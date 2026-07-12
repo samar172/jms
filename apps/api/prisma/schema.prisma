@@ -1,0 +1,651 @@
+// Jewellery Manufacturing, Costing & Karigar Management System
+// Physical schema derived from BRD Section 10 (Conceptual Data Model) and
+// Section 8 functional requirements. Money/metal transactions are treated
+// as append-only ledgers per BR-13 (immutability) — corrections are
+// reversing entries, never edits.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Module 11 — Users, Roles, Audit
+// ---------------------------------------------------------------------------
+
+enum Role {
+  SUPER_ADMIN
+  MANAGER
+  COSTING
+  STORE
+  PRODUCTION
+  SALES
+  KARIGAR
+  AUDITOR
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         Role
+  isActive     Boolean  @default(true)
+  karigarId    String?  @unique // set only for KARIGAR-role logins
+  karigar      Karigar? @relation(fields: [karigarId], references: [id])
+  failedLoginCount Int  @default(0)
+  lockedUntil  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  auditLogs        AuditLog[]
+  createdProducts  Product[]        @relation("ProductCreatedBy")
+  createdJobCards  JobCard[]        @relation("JobCardCreatedBy")
+  issuedMaterials  MaterialIssue[]  @relation("MaterialIssuedBy")
+  receivedMaterials MaterialReceipt[] @relation("MaterialReceivedBy")
+  enteredLabour    LabourEntry[]    @relation("LabourEnteredBy")
+  approvedLabour   LabourEntry[]    @relation("LabourApprovedBy")
+  createdEstimates Estimate[]       @relation("EstimateCreatedBy")
+  approvedEstimates Estimate[]      @relation("EstimateApprovedBy")
+  approvedWastage  WastageRecord[]  @relation("WastageApprovedBy")
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  APPROVE
+}
+
+model AuditLog {
+  id         String      @id @default(cuid())
+  userId     String?
+  user       User?       @relation(fields: [userId], references: [id])
+  action     AuditAction
+  entityType String
+  entityId   String
+  beforeJson Json?
+  afterJson  Json?
+  ipAddress  String?
+  createdAt  DateTime    @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Module 1 — Master Data
+// ---------------------------------------------------------------------------
+
+model GoldRate {
+  id            String   @id @default(cuid())
+  ratePerGram24k Decimal @db.Decimal(12, 2)
+  effectiveFrom DateTime
+  createdById   String?
+  createdAt     DateTime @default(now())
+
+  @@index([effectiveFrom])
+}
+
+model Karat {
+  id            String   @id @default(cuid())
+  code          String   @unique // "24K", "22K", "18K", "14K"
+  purityFactor  Decimal  @db.Decimal(6, 4) // e.g. 0.7500
+  isActive      Boolean  @default(true)
+
+  products      Product[]
+  materialIssues MaterialIssue[]
+  estimateLines EstimateLine[]
+}
+
+enum StoneCategory {
+  POLKI
+  DIAMOND
+  COLOURED_STONE
+}
+
+model StoneType {
+  id                  String        @id @default(cuid())
+  name                String
+  category            StoneCategory
+  defaultRatePerCarat Decimal?      @db.Decimal(12, 2)
+  isActive            Boolean       @default(true)
+
+  materialIssues   MaterialIssue[]
+  estimateLines    EstimateLine[]
+}
+
+model Category {
+  id            String   @id @default(cuid())
+  name          String
+  code          String   @unique // used in serial number, e.g. "NK"
+  isActive      Boolean  @default(true)
+
+  subcategories Subcategory[]
+  products      Product[]
+}
+
+model Subcategory {
+  id         String   @id @default(cuid())
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
+  name       String
+  isActive   Boolean  @default(true)
+
+  products   Product[]
+
+  @@unique([categoryId, name])
+}
+
+model ProcessStage {
+  id                 String   @id @default(cuid())
+  name               String   @unique // Casting, Filing, Setting, Polishing, QC...
+  sequenceOrder      Int
+  wastageTolerancePct Decimal @db.Decimal(5, 2)
+  isActive           Boolean  @default(true)
+
+  jobStages          JobStage[]
+  karigarRates       KarigarStageRate[]
+}
+
+enum EmploymentType {
+  IN_HOUSE
+  EXTERNAL
+}
+
+model Karigar {
+  id              String         @id @default(cuid())
+  code            String         @unique // KR-014
+  name            String
+  photoUrl        String?
+  contactNumber   String?
+  address         String?
+  specialization  String?
+  employmentType  EmploymentType
+  isActive        Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+
+  user            User?
+  stageRates      KarigarStageRate[]
+  jobStages       JobStage[]
+  materialIssues  MaterialIssue[]
+  materialReceipts MaterialReceipt[]
+  labourEntries   LabourEntry[]
+  ledgerEntries   KarigarLedgerEntry[]
+
+  @@index([isActive])
+}
+
+model KarigarStageRate {
+  id             String        @id @default(cuid())
+  karigarId      String
+  karigar        Karigar       @relation(fields: [karigarId], references: [id])
+  processStageId String
+  processStage   ProcessStage  @relation(fields: [processStageId], references: [id])
+  rateBasis      LabourRateBasis
+  rate           Decimal       @db.Decimal(12, 2)
+
+  @@unique([karigarId, processStageId])
+}
+
+enum LabourRateBasis {
+  PER_GRAM
+  PER_PIECE
+  PER_CARAT
+  DAILY_WAGE
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  name      String
+  contact   String?
+  address   String?
+  isActive  Boolean  @default(true)
+
+  products  Product[]
+  jobCards  JobCard[]
+}
+
+enum VendorType {
+  REFINER
+  SUPPLIER
+}
+
+model Vendor {
+  id       String     @id @default(cuid())
+  name     String
+  type     VendorType
+  contact  String?
+  isActive Boolean    @default(true)
+
+  dustLots DustLot[]
+}
+
+model ChargeType {
+  id       String  @id @default(cuid())
+  name     String  @unique // Hallmarking, Certification, Packing, Rhodium, Freight
+  isActive Boolean @default(true)
+
+  estimateLines EstimateLine[]
+}
+
+// ---------------------------------------------------------------------------
+// Module 2 — Product & Design Registry
+// ---------------------------------------------------------------------------
+
+enum ProductStatus {
+  DESIGN
+  ESTIMATED
+  IN_PRODUCTION
+  FINISHED
+  SOLD
+  MELTED
+}
+
+enum DesignSource {
+  IN_HOUSE
+  CUSTOMER_SUPPLIED
+}
+
+model Product {
+  id             String        @id @default(cuid())
+  serialNo       String        @unique
+  legacyRef      String?
+  designName     String
+  categoryId     String
+  category       Category      @relation(fields: [categoryId], references: [id])
+  subcategoryId  String?
+  subcategory    Subcategory?  @relation(fields: [subcategoryId], references: [id])
+  purityId       String
+  purity         Karat         @relation(fields: [purityId], references: [id])
+  grossWeightG   Decimal       @db.Decimal(10, 3)
+  netWeightG     Decimal       @db.Decimal(10, 3)
+  stoneWeightCt  Decimal?      @db.Decimal(10, 3)
+  size           String?
+  description    String?
+  designSource   DesignSource  @default(IN_HOUSE)
+  customerId     String?
+  customer       Customer?     @relation(fields: [customerId], references: [id])
+  status         ProductStatus @default(DESIGN)
+  clonedFromId   String?
+
+  createdById    String
+  createdBy      User          @relation("ProductCreatedBy", fields: [createdById], references: [id])
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  images         ProductImage[]
+  jobCards       JobCard[]
+  estimates      Estimate[]
+
+  @@index([status])
+  @@index([categoryId, purityId])
+}
+
+// Serial number sequence counters, one row per (category, purity, yymm) bucket,
+// incremented inside a transaction to guarantee no duplicate/skipped numbers
+// under concurrent creation (FR-2.03).
+model SerialSequence {
+  bucketKey String @id // e.g. "NK-18K-2607"
+  lastValue Int    @default(0)
+}
+
+enum ImageType {
+  SKETCH
+  WORK_IN_PROGRESS
+  FINAL_PRODUCT
+}
+
+model ProductImage {
+  id           String    @id @default(cuid())
+  productId    String
+  product      Product   @relation(fields: [productId], references: [id])
+  type         ImageType
+  url          String
+  thumbnailUrl String?
+  isPrimary    Boolean   @default(false)
+  isActive     Boolean   @default(true)
+  uploadedById String?
+  createdAt    DateTime  @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Module 3 — Job Card & Manufacturing Workflow
+// ---------------------------------------------------------------------------
+
+enum JobCardStatus {
+  OPEN
+  ON_HOLD
+  CLOSED
+}
+
+model JobCard {
+  id                 String        @id @default(cuid())
+  productId          String
+  product            Product       @relation(fields: [productId], references: [id])
+  customerId         String?
+  customer           Customer?     @relation(fields: [customerId], references: [id])
+  targetDeliveryDate DateTime?
+  status             JobCardStatus @default(OPEN)
+  holdReason         String?
+
+  createdById        String
+  createdBy          User          @relation("JobCardCreatedBy", fields: [createdById], references: [id])
+  createdAt          DateTime      @default(now())
+  closedAt           DateTime?
+
+  stages             JobStage[]
+
+  @@index([status])
+}
+
+enum JobStageStatus {
+  PENDING
+  ISSUED
+  IN_PROGRESS
+  RECEIVED
+  APPROVED
+  REWORK
+}
+
+model JobStage {
+  id                   String         @id @default(cuid())
+  jobCardId            String
+  jobCard              JobCard        @relation(fields: [jobCardId], references: [id])
+  processStageId       String
+  processStage         ProcessStage   @relation(fields: [processStageId], references: [id])
+  karigarId            String?
+  karigar              Karigar?       @relation(fields: [karigarId], references: [id])
+  sequenceOrder        Int
+  status               JobStageStatus @default(PENDING)
+  assignedAt           DateTime?
+  expectedCompletionAt DateTime?
+  isRework             Boolean        @default(false)
+  reworkOfStageId       String?
+
+  materialIssues   MaterialIssue[]
+  materialReceipts MaterialReceipt[]
+  labourEntries    LabourEntry[]
+  wastageRecord    WastageRecord?
+
+  @@index([jobCardId])
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// Module 4 — Raw Material, Inventory & Metal Accounting
+// ---------------------------------------------------------------------------
+
+enum MaterialType {
+  GOLD
+  POLKI
+  COLOURED_STONE
+  FINDING
+}
+
+model MaterialIssue {
+  id            String       @id @default(cuid())
+  issueNo       String       @unique
+  jobStageId    String
+  jobStage      JobStage     @relation(fields: [jobStageId], references: [id])
+  karigarId     String
+  karigar       Karigar      @relation(fields: [karigarId], references: [id])
+  materialType  MaterialType
+  purityId      String?
+  purity        Karat?       @relation(fields: [purityId], references: [id])
+  stoneTypeId   String?
+  stoneType     StoneType?   @relation(fields: [stoneTypeId], references: [id])
+  grossWeightG  Decimal?     @db.Decimal(10, 3)
+  fineWeightG   Decimal      @db.Decimal(10, 3)
+  caratWeight   Decimal?     @db.Decimal(10, 3)
+  pieces        Int?
+
+  issuedById    String
+  issuedBy      User         @relation("MaterialIssuedBy", fields: [issuedById], references: [id])
+  issuedAt      DateTime     @default(now())
+
+  isReversed    Boolean      @default(false)
+  reversalOfId  String?      @unique
+
+  @@index([jobStageId])
+  @@index([karigarId])
+}
+
+model MaterialReceipt {
+  id                    String   @id @default(cuid())
+  receiptNo             String   @unique
+  jobStageId            String
+  jobStage              JobStage @relation(fields: [jobStageId], references: [id])
+  karigarId             String
+  karigar               Karigar  @relation(fields: [karigarId], references: [id])
+  finishedPieceWeightG  Decimal  @db.Decimal(10, 3)
+  dustWeightG           Decimal  @db.Decimal(10, 3) @default(0)
+  unusedReturnedWeightG Decimal  @db.Decimal(10, 3) @default(0)
+  stonesReturnedJson    Json?
+
+  dustLotId             String?
+  dustLot               DustLot? @relation(fields: [dustLotId], references: [id])
+
+  receivedById          String
+  receivedBy            User     @relation("MaterialReceivedBy", fields: [receivedById], references: [id])
+  receivedAt            DateTime @default(now())
+
+  isReversed            Boolean  @default(false)
+  reversalOfId          String?  @unique
+
+  @@index([jobStageId])
+  @@index([karigarId])
+}
+
+// ---------------------------------------------------------------------------
+// Module 5 — Gold Dust, Wastage & Loss Reconciliation
+// ---------------------------------------------------------------------------
+
+enum WastageExceptionStatus {
+  NONE          // within tolerance, no exception raised
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model WastageRecord {
+  id                String                  @id @default(cuid())
+  jobStageId        String                  @unique
+  jobStage          JobStage                @relation(fields: [jobStageId], references: [id])
+
+  fineIssuedG       Decimal                 @db.Decimal(10, 3)
+  finePieceG        Decimal                 @db.Decimal(10, 3)
+  fineDustG         Decimal                 @db.Decimal(10, 3)
+  fineReturnedG     Decimal                 @db.Decimal(10, 3)
+  netWastageG       Decimal                 @db.Decimal(10, 3)
+  wastagePct        Decimal                 @db.Decimal(6, 2)
+  tolerancePct      Decimal                 @db.Decimal(5, 2)
+  withinTolerance   Boolean
+
+  exceptionStatus   WastageExceptionStatus  @default(NONE)
+  exceptionReason   String?
+  approvedById      String?
+  approvedBy        User?                   @relation("WastageApprovedBy", fields: [approvedById], references: [id])
+  approvedAt        DateTime?
+
+  recoveredFromKarigar Boolean              @default(false)
+  recoveryAmount       Decimal?             @db.Decimal(12, 2)
+
+  createdAt         DateTime                @default(now())
+
+  @@index([exceptionStatus])
+}
+
+enum DustLotStatus {
+  OPEN
+  DESPATCHED
+  RECEIVED
+}
+
+model DustLot {
+  id                 String        @id @default(cuid())
+  lotNo              String        @unique
+  status             DustLotStatus @default(OPEN)
+  totalDustWeightG   Decimal       @db.Decimal(10, 3) @default(0)
+  vendorId           String?
+  vendor             Vendor?       @relation(fields: [vendorId], references: [id])
+  despatchedAt       DateTime?
+  recoveredPureGoldG Decimal?      @db.Decimal(10, 3)
+  recoveredAt        DateTime?
+  recoveryPct        Decimal?      @db.Decimal(6, 2)
+
+  receipts           MaterialReceipt[]
+
+  createdAt          DateTime      @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Module 6 — Karigar Labour & Employee Costing
+// ---------------------------------------------------------------------------
+
+enum LabourEntryStatus {
+  PENDING
+  APPROVED
+}
+
+model LabourEntry {
+  id           String            @id @default(cuid())
+  jobStageId   String
+  jobStage     JobStage          @relation(fields: [jobStageId], references: [id])
+  karigarId    String
+  karigar      Karigar           @relation(fields: [karigarId], references: [id])
+  rateBasis    LabourRateBasis
+  quantity     Decimal           @db.Decimal(10, 3)
+  rate         Decimal           @db.Decimal(12, 2)
+  amount       Decimal           @db.Decimal(12, 2)
+  isOverride   Boolean           @default(false)
+  status       LabourEntryStatus @default(PENDING)
+
+  enteredById  String
+  enteredBy    User              @relation("LabourEnteredBy", fields: [enteredById], references: [id])
+  enteredAt    DateTime          @default(now())
+  approvedById String?
+  approvedBy   User?             @relation("LabourApprovedBy", fields: [approvedById], references: [id])
+  approvedAt   DateTime?
+
+  @@index([karigarId])
+  @@index([status])
+}
+
+enum KarigarLedgerEntryType {
+  METAL_DEBIT
+  METAL_CREDIT
+  LABOUR_EARNED
+  ADVANCE_PAID
+  ADVANCE_ADJUSTED
+  WASTAGE_RECOVERY
+}
+
+model KarigarLedgerEntry {
+  id            String                  @id @default(cuid())
+  karigarId     String
+  karigar       Karigar                 @relation(fields: [karigarId], references: [id])
+  type          KarigarLedgerEntryType
+  fineGoldG     Decimal?                @db.Decimal(10, 3)
+  amount        Decimal?                @db.Decimal(12, 2)
+  referenceType String
+  referenceId   String
+  note          String?
+  createdAt     DateTime                @default(now())
+
+  @@index([karigarId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Module 7 — Costing & Estimate Engine
+// ---------------------------------------------------------------------------
+
+enum EstimateType {
+  ROUGH_ESTIMATE
+  FINAL_COSTING
+}
+
+enum EstimateStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  SUPERSEDED
+}
+
+model Estimate {
+  id             String         @id @default(cuid())
+  productId      String
+  product        Product        @relation(fields: [productId], references: [id])
+  type           EstimateType
+  version        Int
+  status         EstimateStatus @default(DRAFT)
+
+  estimateDate       DateTime
+  goldRateSnapshot24k Decimal   @db.Decimal(12, 2)
+  profitPct          Decimal    @db.Decimal(5, 2)
+
+  materialCost   Decimal        @db.Decimal(12, 2) @default(0)
+  makingCharges  Decimal        @db.Decimal(12, 2) @default(0)
+  otherCharges   Decimal        @db.Decimal(12, 2) @default(0)
+  wastageCost    Decimal        @db.Decimal(12, 2) @default(0)
+  cost           Decimal        @db.Decimal(12, 2) @default(0)
+  profit         Decimal        @db.Decimal(12, 2) @default(0)
+  netAmount      Decimal        @db.Decimal(12, 2) @default(0)
+
+  showBreakdownOnPdf Boolean    @default(false)
+  gstPct             Decimal?   @db.Decimal(5, 2)
+
+  createdById    String
+  createdBy      User           @relation("EstimateCreatedBy", fields: [createdById], references: [id])
+  createdAt      DateTime       @default(now())
+  approvedById   String?
+  approvedBy     User?          @relation("EstimateApprovedBy", fields: [approvedById], references: [id])
+  approvedAt     DateTime?
+
+  lines          EstimateLine[]
+
+  @@unique([productId, type, version])
+  @@index([productId])
+}
+
+enum EstimateLineHead {
+  GOLD
+  POLKI
+  COLOURED_STONE
+  MAKING
+  OTHER
+  WASTAGE
+}
+
+enum EstimateLineSource {
+  MANUAL
+  FROM_LABOUR
+  FROM_WASTAGE
+}
+
+model EstimateLine {
+  id            String             @id @default(cuid())
+  estimateId    String
+  estimate      Estimate           @relation(fields: [estimateId], references: [id])
+  head          EstimateLineHead
+  description   String?
+  purityId      String?
+  purity        Karat?             @relation(fields: [purityId], references: [id])
+  stoneTypeId   String?
+  stoneType     StoneType?         @relation(fields: [stoneTypeId], references: [id])
+  chargeTypeId  String?
+  chargeType    ChargeType?        @relation(fields: [chargeTypeId], references: [id])
+  karigarName   String?
+  quantity      Decimal            @db.Decimal(10, 3)
+  rate          Decimal            @db.Decimal(12, 2)
+  amount        Decimal            @db.Decimal(12, 2)
+  sourceType    EstimateLineSource @default(MANUAL)
+  sourceLabourEntryId String?
+  sortOrder     Int                @default(0)
+
+  @@index([estimateId])
+}
