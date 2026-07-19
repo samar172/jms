@@ -167,6 +167,43 @@ router.post(
   })
 );
 
+// --- Khata summary across all karigars (for the combined ledger hub) --------
+router.get(
+  "/karigars-summary",
+  requireRole("SUPER_ADMIN", "MANAGER", "COSTING", "AUDITOR"),
+  asyncHandler(async (_req, res) => {
+    const karigars = await prisma.karigar.findMany({
+      where: { isActive: true },
+      include: { ledgerEntries: true },
+      orderBy: { name: "asc" },
+    });
+
+    res.json(
+      karigars.map((k) => {
+        let goldHeldG = 0;
+        let labourEarned = 0;
+        let advancesPaid = 0;
+        let wastageRecoveries = 0;
+        for (const e of k.ledgerEntries) {
+          if (e.type === "METAL_DEBIT") goldHeldG += Number(e.fineGoldG ?? 0);
+          if (e.type === "METAL_CREDIT") goldHeldG -= Number(e.fineGoldG ?? 0);
+          if (e.type === "LABOUR_EARNED") labourEarned += Number(e.amount ?? 0);
+          if (e.type === "ADVANCE_PAID") advancesPaid += Number(e.amount ?? 0);
+          if (e.type === "ADVANCE_ADJUSTED") advancesPaid -= Number(e.amount ?? 0);
+          if (e.type === "WASTAGE_RECOVERY") wastageRecoveries += Number(e.amount ?? 0);
+        }
+        return {
+          id: k.id,
+          name: k.name,
+          code: k.code,
+          goldHeldG: Math.round(goldHeldG * 1000) / 1000,
+          netPayable: Math.round((labourEarned - advancesPaid - wastageRecoveries) * 100) / 100,
+        };
+      })
+    );
+  })
+);
+
 // --- Karigar payable ledger & statements (FR-6.03, FR-6.05) ------------------
 router.get(
   "/karigars/:id/ledger",

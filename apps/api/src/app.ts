@@ -19,6 +19,9 @@ import estimatesRoutes from "./modules/estimates/estimates.routes";
 import dashboardRoutes from "./modules/dashboard/dashboard.routes";
 import auditRoutes from "./modules/audit/audit.routes";
 import usersRoutes from "./modules/users/users.routes";
+import settingsRoutes from "./modules/settings/settings.routes";
+import stockLedgerRoutes from "./modules/ledger/stock.routes";
+import customerLedgerRoutes from "./modules/ledger/customer.routes";
 
 export const app = express();
 
@@ -48,5 +51,8 @@ app.use("/api/estimates", requireAuth, estimatesRoutes);
 app.use("/api/dashboard", requireAuth, dashboardRoutes);
 app.use("/api/audit-logs", requireAuth, auditRoutes);
 app.use("/api/users", requireAuth, usersRoutes);
+app.use("/api/settings", requireAuth, settingsRoutes);
+app.use("/api/ledger/stock", requireAuth, stockLedgerRoutes);
+app.use("/api/ledger/customers", requireAuth, customerLedgerRoutes);
 
 app.use(errorHandler);

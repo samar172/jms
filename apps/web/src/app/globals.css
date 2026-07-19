@@ -102,6 +102,44 @@ body {
   background: var(--color-surface);
   color: var(--color-text);
 }
+
+/* Shop-floor inputs/buttons: large tap targets for dusty/gloved hands
+   (design.md Screen 11) — used on the material receipt/reconciliation form. */
+.input-lg {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 0.875rem 1rem;
+  font-size: 1.25rem;
+  min-height: 56px;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+.input-lg:focus {
+  outline: none;
+  border-color: var(--color-gold);
+  box-shadow: 0 0 0 3px var(--color-gold-tint);
+}
+.btn-lg {
+  min-height: 56px;
+  font-size: 1.0625rem;
+  border-radius: 10px;
+  padding: 0.875rem 1.5rem;
+}
+.label-lg {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 0.375rem;
+  display: block;
+}
+.label-hi {
+  font-weight: 400;
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  display: block;
+  margin-top: 0.0625rem;
+}
 .input:focus {
   outline: none;
   border-color: var(--color-gold);

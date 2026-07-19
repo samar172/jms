@@ -1,4 +1,5 @@
 import clsx from "clsx";
+import { hi } from "@/lib/hi";
 
 type Tone = "success" | "warning" | "danger" | "neutral";
 
@@ -9,8 +10,21 @@ const TONE_CLASS: Record<Tone, string> = {
   neutral: "pill-neutral",
 };
 
-export function StatusPill({ label, tone }: { label: string; tone: Tone }) {
-  return <span className={clsx("pill", TONE_CLASS[tone])}>{label}</span>;
+export function StatusPill({
+  label,
+  hiLabel,
+  tone,
+}: {
+  label: string;
+  hiLabel?: string;
+  tone: Tone;
+}) {
+  return (
+    <span className={clsx("pill", TONE_CLASS[tone])}>
+      {label}
+      {hiLabel && <span className="opacity-70">· {hiLabel}</span>}
+    </span>
+  );
 }
 
 const PRODUCT_STATUS_TONE: Record<string, Tone> = {
@@ -26,6 +40,7 @@ export function ProductStatusPill({ status }: { status: string }) {
   return (
     <StatusPill
       label={status.replace(/_/g, " ")}
+      hiLabel={hi.productStatus[status]}
       tone={PRODUCT_STATUS_TONE[status] ?? "neutral"}
     />
   );
@@ -44,6 +59,7 @@ export function JobStageStatusPill({ status }: { status: string }) {
   return (
     <StatusPill
       label={status.replace(/_/g, " ")}
+      hiLabel={hi.jobStageStatus[status]}
       tone={JOB_STAGE_STATUS_TONE[status] ?? "neutral"}
     />
   );

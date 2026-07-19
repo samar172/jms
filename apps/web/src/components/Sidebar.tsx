@@ -13,6 +13,7 @@ import {
   Users,
   BarChart3,
   Settings,
+  BookOpen,
 } from "lucide-react";
 import type { Role } from "@jms/shared";
 import { useAuth } from "@/lib/auth-context";
@@ -31,6 +32,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/job-cards", label: "Job Cards", icon: ClipboardList },
   { href: "/materials", label: "Materials & Stock", icon: Boxes, roles: ["SUPER_ADMIN", "MANAGER", "STORE", "COSTING", "AUDITOR"] },
   { href: "/costing", label: "Costing", icon: Calculator, roles: ["SUPER_ADMIN", "MANAGER", "COSTING", "AUDITOR"] },
+  { href: "/ledger", label: "Ledger", icon: BookOpen, roles: ["SUPER_ADMIN", "MANAGER", "COSTING", "SALES", "AUDITOR"] },
   { href: "/karigars", label: "Karigars", icon: Users },
   { href: "/reports", label: "Reports", icon: BarChart3 },
   { href: "/settings", label: "Settings", icon: Settings, roles: ["SUPER_ADMIN"] },

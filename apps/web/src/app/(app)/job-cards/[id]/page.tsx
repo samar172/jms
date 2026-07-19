@@ -7,6 +7,7 @@ import { apiFetch, ApiError } from "@/lib/api";
 import { JobStageStatusPill } from "@/components/StatusPill";
 import { formatINR, formatWeight, formatPct } from "@/lib/format";
 import { computeWastage } from "@jms/shared";
+import { hi } from "@/lib/hi";
 
 interface WastageRecord {
   id: string;
@@ -208,8 +209,8 @@ function StageCard({
       )}
 
       {stage.materialIssues.length > 0 && !stage.wastageRecord && (
-        <button className="btn btn-outline mb-3" onClick={() => setShowReceiptForm((s) => !s)}>
-          Receive &amp; Reconcile
+        <button className="btn btn-outline btn-lg mb-3 w-full sm:w-auto" onClick={() => setShowReceiptForm((s) => !s)}>
+          Receive &amp; Reconcile <span className="opacity-70 ml-1">· {hi.receipt.title}</span>
         </button>
       )}
       {showReceiptForm && (
@@ -349,47 +350,71 @@ function ReceiptForm({
 
   return (
     <form onSubmit={submit} className="bg-bg p-4 rounded-lg mb-3 grid sm:grid-cols-2 gap-4">
-      <div className="space-y-3">
-        <div className="text-xs text-text-muted">Fine Gold Issued: {formatWeight(fineIssuedG)}</div>
+      <div className="space-y-4">
+        <div className="text-sm text-text-muted">
+          Fine Gold Issued <span className="text-xs">({hi.receipt.fineGoldIssued})</span>:{" "}
+          <span className="font-medium text-text tabular">{formatWeight(fineIssuedG)}</span>
+        </div>
         <div>
-          <label className="label">Finished Piece Weight (g)</label>
+          <label className="label-lg">
+            Finished Piece Weight (g)
+            <span className="label-hi">{hi.receipt.finishedPieceWeight} (ग्राम)</span>
+          </label>
           <input
             required
             type="number"
+            inputMode="decimal"
             step="0.001"
-            className="input"
+            className="input-lg tabular"
             value={finishedPieceWeightG}
             onChange={(e) => setFinishedPieceWeightG(e.target.value)}
           />
         </div>
         <div>
-          <label className="label">Gold Dust Recovered (g)</label>
-          <input type="number" step="0.001" className="input" value={dustWeightG} onChange={(e) => setDustWeightG(e.target.value)} />
-        </div>
-        <div>
-          <label className="label">Unused Gold Returned (g)</label>
+          <label className="label-lg">
+            Gold Dust Recovered (g)
+            <span className="label-hi">{hi.receipt.dustRecovered} (ग्राम)</span>
+          </label>
           <input
             type="number"
+            inputMode="decimal"
             step="0.001"
-            className="input"
+            className="input-lg tabular"
+            value={dustWeightG}
+            onChange={(e) => setDustWeightG(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="label-lg">
+            Unused Gold Returned (g)
+            <span className="label-hi">{hi.receipt.unusedReturned} (ग्राम)</span>
+          </label>
+          <input
+            type="number"
+            inputMode="decimal"
+            step="0.001"
+            className="input-lg tabular"
             value={unusedReturnedWeightG}
             onChange={(e) => setUnusedReturnedWeightG(e.target.value)}
           />
         </div>
       </div>
       <div className={`rounded-lg p-4 flex flex-col justify-center items-center ${withinTolerance ? "bg-success-tint" : "bg-danger-tint"}`}>
-        <div className="text-xs text-text-muted mb-1">Net Wastage</div>
-        <div className={`text-3xl font-bold tabular ${withinTolerance ? "text-success" : "text-danger"}`}>
+        <div className="text-sm text-text-muted mb-1 text-center">
+          Net Wastage <span className="block">{hi.receipt.netWastage}</span>
+        </div>
+        <div className={`text-4xl font-bold tabular ${withinTolerance ? "text-success" : "text-danger"}`}>
           {formatPct(preview.wastagePct)}
         </div>
-        <div className="text-xs text-text-muted mt-1">{formatWeight(preview.netWastageG)} · Tolerance {formatPct(tolerancePct)}</div>
+        <div className="text-sm text-text-muted mt-1">{formatWeight(preview.netWastageG)} · Tolerance {formatPct(tolerancePct)}</div>
         {!withinTolerance && (
-          <p className="text-xs text-danger mt-2 text-center">
-            Exceeds tolerance — will raise a wastage exception requiring Manager approval.
+          <p className="text-sm text-danger mt-2 text-center font-medium">
+            Exceeds tolerance — Manager approval required.
+            <span className="block font-normal">{hi.receipt.exceedsTolerance}</span>
           </p>
         )}
-        <button className="btn btn-primary mt-3 w-full" disabled={submitting}>
-          {submitting ? "Saving…" : "Submit Receipt"}
+        <button className="btn btn-primary btn-lg mt-3 w-full" disabled={submitting}>
+          {submitting ? "Saving…" : `Submit Receipt · ${hi.receipt.submit}`}
         </button>
         {error && <p className="text-sm text-danger mt-2">{error}</p>}
       </div>
@@ -425,17 +450,17 @@ function WastageDisplay({ wastage, stageId, onChange }: { wastage: WastageRecord
       {wastage.exceptionStatus === "PENDING" && (
         <div className="mt-3 space-y-2">
           <textarea
-            className="input"
-            placeholder="Reason for excess wastage (required)"
+            className="input-lg"
+            placeholder={`Reason for excess wastage (required) · ${hi.receipt.reasonRequired}`}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
           />
           <div className="flex gap-2">
-            <button className="btn btn-primary" disabled={submitting || !reason} onClick={() => decide(true)}>
-              Approve Exception
+            <button className="btn btn-primary btn-lg flex-1" disabled={submitting || !reason} onClick={() => decide(true)}>
+              Approve Exception · {hi.receipt.approve}
             </button>
-            <button className="btn btn-outline" disabled={submitting || !reason} onClick={() => decide(false)}>
-              Reject
+            <button className="btn btn-outline btn-lg flex-1" disabled={submitting || !reason} onClick={() => decide(false)}>
+              Reject · {hi.receipt.reject}
             </button>
           </div>
         </div>

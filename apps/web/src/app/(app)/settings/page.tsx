@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useApi, useKarats, useProcessStages } from "@/lib/hooks";
+import { useApi, useKarats, useProcessStages, useStockLedgerEnabled } from "@/lib/hooks";
 import { apiFetch, ApiError } from "@/lib/api";
 import { formatINR, formatDate } from "@/lib/format";
 
@@ -15,8 +15,23 @@ export default function SettingsPage() {
   const { data: rates, mutate } = useApi<GoldRate[]>("/api/masters/gold-rates");
   const { data: karats } = useKarats();
   const { data: stages } = useProcessStages();
+  const { data: stockEnabled, mutate: mutateStockEnabled } = useStockLedgerEnabled();
   const [rate, setRate] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [togglingStock, setTogglingStock] = useState(false);
+
+  async function toggleStockLedger() {
+    setTogglingStock(true);
+    try {
+      await apiFetch("/api/settings/stock-ledger-enabled", {
+        method: "PUT",
+        body: { enabled: !stockEnabled?.enabled },
+      });
+      await mutateStockEnabled();
+    } finally {
+      setTogglingStock(false);
+    }
+  }
 
   async function addRate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -91,6 +106,30 @@ export default function SettingsPage() {
             ))}
           </tbody>
         </table>
+      </section>
+
+      <section className="card p-5">
+        <h2 className="font-semibold mb-1">Store Gold/Stone Stock Ledger</h2>
+        <p className="text-sm text-text-muted mb-4">
+          Tracks raw material sitting in the store itself (purchases, issues to karigars, returns),
+          separate from what each karigar is holding. Off by default — turn it on only if you want
+          to track store-level stock in the system.
+        </p>
+        <label className="flex items-center gap-3 cursor-pointer w-fit">
+          <span className="text-sm font-medium">{stockEnabled?.enabled ? "Enabled" : "Disabled"}</span>
+          <span
+            onClick={toggleStockLedger}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+              stockEnabled?.enabled ? "bg-gold" : "bg-border"
+            } ${togglingStock ? "opacity-50" : ""}`}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                stockEnabled?.enabled ? "translate-x-6" : "translate-x-1"
+              }`}
+            />
+          </span>
+        </label>
       </section>
 
       <p className="text-xs text-text-muted">

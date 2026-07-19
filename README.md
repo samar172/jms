@@ -59,6 +59,16 @@ seeded roles: `manager@`, `costing@`, `store@`, `production@`, `sales@`, `audito
   API responses (not just hidden client-side) for Store/Production/Sales/Karigar roles (BR-16),
   append-only audit log on every mutating action, account lockout after failed logins.
 - **Dashboards**: role-aware KPIs, WIP board, wastage alerts.
+- **Ledger / Khata** (`/ledger`): a combined view across
+  - the **karigar metal + payable ledger** (gold held, labour earned, advances, net payable) — the
+    workflow Section 7.2 calls this "the financial heart of the system";
+  - a **customer ledger** (advances, payments, and an invoice auto-posted whenever a Final Costing
+    estimate is approved) — not in the original BRD scope, added on request;
+  - an **optional store gold/stone stock ledger** (FR-4.05/4.06: purchases, issues, returns, balance
+    by purity/stone type) — off by default per the client's own workflow, toggle it on in
+    `/settings` if you want to track store-level stock in the system.
+- **Hindi labels + large touch targets** on the material receipt/reconciliation screen (FR-14.04 and
+  design.md Screen 11) — the one screen Store/Production staff fill in by hand.
 
 ## Deliberately deferred (see BRD phasing, Section 16)
 
@@ -66,18 +76,20 @@ seeded roles: `manager@`, `costing@`, `store@`, `production@`, `sales@`, `audito
   (self-hosted CLIP/DINOv2 + pgvector) that the BRD itself phases in only once the catalogue has
   enough indexed images (Section 12). The schema already tags images as Sketch/WIP/Final Product so
   this can be added without a data migration.
-- **Store-level stock ledger** (FR-4.05–4.08: purchases, physical stock-take, negative-stock guard).
-  The karigar metal ledger — the workflow Section 7.2 calls "the financial heart of the system" — is
-  fully implemented; the pre-issue store inventory layer is a natural next slice.
 - **Server-rendered PDF/Excel exports** (FR-7.13, FR-7.16, FR-3.09, FR-6.05). All the underlying data
   is exposed via API; documents currently render via the browser's print dialog. Swapping in
   a template-based PDF/XLSX generator is straightforward from here.
 - **2FA/OTP** (FR-11.06, Should-have) and **WhatsApp/email alert delivery** (FR-13.05).
+- **Physical stock-take variance** (FR-4.07) and **negative-stock blocking** (FR-4.08) on the store
+  stock ledger — purchases/issues/adjustments are all recorded; the stock-take reconciliation report
+  and the hard block on over-issuing are the remaining pieces of that optional module.
 - Full admin UI for every master (categories, stone types, charge types, users) — the APIs exist;
-  `/settings` currently covers gold rates, karats and process stages inline.
+  `/settings` currently covers gold rates, karats, process stages and the stock ledger toggle inline.
 - **Object storage** (FR-8.05): images are on local disk for dev (`apps/api/uploads/`, git-ignored).
   Swap `apps/api/src/services/imageStorage.ts` for an S3-backed implementation before deploying —
   the interface is already isolated for that.
+- Hindi coverage is currently limited to the material receipt screen — extending the same
+  `src/lib/hi.ts` pattern to Job Cards and Karigar screens is a small, mechanical follow-up.
 
 ## Repo layout
 

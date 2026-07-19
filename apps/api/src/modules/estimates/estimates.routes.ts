@@ -341,7 +341,10 @@ router.post(
   "/:id/approve",
   requireRole("SUPER_ADMIN", "MANAGER"),
   asyncHandler(async (req, res) => {
-    const estimate = await prisma.estimate.findUnique({ where: { id: req.params.id } });
+    const estimate = await prisma.estimate.findUnique({
+      where: { id: req.params.id },
+      include: { product: true },
+    });
     if (!estimate) throw notFound("Estimate not found");
     if (estimate.status === "APPROVED") throw badRequest("Estimate is already approved");
 
@@ -364,6 +367,23 @@ router.post(
       where: { id: estimate.productId },
       data: { status: estimate.type === "ROUGH_ESTIMATE" ? "ESTIMATED" : undefined },
     });
+
+    // Mirror the approved Final Costing onto the customer's ledger as what
+    // they now owe for this piece. Rough Estimates are quotations, not a
+    // billable event, so only Final Costing posts here.
+    if (estimate.type === "FINAL_COSTING" && estimate.product.customerId) {
+      await prisma.customerLedgerEntry.create({
+        data: {
+          customerId: estimate.product.customerId,
+          type: "INVOICE_RAISED",
+          amount: approved.netAmount,
+          referenceType: "Estimate",
+          referenceId: approved.id,
+          note: `Final costing — ${estimate.product.serialNo}`,
+          createdById: req.user!.id,
+        },
+      });
+    }
 
     await recordAudit(prisma, {
       userId: req.user!.id,

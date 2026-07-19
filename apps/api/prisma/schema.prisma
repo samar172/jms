@@ -100,6 +100,7 @@ model Karat {
   products      Product[]
   materialIssues MaterialIssue[]
   estimateLines EstimateLine[]
+  stockLedgerEntries StockLedgerEntry[]
 }
 
 enum StoneCategory {
@@ -117,6 +118,7 @@ model StoneType {
 
   materialIssues   MaterialIssue[]
   estimateLines    EstimateLine[]
+  stockLedgerEntries StockLedgerEntry[]
 }
 
 model Category {
@@ -208,6 +210,7 @@ model Customer {
 
   products  Product[]
   jobCards  JobCard[]
+  ledgerEntries CustomerLedgerEntry[]
 }
 
 enum VendorType {
@@ -223,6 +226,7 @@ model Vendor {
   isActive Boolean    @default(true)
 
   dustLots DustLot[]
+  stockLedgerEntries StockLedgerEntry[]
 }
 
 model ChargeType {
@@ -648,4 +652,79 @@ model EstimateLine {
   sortOrder     Int                @default(0)
 
   @@index([estimateId])
+}
+
+// ---------------------------------------------------------------------------
+// App settings — client-toggleable feature flags (e.g. Store Stock Ledger,
+// which the client said is not core to how they work today but should be
+// available as an opt-in module without a code change).
+// ---------------------------------------------------------------------------
+
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Store gold / stone stock ledger — optional module (FR-4.05/4.06), gated by
+// the "stockLedgerEnabled" AppSetting. Tracks material sitting in the store
+// itself, separate from the Karigar metal ledger which tracks material once
+// issued out to a karigar. IN entries: purchases, dust-recovery credits,
+// unused gold returned by a karigar. OUT entries: issues to a karigar.
+// ---------------------------------------------------------------------------
+
+enum StockDirection {
+  IN
+  OUT
+}
+
+model StockLedgerEntry {
+  id           String         @id @default(cuid())
+  materialType MaterialType
+  purityId     String?
+  purity       Karat?         @relation(fields: [purityId], references: [id])
+  stoneTypeId  String?
+  stoneType    StoneType?     @relation(fields: [stoneTypeId], references: [id])
+  direction    StockDirection
+  quantity     Decimal        @db.Decimal(10, 3) // grams for gold/findings, carats for stones
+  vendorId     String?
+  vendor       Vendor?        @relation(fields: [vendorId], references: [id])
+  rate         Decimal?       @db.Decimal(12, 2) // purchase rate, if applicable
+  referenceType String
+  referenceId   String
+  note          String?
+  createdById   String?
+  createdAt     DateTime      @default(now())
+
+  @@index([materialType, purityId, stoneTypeId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Customer ledger — money owed by / advances held from each customer.
+// Invoice entries are posted automatically when a Final Costing estimate is
+// approved (BR-08 keeps the estimate itself locked; this just mirrors its
+// net amount onto the customer's account).
+// ---------------------------------------------------------------------------
+
+enum CustomerLedgerEntryType {
+  INVOICE_RAISED
+  ADVANCE_RECEIVED
+  PAYMENT_RECEIVED
+  ADJUSTMENT
+}
+
+model CustomerLedgerEntry {
+  id            String                   @id @default(cuid())
+  customerId    String
+  customer      Customer                 @relation(fields: [customerId], references: [id])
+  type          CustomerLedgerEntryType
+  amount        Decimal                  @db.Decimal(12, 2)
+  referenceType String
+  referenceId   String
+  note          String?
+  createdById   String?
+  createdAt     DateTime                 @default(now())
+
+  @@index([customerId, createdAt])
 }

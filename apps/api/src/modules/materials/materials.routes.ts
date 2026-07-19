@@ -8,6 +8,7 @@ import { badRequest, notFound } from "../../utils/httpError";
 import { fineWeight, round3 } from "@jms/shared";
 import { nextVoucherNumber } from "../../services/voucherNumber";
 import { recomputeStageWastage } from "./wastage.service";
+import { isStockLedgerEnabled } from "../../services/settings";
 
 const router = Router();
 
@@ -74,6 +75,24 @@ router.post(
           referenceType: "MaterialIssue",
           referenceId: issue.id,
           note: `Gold issued — ${issueNo}`,
+        },
+      });
+    }
+
+    // Store Stock Ledger (optional module): material leaving the store for a
+    // karigar is an OUT entry. No-op when the module is switched off.
+    if (await isStockLedgerEnabled()) {
+      await prisma.stockLedgerEntry.create({
+        data: {
+          materialType: body.materialType,
+          purityId: body.purityId,
+          stoneTypeId: body.stoneTypeId,
+          direction: "OUT",
+          quantity: body.materialType === "GOLD" ? Number(body.grossWeightG) : Number(body.caratWeight ?? body.grossWeightG ?? 0),
+          referenceType: "MaterialIssue",
+          referenceId: issue.id,
+          note: `Issued to karigar — ${issueNo}`,
+          createdById: req.user!.id,
         },
       });
     }
@@ -168,6 +187,25 @@ router.post(
       await prisma.dustLot.update({
         where: { id: body.dustLotId },
         data: { totalDustWeightG: { increment: body.dustWeightG } },
+      });
+    }
+
+    // Store Stock Ledger (optional module): unused gold handed back by the
+    // karigar returns to the store's own stock, so it's an IN entry there
+    // (separate from the karigar ledger credit above, which just closes out
+    // what that karigar was carrying).
+    if (body.unusedReturnedWeightG > 0 && (await isStockLedgerEnabled())) {
+      await prisma.stockLedgerEntry.create({
+        data: {
+          materialType: "GOLD",
+          purityId: purity!.jobCard.product.purityId,
+          direction: "IN",
+          quantity: body.unusedReturnedWeightG,
+          referenceType: "MaterialReceipt",
+          referenceId: receipt.id,
+          note: `Unused gold returned — ${receiptNo}`,
+          createdById: req.user!.id,
+        },
       });
     }
 
@@ -348,10 +386,25 @@ router.post(
         recoveredAt: new Date(),
       },
     });
-    // FR-5.08: recovered pure gold is credited back to 24K stock. A dedicated
-    // store-level stock ledger (FR-4.05) is out of scope for this pass — see
-    // README roadmap — so this is recorded on the DustLot itself as the
-    // system of record for the credit until that ledger exists.
+    // FR-5.08: recovered pure gold is credited back to 24K stock.
+    if (await isStockLedgerEnabled()) {
+      const karat24k = await prisma.karat.findFirst({ where: { code: "24K" } });
+      if (karat24k) {
+        await prisma.stockLedgerEntry.create({
+          data: {
+            materialType: "GOLD",
+            purityId: karat24k.id,
+            direction: "IN",
+            quantity: recoveredPureGoldG,
+            vendorId: dustLot.vendorId,
+            referenceType: "DustLot",
+            referenceId: dustLot.id,
+            note: `Refining recovery — ${dustLot.lotNo} (${recoveryPct}%)`,
+            createdById: req.user!.id,
+          },
+        });
+      }
+    }
 
     await recordAudit(prisma, {
       userId: req.user!.id,

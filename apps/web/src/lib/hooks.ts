@@ -44,6 +44,18 @@ export interface Customer {
   name: string;
   contact?: string;
 }
+export interface CustomerBalance {
+  id: string;
+  name: string;
+  contact?: string;
+  balanceDue: number;
+}
+export interface StockBalance {
+  materialType: string;
+  purity?: string;
+  stoneType?: string;
+  balance: number;
+}
 
 export const useCategories = () => useApi<Category[]>("/api/masters/categories");
 export const useKarats = () => useApi<Karat[]>("/api/masters/karats");
@@ -51,3 +63,5 @@ export const useStoneTypes = () => useApi<StoneType[]>("/api/masters/stone-types
 export const useProcessStages = () => useApi<ProcessStage[]>("/api/masters/process-stages");
 export const useKarigars = () => useApi<Karigar[]>("/api/masters/karigars");
 export const useCustomers = () => useApi<Customer[]>("/api/masters/customers");
+export const useStockLedgerEnabled = () =>
+  useApi<{ enabled: boolean }>("/api/settings/stock-ledger-enabled");
