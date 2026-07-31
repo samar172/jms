@@ -124,6 +124,16 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
               </button>
             </>
           )}
+          {!editable && (
+            <>
+              <a href={`/api/estimates/${estimateId}/pdf`} target="_blank" rel="noreferrer" className="btn btn-outline">
+                Export PDF
+              </a>
+              <a href={`/api/estimates/${estimateId}/excel`} target="_blank" rel="noreferrer" className="btn btn-outline">
+                Export Excel
+              </a>
+            </>
+          )}
         </div>
       </div>
 

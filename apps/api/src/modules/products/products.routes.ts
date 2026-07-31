@@ -9,6 +9,7 @@ import { badRequest, notFound } from "../../utils/httpError";
 import { round3 } from "@jms/shared";
 import { generateSerialNumber } from "./serialNumber.service";
 import { storeProductImage } from "../../services/imageStorage";
+import { embedImage } from "./vision.service";
 import { buildProductTimeline } from "./timeline.service";
 
 const router = Router();
@@ -295,6 +296,15 @@ router.post(
         uploadedById: req.user!.id,
       },
     });
+
+    try {
+      const vector = await embedImage(req.file.buffer);
+      const vectorStr = `[${vector.join(",")}]`;
+      await prisma.$executeRaw`UPDATE "ProductImage" SET embedding = ${vectorStr}::vector WHERE id = ${image.id}`;
+    } catch (err) {
+      console.error("Failed to generate embedding for image", image.id, err);
+      // We do not fail the upload just because AI embedding failed.
+    }
 
     await recordAudit(prisma, {
       userId: req.user!.id,

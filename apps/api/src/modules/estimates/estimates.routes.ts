@@ -7,6 +7,8 @@ import { recordAudit } from "../../services/audit";
 import { badRequest, forbidden, notFound } from "../../utils/httpError";
 import { lineAmount, round2 } from "@jms/shared";
 import { recalculateEstimateTotals, derivedGoldRate } from "./estimates.service";
+import { generateEstimatePdf } from "./pdf.service";
+import { generateEstimateExcel } from "./excel.service";
 
 const router = Router();
 
@@ -395,6 +397,44 @@ router.post(
     });
 
     res.json(approved);
+  })
+);
+
+router.get(
+  "/:id/pdf",
+  asyncHandler(async (req, res) => {
+    const estimate = await prisma.estimate.findUnique({
+      where: { id: req.params.id },
+      include: { 
+        product: { include: { customer: true } },
+        lines: { include: { purity: true, stoneType: true }, orderBy: { sortOrder: "asc" } }
+      },
+    });
+    if (!estimate) throw notFound("Estimate not found");
+
+    const pdfBuffer = await generateEstimatePdf(estimate);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename=Estimate-${estimate.product.serialNo}.pdf`);
+    res.send(pdfBuffer);
+  })
+);
+
+router.get(
+  "/:id/excel",
+  asyncHandler(async (req, res) => {
+    const estimate = await prisma.estimate.findUnique({
+      where: { id: req.params.id },
+      include: { 
+        product: { include: { customer: true } },
+        lines: { include: { purity: true, stoneType: true }, orderBy: { sortOrder: "asc" } }
+      },
+    });
+    if (!estimate) throw notFound("Estimate not found");
+
+    const excelBuffer = await generateEstimateExcel(estimate);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename=Estimate-${estimate.product.serialNo}.xlsx`);
+    res.send(excelBuffer);
   })
 );
 

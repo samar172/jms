@@ -1,38 +1,77 @@
-import path from "node:path";
-import fs from "node:fs/promises";
-import crypto from "node:crypto";
-import sharp from "sharp";
+import { v2 as cloudinary } from "cloudinary";
 import { env } from "../env";
 
+// We rely on the CLOUDINARY_URL environment variable to automatically configure the SDK.
+// e.g. cloudinary://my_key:my_secret@my_cloud_name
+if (env.CLOUDINARY_URL) {
+  cloudinary.config({
+    secure: true,
+  });
+}
+
 /**
- * Local-disk image storage for development. FR-8.05 specifies object storage
- * (S3 or equivalent) with signed URLs in production — swap this module for
- * an S3-backed implementation behind the same interface when deploying.
- * sharp() strips EXIF (including GPS location, FR-8.06) by default since we
- * never call .withMetadata(); .rotate() bakes in EXIF orientation first so
- * images don't appear sideways once that metadata is dropped.
+ * Uploads an image buffer directly to Cloudinary.
+ * Returns the secure URL of the uploaded image and a generated thumbnail URL.
  */
 export async function storeProductImage(
   productId: string,
   buffer: Buffer
 ): Promise<{ url: string; thumbnailUrl: string }> {
-  const dir = path.join(env.UPLOAD_DIR, "products", productId);
-  await fs.mkdir(dir, { recursive: true });
+  if (!env.CLOUDINARY_URL) {
+    throw new Error("CLOUDINARY_URL is not configured.");
+  }
 
-  const id = crypto.randomUUID();
-  const originalName = `${id}.webp`;
-  const thumbName = `${id}-thumb.webp`;
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        folder: `jms/products/${productId}`,
+        resource_type: "image",
+      },
+      (error, result) => {
+        if (error || !result) {
+          console.error("Cloudinary upload failed:", error);
+          return reject(error || new Error("Unknown Cloudinary upload error"));
+        }
 
-  const pipeline = sharp(buffer).rotate();
-  await pipeline.clone().webp({ quality: 90 }).toFile(path.join(dir, originalName));
-  await pipeline
-    .clone()
-    .resize(400, 400, { fit: "cover" })
-    .webp({ quality: 80 })
-    .toFile(path.join(dir, thumbName));
+        // Generate a thumbnail URL directly using Cloudinary's transformation API
+        const thumbnailUrl = cloudinary.url(result.public_id, {
+          width: 400,
+          height: 400,
+          crop: "fill",
+          quality: 80,
+          format: "webp",
+          secure: true,
+        });
 
-  return {
-    url: `/uploads/products/${productId}/${originalName}`,
-    thumbnailUrl: `/uploads/products/${productId}/${thumbName}`,
-  };
+        resolve({
+          url: result.secure_url,
+          thumbnailUrl,
+        });
+      }
+    );
+
+    uploadStream.end(buffer);
+  });
+}
+
+/**
+ * Deletes an image from Cloudinary (using its URL to infer the public_id).
+ */
+export async function deleteProductImageFile(url: string): Promise<void> {
+  if (!env.CLOUDINARY_URL || !url.includes("cloudinary.com")) return;
+
+  try {
+    // A simplified extraction of the public_id from a Cloudinary URL:
+    // .../upload/v1234567890/folder/filename.ext -> folder/filename
+    const parts = url.split("/upload/");
+    if (parts.length > 1) {
+      const pathPart = parts[1];
+      const withoutVersion = pathPart.replace(/^v\d+\//, "");
+      const publicId = withoutVersion.substring(0, withoutVersion.lastIndexOf("."));
+
+      await cloudinary.uploader.destroy(publicId);
+    }
+  } catch (err) {
+    console.error("Failed to delete image from Cloudinary:", err);
+  }
 }

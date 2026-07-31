@@ -1,0 +1,2117 @@
+
+
+
+BUSINESS REQUIREMENTS DOCUMENT
+Jewellery Manufacturing, Costing & Karigar Management System
+with AI-based Design Image Search
+Prepared for
+[CLIENT COMPANY NAME]
+Prepared by
+[YOUR COMPANY NAME]
+Field
+Detail
+Document Title
+Business Requirements Document (BRD)
+Project Name
+Jewellery Manufacturing, Costing & Karigar Management System
+Document Version
+1.0 (Draft for Client Review)
+Date of Issue
+10 July 2026
+Prepared By
+[Business Analyst Name], [Your Company Name]
+Reviewed By
+[Project Manager Name]
+Approved By (Client)
+[Client Authorised Signatory]
+Classification
+Confidential — For Client Circulation Only
+Reference Source
+Existing workbook: “Normal Detail 24-18 K.xlsx”
+
+
+This document is confidential and is intended solely for the use of the client named above. It contains proprietary business analysis and solution design. No part of this document may be reproduced or disclosed to third parties without prior written consent.
+
+Table of Contents
+The table of contents below is a live field. In Microsoft Word, click anywhere inside it, press F9 (or right-click → Update Field) → “Update entire table” to populate page numbers.
+Right-click and select “Update Field” to build.
+
+1. Document Control
+1.1 Version History
+Version
+Date
+Author
+Summary of Change
+Status
+0.1
+03 Jul 2026
+[BA Name]
+Initial skeleton after discovery call
+Internal
+0.5
+07 Jul 2026
+[BA Name]
+Added costing engine analysis from client Excel workbook
+Internal
+1.0
+10 Jul 2026
+[BA Name]
+Complete draft issued to client for review and sign-off
+Issued
+1.1
+[TBD]
+[BA Name]
+Incorporate client review comments
+Pending
+
+1.2 Distribution List
+Name
+Organisation
+Role
+Purpose
+[Client Owner / Director]
+[Client Company]
+Project Sponsor
+Approval & Sign-off
+[Client Manufacturing Head]
+[Client Company]
+Process Owner
+Review & Validation
+[Client Accounts Head]
+[Client Company]
+Costing Owner
+Review & Validation
+[Your Project Manager]
+[Your Company]
+Delivery Manager
+Execution
+[Your Tech Lead]
+[Your Company]
+Solution Architect
+Technical Design
+
+1.3 Approval & Sign-off
+Sign-off on this document confirms that the requirements captured herein are a complete and accurate representation of the client’s business needs. Development will commence against this baseline. Any change requested after sign-off will be processed through the Change Control procedure defined in Section 18.
+Role
+Name
+Signature
+Date
+Project Sponsor (Client)
+
+
+
+Process Owner (Client)
+
+
+
+Delivery Manager (Vendor)
+
+
+
+
+1.4 Purpose of This Document
+This Business Requirements Document (BRD) defines the business need, scope, functional and non-functional requirements for a custom software platform that will replace the client’s current Excel-and-register based method of tracking jewellery manufacturing, raw material movement, karigar (craftsman) labour and product costing. It is written to be understood by business stakeholders while being precise enough to serve as the baseline for solution design, estimation, development and User Acceptance Testing (UAT).
+1.5 Intended Audience
+Client business stakeholders — to validate that the system will reflect how they actually work.
+Vendor delivery team — architects, developers, QA, as the authoritative scope baseline.
+Commercial teams on both sides — as the basis for effort estimation and contracting.
+1.6 Requirement Prioritisation Legend (MoSCoW)
+Code
+Priority
+Meaning
+M
+Must Have
+Non-negotiable. The system is not viable at go-live without it.
+S
+Should Have
+Important and painful to omit, but a manual workaround exists for a short period.
+C
+Could Have
+Desirable. Included only if schedule and budget permit.
+W
+Won’t Have (this release)
+Explicitly deferred to a future phase. Documented to prevent scope ambiguity.
+
+
+2. Executive Summary
+The client is a jewellery manufacturing business that designs and produces gold jewellery (primarily 24K and 18K) set with polki and coloured stones, executed through a network of in-house and external karigars (craftsmen). Today, the entire operation — product serial numbering, raw material issue, gold dust and wastage reconciliation, karigar labour entry, and final product costing — is run on a combination of a single Excel estimate workbook and handwritten register copies.
+This approach has carried the business so far, but it has reached its structural limits. There is no single source of truth for how much gold was issued against a job and how much came back; wastage and dust recovery are estimated from memory rather than measured; labour payable to each karigar is reconstructed at month-end from registers; and there is no reliable way to look up an old design. Product knowledge lives in people’s heads and in loose photographs, not in a system.
+This document proposes a **web-based Jewellery Manufacturing, Costing & Karigar Management System** that digitises the complete lifecycle from design sketch to finished, costed product. Every product receives a permanent serial number. Every gram of gold issued to a karigar is tracked to its return, with dust and wastage reconciled against configurable tolerances. Every labour entry is captured against the job at the moment work is booked, so karigar payables are always current. The costing engine replicates the client’s existing Excel formulas exactly — including the derivation of the 18K rate as 75% of the 24K rate — so that finance staff see numbers they already trust, computed automatically rather than by hand.
+The platform also introduces a capability the client cannot achieve with Excel at all: **AI-based design image search**. A staff member photographs a physical piece, or uploads a customer-supplied design image, and the system returns the closest matching products from the catalogue along with their serial numbers, specifications and past costings. What is currently a twenty-minute hunt through registers and photo folders — often ending in failure — becomes a five-second lookup.
+2.1 Expected Business Outcomes
+Outcome
+Current State
+Target State
+Gold reconciliation
+Reconciled from memory / registers; leakage is invisible.
+Every issue and receipt tracked per job; dust and wastage measured against tolerance; exceptions flagged for approval.
+Product costing
+Manual Excel estimate per piece; formulas re-entered each time; errors go unnoticed.
+Rate-driven costing engine; snapshot of rates at estimate date; versioned and approved estimates.
+Karigar labour
+Register entries compiled at month-end; disputes are common.
+Labour booked at the point of work against the job card; payables live and auditable.
+Design retrieval
+Photographs in folders; serial number found only if someone remembers it.
+Upload a picture, receive ranked matches with serial numbers in seconds.
+Management visibility
+No consolidated view; questions answered only by asking staff.
+Dashboards for work-in-progress, metal position, wastage trend, karigar performance and margin.
+
+2.2 Indicative Investment Summary
+A detailed commercial proposal accompanies this BRD as a separate document. Indicatively, the scope described here is delivered over approximately **22–26 weeks** across eight phases (Section 16), with the visual search module positioned in the second half of the programme once the design catalogue has accumulated enough images to train and evaluate against. Phasing has been deliberately structured so that the client derives operational benefit from Phase 3 onward, well before final delivery.
+
+3. Business Background & Current State Analysis
+3.1 About the Client’s Business
+The client manufactures gold jewellery, working principally in 24K (pure) and 18K gold, with polki (uncut diamond) and coloured stone settings. Manufacturing is performed by karigars — skilled craftsmen — who receive raw gold and stones against a job, perform their stage of work (casting, filing, setting, polishing, and so on), and return the piece along with any recovered gold dust. The business handles both made-to-order customer pieces and repeat production of established designs.
+3.2 As-Is Process
+The current end-to-end process, as observed during discovery, runs as follows:
+A design is agreed with the customer, typically from a hand-drawn sketch or a photograph of an existing piece.
+A serial number is written into a register copy by hand. Sequence is maintained by whoever is holding the register.
+A rough estimate is prepared in the Excel workbook “Normal Detail 24-18 K.xlsx” to quote the customer.
+Raw gold is weighed and issued to a karigar. The weight is noted in the register.
+The karigar performs the work. Gold dust generated during filing and polishing is collected and returned separately, in principle.
+The finished piece is weighed on return. The difference between issue and receipt is treated as wastage, absorbed informally.
+Labour is agreed and noted — sometimes per gram, sometimes per piece, sometimes verbally — and settled at month-end.
+The final costing is completed in Excel, profit is added as a percentage, and the net amount is quoted or invoiced.
+The photograph of the finished piece, if taken at all, is stored on a phone or in an unstructured folder.
+3.3 Analysis of the Existing Excel Workbook
+The workbook “Normal Detail 24-18 K.xlsx” was provided by the client and has been analysed line by line. It is a single-sheet estimate template titled **ESTIMATE / RoughEstimate**, capturing gross weight (Gwt) and a date, and computing cost across four cost heads. Its structure is reproduced below because the proposed costing engine must reproduce it faithfully.
+3.3.1 Structure of the Sheet
+Block
+Rows
+Line Items Captured
+Columns Used
+Header
+1–4
+ESTIMATE / Rough Estimate label, Date, Gross Weight (Gwt)
+Date, Gwt
+1. Gold
+5–6
+Pure Gold 24K (grams); Pure Gold 18K (grams)
+Weight, Rate, Amount
+2. Polki
+8–15
+Up to 8 polki line items, each measured in carats (Crt)
+Carat, Rate, Amount
+3. Coloured Stone
+17–21
+Up to 5 coloured stone line items, each in carats (Crt)
+Carat, Rate, Amount
+4. Making Charges
+23
+Labour / making charge line
+Weight, Rate, Amount
+Totals
+24–26
+Cost (Rs.) → Add: Profit % → Net Amount (Rs.)
+Amount
+
+3.3.2 Formulas Embedded in the Workbook
+The following calculation logic is currently hard-coded into the cells and **must be preserved by the system**, with the constants exposed as configurable master data rather than frozen in formulas:
+#
+Excel Cell
+Formula in Workbook
+Business Meaning
+1
+H5
+=F5*G5
+24K gold amount = weight (g) × 24K rate per gram.
+2
+G6
+=G5*75/100
+18K rate is derived as 75% of the 24K rate (i.e. the 0.750 purity factor).
+3
+H6
+=F6*G6
+18K gold amount = weight (g) × derived 18K rate.
+4
+H8:H15
+=Fn*Gn
+Polki amount per line = carat × rate per carat (8 lines available).
+5
+H16
+=H5+H6+H8+…+H15
+Running subtotal: gold + all polki lines.
+6
+H17:H21
+=Fn*Gn
+Coloured stone amount per line = carat × rate per carat (5 lines available).
+7
+H22
+=H16+H17+…+H21
+Subtotal: gold + polki + coloured stones (total material cost).
+8
+H23
+=F23*G23
+Making charges / labour = quantity × rate.
+9
+H24
+=H22+H23
+Cost (Rs.) = total material cost + making charges.
+10
+H25
+=H24*G25/100
+Profit = Cost × profit percentage.
+11
+H26
+=H24+H25
+Net Amount (Rs.) = Cost + Profit.
+
+3.3.3 Structural Limitations Identified in the Workbook
+Fixed line-item capacity. Only 8 polki rows and 5 coloured stone rows exist. A piece with more stone varieties cannot be costed without breaking the formulas.
+Purity factor is buried in a formula. The 75% conversion sits inside cell G6. If the client ever needs 22K (91.66%) or 14K (58.5%), the sheet must be rebuilt.
+No rate history. The gold rate typed in on the day of the estimate is overwritten by the next estimate. There is no way to reconstruct what rate a past job was costed at.
+No serial number linkage. The sheet has an “S.no.” column, but it numbers the cost heads (1–4), not the product. The product serial number lives only in the register.
+Nothing is captured on the input side. The sheet records the cost of gold consumed, but not the gold issued, returned, lost as wastage, or recovered as dust.
+No karigar attribution. Making charges appear as a single line. Which karigar earned it, and for what stage of work, is not recorded.
+Single file, single user. The workbook cannot be safely used by two people at once, has no audit trail, and one accidental overwrite destroys history.
+Totals are brittle. H16 and H22 reference individual cells by name. Inserting a row silently excludes it from the total — a class of error that produces a plausible but wrong number.
+3.4 Consolidated Pain Points
+ID
+Pain Point
+Business Impact
+P-01
+Serial numbers issued manually in a register.
+Duplicate and skipped numbers. No way to guarantee uniqueness. A lost register means lost history.
+P-02
+Gold issue and receipt not systematically recorded.
+Metal leakage cannot be detected. Losses surface only at annual stock-take, when attribution is impossible.
+P-03
+Wastage and dust are estimated, not measured.
+Direct, silent erosion of margin. Karigar performance on wastage cannot be compared.
+P-04
+Labour recorded in registers and settled at month-end.
+Disputes with karigars. Labour cost not visible in the true cost of a piece until long after it has shipped.
+P-05
+Costing done manually per piece in Excel.
+Transcription errors. Formulas silently broken by row insertion. Estimates cannot be compared or audited.
+P-06
+No rate history captured against estimates.
+Past estimates cannot be defended to a customer, or re-derived for margin analysis.
+P-07
+Design sketches and product photos stored informally.
+Design IP is effectively lost. Re-orders of an old design require rebuilding it from scratch.
+P-08
+No way to search for a design by its appearance.
+Staff spend 15–30 minutes hunting for a past product, often unsuccessfully, delaying customer quotes.
+P-09
+No consolidated management reporting.
+The owner cannot answer basic questions — what is in progress, where is my metal, which karigar is losing gold — without interrogating staff.
+P-10
+No access control or audit trail.
+Any staff member with the file can alter any number. Nothing is traceable to a person or a time.
+
+
+4. Project Objectives & Success Criteria
+4.1 Business Objectives
+Eliminate dependency on Excel and register copies for all manufacturing, material, labour and costing records, replacing them with a single authoritative system of record.
+Establish end-to-end metal accountability, so that for every job the gold issued, returned, recovered as dust and lost as wastage is known, measured and reconciled.
+Automate product costing using the client’s existing formulas, with rates, purity factors and profit margins driven from configurable masters rather than hand-typed cells.
+Capture karigar labour at source, at the moment work is booked against a job, producing a live and defensible payables position.
+Preserve design intellectual property by attaching sketches and finished-product photographs permanently to every serial-numbered product.
+Enable instant design retrieval by image, allowing staff to identify a product and its serial number from a photograph alone.
+Give management real-time visibility through dashboards and reports covering work-in-progress, metal position, wastage, labour cost and margin.
+Enforce accountability through role-based access control and an immutable audit trail on every financially material transaction.
+4.2 Success Criteria & Measurable KPIs
+The project will be considered successful when the following criteria are demonstrably met at the end of the post-go-live stabilisation period (90 days after go-live):
+#
+Success Criterion
+Measurement
+Target
+SC-01
+Excel and register discontinued for new jobs.
+Count of new jobs created outside the system.
+Zero
+SC-02
+Every new product carries a system-generated serial number.
+% of products created with auto serial number.
+100%
+SC-03
+Every job is metal-reconciled before closure.
+% of closed job cards with a completed reconciliation entry.
+100%
+SC-04
+Wastage is measured, not estimated.
+% of jobs with recorded issue weight, receipt weight and dust weight.
+≥ 98%
+SC-05
+Costing matches the legacy Excel output.
+Parallel-run variance on a sample of 30 historical estimates.
+≤ ₹1 rounding variance
+SC-06
+Karigar payables are current at any point in time.
+Days of lag between work booked and labour visible in payables.
+0 days (real time)
+SC-07
+Design retrieval time collapses.
+Median time to locate a past design’s serial number.
+≤ 10 seconds (from 15–30 min)
+SC-08
+Visual search returns the correct product.
+Top-5 accuracy on a held-out set of 200 catalogue images.
+≥ 85% (see Section 12)
+SC-09
+Users are self-sufficient.
+Support tickets per user per week after training.
+< 1
+SC-10
+System is dependable during business hours.
+Uptime measured monthly.
+≥ 99.5%
+
+
+5. Project Scope
+5.1 In Scope
+The following capabilities are within the scope of this engagement and are specified in Section 8:
+Master data management — gold rates, purity/karat definitions, stone types, product categories, karigars, employees, customers and vendors.
+Product & design registry with automatic, immutable serial number generation.
+Sketch and finished-product image upload, with multiple images per product.
+Job card lifecycle — creation, stage-wise routing to karigars, progress tracking, and closure.
+Raw material issue and receipt — gold, polki, coloured stones and findings.
+Gold dust collection, refining recovery and credit back to inventory.
+Wastage capture and reconciliation against configurable tolerance limits, with an exception approval workflow.
+Karigar and employee labour entry — per gram, per piece, per stage, or daily wage — and payables computation.
+Costing & estimate engine replicating the client’s existing Excel formulas, with versioning and approval.
+AI-based visual search — identify a product and retrieve its serial number from an uploaded image.
+Reports, dashboards and data exports (Excel and PDF).
+Role-based access control, user management and a full audit trail.
+One-time migration of the client’s existing product, karigar and rate data into the system.
+User training, documentation and a defined post-go-live support period.
+5.2 Out of Scope
+The following are explicitly **excluded** from this release. They are recorded here to remove ambiguity, not to rule them out permanently; several are natural candidates for a subsequent phase.
+ID
+Excluded Item
+Rationale / Future Position
+OS-01
+Full financial accounting, general ledger and balance sheet.
+The system will produce costing and payables data and export it. It is not an accounting package.
+OS-02
+GST return filing and statutory e-invoicing.
+GST can be shown on documents if required, but filing remains with the client’s CA. Candidate for Phase 2.
+OS-03
+Retail point-of-sale and customer billing counter.
+Scope is manufacturing and costing, not retail sale.
+OS-04
+Payroll processing, statutory deductions, PF/ESI.
+Labour payable is computed; disbursement and statutory payroll are out of scope.
+OS-05
+E-commerce storefront or customer-facing catalogue.
+Candidate for a future phase once the design catalogue is populated.
+OS-06
+Hallmarking (BIS/HUID) portal integration.
+Dependent on external portal availability. Field capture only in this release.
+OS-07
+Native iOS / Android applications.
+Delivered as a mobile-responsive web application. Native apps are a Phase 2 candidate.
+OS-08
+Integration with digital weighing scales via hardware interface.
+Weights are keyed in. Scale integration is a Could-Have (Section 8.5) subject to scale model.
+OS-09
+Automatic identification of stones or gemstone grading from an image.
+The visual search identifies products, not gemstone characteristics.
+OS-10
+Migration of historical estimates older than the agreed cut-off date.
+Cut-off to be agreed at Discovery. Older records remain in Excel as read-only archive.
+
+5.3 Assumptions
+ID
+Assumption
+A-01
+The client will nominate a single empowered Process Owner available for at least 4 hours per week through the project.
+A-02
+The costing formulas in the supplied Excel workbook are complete and currently correct. Any additional cost head (e.g. hallmarking, certification, packing) will be raised during Discovery.
+A-03
+The 18K rate is derived as 75% of the 24K rate. Other purities, if required, follow standard purity factors (22K = 0.9166, 14K = 0.585) and will be configurable.
+A-04
+Gold rates are entered manually by an authorised user. Live rate-feed integration is a Could-Have, not assumed.
+A-05
+The client has, or will procure, reasonable-quality photographs of past designs. Visual search accuracy is a direct function of image quality and catalogue size.
+A-06
+Users have basic smartphone and computer literacy and access to a stable internet connection at the premises.
+A-07
+The client will provide sign-off on this BRD within 10 working days of issue, and on UAT within 10 working days of UAT commencement.
+A-08
+Weighing is performed on the client’s existing scales; recorded weights are accurate to three decimal places in grams.
+
+5.4 Dependencies
+ID
+Dependency
+Owner
+D-01
+Provision of the complete legacy dataset (products, karigars, rates) in an agreed format for migration.
+Client
+D-02
+Provision of a starter set of at least 300 labelled product images for visual search training and evaluation.
+Client
+D-03
+Confirmation of the serial number format and any legacy numbering that must be preserved.
+Client
+D-04
+Confirmation of wastage tolerance percentages, by process stage and by karigar category.
+Client
+D-05
+Cloud hosting account provisioning and domain name.
+Vendor (billed to Client)
+D-06
+Availability of nominated end users for UAT and training.
+Client
+
+5.5 Constraints
+Connectivity. The system is a hosted web application and requires internet access. A limited offline capture mode for the shop floor is classified as a Could-Have (Section 8.5).
+Language. The user interface will be delivered in English. Hindi labelling for shop-floor screens is a Should-Have.
+Visual search is probabilistic. It returns ranked candidate matches with confidence scores; it does not return a guaranteed single answer. This is elaborated in Section 12 and must be understood by the client at sign-off.
+Historical accuracy. Data migrated from Excel and registers can only be as accurate as the source. The system cannot reconstruct metal history that was never recorded.
+
+6. Stakeholders, User Roles & Access Matrix
+6.1 Stakeholder Register
+Stakeholder
+Interest in the Project
+Influence
+Owner / Director
+Margin visibility, metal accountability, protection of design IP.
+High — Sponsor
+Manufacturing Manager
+Job progress, karigar allocation, wastage control.
+High — Process Owner
+Accounts / Costing Staff
+Accurate, fast, defensible costing. Elimination of manual re-entry.
+High — Daily User
+Store / Inventory Keeper
+Correct metal and stone issue-receipt records.
+Medium — Daily User
+Karigars (in-house & external)
+Fair and prompt labour settlement; clear work instructions.
+Medium — Subject
+Sales / Front Desk Staff
+Fast retrieval of past designs to quote customers.
+Medium — Daily User
+Vendor Delivery Team
+Clear, stable scope; timely access to stakeholders.
+High — Supplier
+
+6.2 System Roles
+Role
+Description
+Super Admin
+Full system access including user management, master data, configuration and audit log. Typically the owner or IT delegate.
+Manager
+Full operational access: create jobs, approve estimates, approve wastage exceptions, view all reports. Cannot manage users or alter audit records.
+Costing / Accounts User
+Create and revise estimates, view rates and margins, generate costing reports. Cannot issue material or alter job status.
+Store Keeper
+Issue and receive raw material, record dust, weigh and record returns. Cannot see rates, cost or margin.
+Production Staff
+Update job stage status, record labour against a job. Cannot see rates, cost or margin.
+Sales / Front Desk
+Search the catalogue (including visual search), view product specifications and images. Cannot see cost, margin or karigar labour rates.
+Karigar (optional login)
+View own assigned jobs and own labour/payable statement only.
+Auditor (read-only)
+Read-only access to all transactional data and the audit trail. Cannot modify anything.
+
+6.3 Role–Permission Matrix
+Legend: **C** Create · **R** Read · **U** Update · **D** Delete · **A** Approve · **—** No Access
+Module
+Super Admin
+Manager
+Costing
+Store
+Production
+Sales
+Karigar
+Auditor
+Master Data (rates, karat, stones)
+CRUD
+R
+R
+R
+—
+—
+—
+R
+User & Role Management
+CRUD
+—
+—
+—
+—
+—
+—
+R
+Product / Design Registry
+CRUD
+CRU
+R
+R
+R
+R
+—
+R
+Product Images & Sketches
+CRUD
+CRU
+R
+R
+R
+R
+—
+R
+Job Card
+CRUD
+CRUA
+R
+R
+RU
+R
+R (own)
+R
+Raw Material Issue / Receipt
+CRUD
+CRUA
+R
+CRU
+R
+—
+—
+R
+Dust & Wastage
+CRUD
+CRUA
+R
+CRU
+R
+—
+—
+R
+Labour Entry
+CRUD
+CRUA
+R
+—
+CRU
+—
+R (own)
+R
+Costing / Estimate
+CRUD
+CRUA
+CRU
+—
+—
+—
+—
+R
+Rates & Margin Visibility
+R
+R
+R
+—
+—
+—
+—
+R
+Visual Search
+R
+R
+R
+R
+R
+R
+—
+R
+Reports & Dashboards
+R
+R
+R (costing)
+R (stock)
+R (job)
+R (catalogue)
+—
+R
+Audit Trail
+R
+R
+—
+—
+—
+—
+—
+R
+
+
+7. Proposed To-Be Process Flow
+The target process below is the operational backbone against which the functional requirements in Section 8 are written. Each numbered step corresponds to a system transaction that leaves an auditable record.
+7.1 End-to-End Flow
+Step
+Activity
+Actor
+System Action & Record Created
+1
+Design received (sketch, photo, or customer reference).
+Sales / Manager
+Design record created. Sketch image uploaded. Serial number auto-generated and locked.
+2
+Optional: check whether the design already exists.
+Sales
+Visual search run on the uploaded image; ranked matches with serial numbers returned.
+3
+Rough estimate prepared for the customer.
+Costing User
+Estimate v1 created against the serial number. Gold, polki, stone and labour lines costed at today’s rates. Rate snapshot stored.
+4
+Customer approves; job is released to production.
+Manager
+Estimate marked Approved and locked. Job Card created and linked to the serial number.
+5
+Gold and stones issued to the first karigar.
+Store Keeper
+Material Issue voucher: gross weight, purity, stone carats. Inventory decremented. Karigar’s metal account debited.
+6
+Karigar performs the work stage.
+Karigar / Production
+Job stage status updated (e.g. Casting → Filing → Setting → Polishing).
+7
+Labour is booked for the completed stage.
+Production Staff
+Labour entry against job + karigar + stage, at the applicable rate basis. Karigar payable increases immediately.
+8
+Piece and gold dust are returned and weighed.
+Store Keeper
+Material Receipt voucher: finished weight + dust weight. Karigar’s metal account credited.
+9
+Wastage computed and checked.
+System
+Wastage = Issued − Received − Dust. Compared to tolerance. If exceeded, exception raised for Manager approval.
+10
+Dust sent for refining; recovery received.
+Store Keeper
+Dust lot created, sent to refiner, recovered pure gold credited back to inventory at actual recovery %.
+11
+Piece moves to the next stage, or to finishing.
+Manager
+Steps 5–10 repeat per stage. Full chain of custody maintained per karigar.
+12
+Finished product photographed.
+Sales / Production
+Real product image uploaded against the serial number. Image is indexed for visual search.
+13
+Final costing generated.
+Costing User
+Estimate revised to Actuals: actual metal consumed, actual stones, actual labour booked, wastage cost. Profit % applied. Net Amount computed.
+14
+Job closed.
+Manager
+System blocks closure until metal is reconciled and all labour entries are approved. Product enters finished-goods catalogue.
+
+7.2 Metal Reconciliation Logic
+The reconciliation performed at Step 9 is the financial heart of the system and is stated formally here:
+**Net Wastage (g) = Gold Issued (g) − Finished Piece Weight (g) − Gold Dust Recovered (g) − Gold Returned Unused (g)**
+**Wastage % = (Net Wastage ÷ Gold Issued) × 100**
+Where all weights are normalised to fine gold (i.e. gross weight × purity factor) before comparison, so that gold issued at one purity and returned at another reconciles correctly. The resulting Wastage % is compared against the tolerance configured for the process stage and karigar category. Wastage within tolerance is absorbed into product cost automatically. Wastage beyond tolerance raises an exception that must be approved by a Manager with a recorded reason, and can optionally be recovered from the karigar’s labour payable.
+
+8. Functional Requirements
+Requirements are grouped by module. Each carries a unique identifier used throughout design, development and UAT traceability. Priorities follow the MoSCoW legend in Section 1.6.
+8.1 Module 1 — Master Data Management
+Everything the costing engine and shop floor depend on must be configurable by the client without developer intervention. This module removes the hard-coded constants currently buried in Excel formulas.
+Req. ID
+Requirement
+Priority
+FR-1.01
+The system shall maintain a Gold Rate master allowing an authorised user to enter the 24K rate per gram, effective from a given date and time.
+M
+FR-1.02
+The system shall maintain a full history of gold rates. A rate, once used in an approved estimate, shall never be altered — the estimate stores a snapshot of the rate applied.
+M
+FR-1.03
+The system shall maintain a Purity / Karat master (24K, 22K, 18K, 14K, and user-defined) each with a purity factor (e.g. 18K = 0.750). The 18K rate shall by default be derived as 24K rate × 75%, mirroring the client’s existing workbook, while permitting a manual override.
+M
+FR-1.04
+The system shall maintain a Stone Type master distinguishing Polki, Diamond, and Coloured Stone categories, each with sub-types, unit of measure (carat), and a default rate per carat.
+M
+FR-1.05
+The system shall maintain a Product Category master (ring, necklace, kada, earring, etc.) used in serial number generation and reporting.
+M
+FR-1.06
+The system shall maintain an Employee & Karigar master capturing name, code, photograph, contact number, address, skill/stage specialisation, employment type (in-house / external), and labour rate basis.
+M
+FR-1.07
+The system shall support four labour rate bases per karigar per stage: (a) per gram of net weight, (b) per piece, (c) per carat set, (d) daily wage.
+M
+FR-1.08
+The system shall maintain a Process Stage master (casting, filing, setting, polishing, meena, rhodium, etc.) with a configurable wastage tolerance percentage per stage.
+M
+FR-1.09
+The system shall maintain a Customer master and a Vendor / Refiner master.
+S
+FR-1.10
+The system shall maintain a Charges master for other cost heads (hallmarking, certification, packing, rhodium, freight) that can be appended to any estimate as additional lines.
+S
+FR-1.11
+The system shall maintain a Profit Margin master allowing a default profit percentage, overridable per estimate by an authorised user only.
+M
+FR-1.12
+All master records shall support soft-delete (deactivation) rather than hard delete, so that historical transactions referencing them remain intact and readable.
+M
+
+8.2 Module 2 — Product & Design Registry (Serial Number)
+This module replaces the register copy. It is the anchor to which every image, job card, material movement, labour entry and estimate is attached.
+Req. ID
+Requirement
+Priority
+FR-2.01
+The system shall auto-generate a unique, sequential, immutable serial number for every product created. Manual entry of the serial number shall not be permitted.
+M
+FR-2.02
+The serial number format shall be configurable by the Super Admin using a pattern of prefix, category code, purity code, year/month and a zero-padded sequence. Reference format: NK-18K-2607-0042 (see Appendix B).
+M
+FR-2.03
+The system shall guarantee no duplicate and no skipped serial numbers, enforced at the database level, even under concurrent creation by multiple users.
+M
+FR-2.04
+A product record shall capture: serial number, design name, category, sub-category, purity, gross weight, net weight, stone weight, size/dimensions, description, designer, design source (in-house / customer-supplied), creation date and created-by user.
+M
+FR-2.05
+A product shall support multiple images with an explicit image type: Sketch, Work-in-Progress, and Final Product. At least one Sketch and one Final Product image shall be supported per product.
+M
+FR-2.06
+The system shall generate a QR code / barcode encoding the serial number, printable on a job tag, so that a product can be identified by scanning at any point on the shop floor.
+S
+FR-2.07
+The system shall support cloning an existing product as the starting point for a new one (a repeat order or a variant), carrying forward specifications and images while issuing a fresh serial number.
+S
+FR-2.08
+The system shall maintain a status lifecycle per product: Design → Estimated → In Production → Finished → Sold / Delivered → Melted / Scrapped.
+M
+FR-2.09
+The system shall provide advanced filtering of the catalogue by category, purity, weight range, stone type, karigar, date range, status and customer.
+M
+FR-2.10
+The system shall maintain a complete history view per serial number, showing every material movement, labour entry, stage change, image and estimate version on a single timeline.
+M
+
+8.3 Module 3 — Job Card & Manufacturing Workflow
+Req. ID
+Requirement
+Priority
+FR-3.01
+The system shall allow creation of a Job Card against a serial number, capturing the customer (if made-to-order), target delivery date, and the sequence of process stages required.
+M
+FR-3.02
+Each job card stage shall be assignable to a specific karigar, with an assignment date and an expected completion date.
+M
+FR-3.03
+The system shall track stage status: Pending → Issued → In Progress → Received → Approved → Rework.
+M
+FR-3.04
+The system shall support rework loops — a stage can be re-issued to the same or a different karigar, with rework labour and rework wastage tracked separately from first-pass figures.
+S
+FR-3.05
+The system shall display a live Work-In-Progress board showing every open job, its current stage, the karigar holding it, days elapsed, and days overdue against the delivery date.
+M
+FR-3.06
+The system shall raise an alert when a job exceeds its expected stage duration or its target delivery date.
+S
+FR-3.07
+The system shall prevent closure of a job card until (a) all material is reconciled, (b) all wastage exceptions are approved or rejected, and (c) all labour entries against the job are approved.
+M
+FR-3.08
+The system shall permit a job to be placed on hold with a mandatory reason, and shall exclude held jobs from overdue alerts.
+C
+FR-3.09
+The system shall print a Job Card / work order as PDF, including the QR code, sketch image, specifications and the assigned karigar.
+S
+
+8.4 Module 4 — Raw Material, Inventory & Metal Accounting
+Req. ID
+Requirement
+Priority
+FR-4.01
+The system shall record a Material Issue to a karigar against a job card, capturing item (gold / polki / coloured stone / finding), purity, gross weight in grams (three decimal places), carat for stones, piece count, and the issuing user.
+M
+FR-4.02
+The system shall convert every gold weight to its fine gold equivalent (gross weight × purity factor) so that issues and receipts across different purities reconcile on a common basis.
+M
+FR-4.03
+The system shall record a Material Receipt from a karigar, capturing finished piece weight, gold dust weight, unused gold returned, and any stones returned or rejected.
+M
+FR-4.04
+The system shall maintain a running metal account per karigar — a ledger of fine gold debited on issue and credited on receipt — with the outstanding balance visible at any time.
+M
+FR-4.05
+The system shall maintain stock ledgers for gold (by purity), polki (by carat and quality), coloured stones (by type), and findings, with opening balance, inward, outward and closing balance for any date range.
+M
+FR-4.06
+The system shall record purchases of raw material from vendors, updating stock and capturing rate, invoice reference and date.
+S
+FR-4.07
+The system shall support physical stock-taking, allowing entry of counted quantities and producing a variance report against book stock.
+S
+FR-4.08
+The system shall flag and block a material issue where the requested quantity exceeds available stock, unless overridden by a Manager with a recorded reason.
+S
+FR-4.09
+Every material transaction shall be immutable once posted. Corrections shall be made by a reversing entry, never by editing history.
+M
+
+8.5 Module 5 — Gold Dust, Wastage & Loss Reconciliation
+This module addresses the single largest source of silent margin erosion identified in the current process (pain points P-02 and P-03).
+Req. ID
+Requirement
+Priority
+FR-5.01
+The system shall compute Net Wastage for every job stage as: Fine gold issued − fine gold in finished piece − fine gold in dust recovered − fine gold returned unused.
+M
+FR-5.02
+The system shall compute Wastage % against the fine gold issued and compare it to the tolerance configured for that process stage (FR-1.08).
+M
+FR-5.03
+Where wastage is within tolerance, the system shall absorb the wastage cost into the product cost automatically and post the entry without intervention.
+M
+FR-5.04
+Where wastage exceeds tolerance, the system shall raise a Wastage Exception which blocks stage approval until a Manager approves it with a mandatory recorded reason.
+M
+FR-5.05
+The system shall allow an approved wastage exception to be recovered from the karigar’s labour payable, in full or in part, at the Manager’s discretion, with the recovery posted to the karigar’s ledger.
+S
+FR-5.06
+The system shall maintain a Gold Dust register: dust collected per job, per karigar, per date, accumulated into a dust lot.
+M
+FR-5.07
+The system shall record the despatch of a dust lot to a refiner and the receipt of recovered pure gold, computing the actual recovery percentage = (pure gold recovered ÷ dust weight sent) × 100.
+M
+FR-5.08
+Recovered pure gold shall be credited back into the 24K gold stock ledger on receipt, restoring it to available inventory.
+M
+FR-5.09
+The system shall report wastage % trend by karigar, by stage and by product category over any date range, enabling the client to identify karigars whose losses are consistently above peer average.
+M
+FR-5.10
+The system shall report refining recovery % by refiner over time, so that under-performing refiners can be identified.
+C
+
+8.6 Module 6 — Karigar Labour & Employee Costing
+Req. ID
+Requirement
+Priority
+FR-6.01
+The system shall record a labour entry against a job card stage, capturing karigar, stage, rate basis, quantity (grams / pieces / carats / days), rate applied, and computed amount.
+M
+FR-6.02
+The rate shall default from the karigar’s master rate for that stage, and shall be overridable per entry by an authorised user with the override recorded.
+M
+FR-6.03
+The system shall maintain a karigar payable ledger: labour earned, advances paid, wastage recoveries deducted, and net payable, in real time.
+M
+FR-6.04
+The system shall record advances paid to karigars and automatically adjust them against subsequent labour earnings.
+S
+FR-6.05
+The system shall generate a per-karigar settlement statement for any period, listing every job worked, labour earned, deductions and net payable, exportable as PDF.
+M
+FR-6.06
+The system shall record daily attendance for in-house staff on a daily-wage basis, and compute wages from attendance.
+S
+FR-6.07
+The system shall aggregate total labour cost per product serial number across all stages and karigars, feeding directly into the costing engine as the Making Charges line.
+M
+FR-6.08
+The system shall report karigar productivity: pieces completed, average turnaround days per stage, average wastage %, and total labour earned, for any period.
+S
+FR-6.09
+Karigars with an optional login shall see only their own assigned jobs and payable statement, and no cost, rate or margin data belonging to the business.
+S
+
+8.7 Module 7 — Costing & Estimate Engine
+This module is a faithful, generalised reimplementation of the client’s existing Excel workbook. The formulas of Section 3.3.2 are preserved exactly; the fixed row limits, hard-coded purity factor and brittle cell-reference totals are removed. Finance staff will recognise the output; the mechanics beneath it are auditable and safe.
+8.7.1 Estimate Structure
+Cost Head
+Line Items
+Unit
+Amount Formula
+1. Gold
+Unlimited lines, one per purity used (24K, 18K, 22K…)
+Grams
+Weight × Rate for that purity
+2. Polki
+Unlimited lines (Excel was capped at 8)
+Carat
+Carat × Rate per carat
+3. Coloured Stones
+Unlimited lines (Excel was capped at 5)
+Carat
+Carat × Rate per carat
+4. Making Charges
+Auto-populated from labour entries, or entered manually
+Gram / Piece
+Quantity × Labour rate
+5. Other Charges
+New — hallmarking, certification, rhodium, packing
+As defined
+Quantity × Rate
+Wastage Cost
+New — fine gold lost within tolerance, valued at cost
+Grams
+Wastage (g) × 24K rate
+
+8.7.2 Requirements
+Req. ID
+Requirement
+Priority
+FR-7.01
+The system shall compute line amount = weight × rate for gold lines and line amount = carat × rate for stone lines, per the existing workbook.
+M
+FR-7.02
+The system shall derive the 18K rate as 24K rate × 75% by default (replicating cell G6 of the client workbook), driven by the purity factor in the Karat master rather than a hard-coded formula.
+M
+FR-7.03
+The system shall support an unlimited number of polki and coloured stone lines, removing the 8-line and 5-line caps of the workbook.
+M
+FR-7.04
+The system shall compute Material Cost = Gold total + Polki total + Coloured Stone total (replicating cells H16 and H22).
+M
+FR-7.05
+The system shall compute Cost (Rs.) = Material Cost + Making Charges + Other Charges + Wastage Cost (replicating cell H24, extended).
+M
+FR-7.06
+The system shall compute Profit = Cost × Profit % ÷ 100 (replicating cell H25), with the profit percentage defaulting from the master and overridable by authorised users only.
+M
+FR-7.07
+The system shall compute Net Amount (Rs.) = Cost + Profit (replicating cell H26).
+M
+FR-7.08
+The system shall snapshot every rate used at the moment an estimate is saved, so the estimate can always be re-derived exactly, regardless of subsequent rate changes.
+M
+FR-7.09
+The system shall support two estimate types: a Rough Estimate (pre-production quotation, based on expected weights) and a Final Costing (post-production actuals, drawing real consumed weights and real booked labour).
+M
+FR-7.10
+The system shall present a variance report between Rough Estimate and Final Costing per product, highlighting where estimated and actual metal, stone, labour and wastage diverged.
+S
+FR-7.11
+Estimates shall be versioned. Revising an approved estimate creates a new version; prior versions remain readable and are never overwritten.
+M
+FR-7.12
+An estimate shall move through a status lifecycle: Draft → Submitted → Approved → Superseded. An Approved estimate shall be locked against edits.
+M
+FR-7.13
+The system shall print a customer-facing Estimate / Quotation PDF on the client’s letterhead, with the product image, specifications and cost summary, and a configurable option to hide the internal cost breakdown and margin.
+M
+FR-7.14
+The system shall apply configurable rounding rules: weights to three decimal places, carats to three, currency amounts to two, and the final net amount optionally rounded to the nearest rupee.
+M
+FR-7.15
+The system shall support an optional GST line on the printed estimate, computed at a configurable percentage. GST filing remains out of scope (OS-02).
+C
+FR-7.16
+The system shall allow an estimate to be exported to Excel in a layout familiar to existing staff, easing the transition away from the legacy workbook.
+S
+
+8.8 Module 8 — Image & Media Management
+Req. ID
+Requirement
+Priority
+FR-8.01
+The system shall accept image upload in JPEG, PNG, HEIC and WebP formats, up to a configurable maximum size (default 15 MB per image).
+M
+FR-8.02
+The system shall support direct capture from a mobile device camera through the browser, so shop-floor staff can photograph a piece and upload it without transferring files.
+M
+FR-8.03
+The system shall support multiple images per product, each tagged as Sketch, Work-in-Progress or Final Product, with one nominated as the primary display image.
+M
+FR-8.04
+The system shall automatically generate optimised thumbnails and web-sized renditions on upload, retaining the original at full resolution.
+M
+FR-8.05
+Images shall be stored in object storage (e.g. Amazon S3 or equivalent) with server-side encryption at rest, and served through time-limited signed URLs.
+M
+FR-8.06
+The system shall automatically strip EXIF location metadata from uploaded images before storage.
+S
+FR-8.07
+The system shall support bulk upload of images with a mapping file, to migrate the client’s existing photo archive.
+S
+FR-8.08
+The system shall allow images to be replaced or deactivated, never silently deleted, with the change recorded in the audit trail.
+M
+FR-8.09
+Every uploaded Final Product image shall be automatically queued for visual-search indexing (Module 9) without any additional user action.
+M
+
+8.9 Module 9 — AI-Based Visual Design Search
+This module delivers the capability the client specifically requested: a staff member uploads a photograph of a design and the system identifies the matching product and returns its serial number. Section 12 sets out the technical approach and — importantly — the realistic accuracy expectations that must be understood before sign-off.
+Req. ID
+Requirement
+Priority
+FR-9.01
+The system shall accept an uploaded image, or a live camera capture, as a visual search query.
+M
+FR-9.02
+The system shall return the top N most visually similar products (default N = 5, configurable up to 20), ranked by similarity, each showing the product image, serial number, design name, category, purity, gross weight and a similarity confidence score.
+M
+FR-9.03
+Search results shall be returned within 3 seconds for a catalogue of up to 50,000 indexed images (see NFR-1.03).
+M
+FR-9.04
+The system shall provide a one-click path from a search result to the full product record, showing its complete history, past estimates and job cards.
+M
+FR-9.05
+The system shall allow the visual search to be combined with structured filters — for example, “visually similar to this image, and category = Necklace, and purity = 18K, and gross weight between 20 g and 30 g” — materially improving precision.
+S
+FR-9.06
+The system shall apply automatic image pre-processing to the query — background removal, orientation correction and normalisation — to reduce sensitivity to lighting and backdrop.
+S
+FR-9.07
+The system shall support sketch-to-product search: a hand-drawn sketch uploaded as the query shall be matched against both the sketch images and the finished-product images in the index.
+S
+FR-9.08
+Where the top result’s confidence score falls below a configurable threshold, the system shall clearly state that no confident match was found rather than presenting a weak match as an answer.
+M
+FR-9.09
+The system shall capture a relevance feedback signal — the user marks a returned result as correct or incorrect — and shall use this feedback to improve ranking over time.
+S
+FR-9.10
+The system shall re-index automatically and incrementally whenever a new product image is uploaded, with no manual re-training step required of the client.
+M
+FR-9.11
+The system shall maintain a visual search audit log — who searched, with what image, what was returned, and what was selected — supporting both accuracy measurement and misuse detection.
+C
+FR-9.12
+The system shall provide an accuracy dashboard showing top-1 and top-5 hit rates derived from the feedback signal, so that model performance is transparent to the client over time.
+C
+
+8.10 Module 10 — Reports, Dashboards & Analytics
+Req. ID
+Requirement
+Priority
+FR-10.01
+The system shall provide a role-aware dashboard on login. The Manager sees WIP, overdue jobs, metal position and wastage alerts; Costing sees pending estimates and margin summary; Store sees stock position and outstanding karigar metal balances.
+M
+FR-10.02
+The system shall provide a Work-In-Progress report: every open job, stage, karigar, days elapsed, days overdue.
+M
+FR-10.03
+The system shall provide a Metal Position report: opening stock, purchases, issued, received, dust recovered, wastage and closing stock, by purity, for any date range.
+M
+FR-10.04
+The system shall provide a Karigar Metal Outstanding report: fine gold currently held by each karigar, with ageing.
+M
+FR-10.05
+The system shall provide a Wastage Analysis report: wastage % by karigar, by stage, by category, against tolerance, with trend over time.
+M
+FR-10.06
+The system shall provide a Karigar Labour & Payable report with settlement statements.
+M
+FR-10.07
+The system shall provide a Product Costing report showing, per serial number, the full cost build-up and the realised margin.
+M
+FR-10.08
+The system shall provide an Estimate vs Actual variance report.
+S
+FR-10.09
+The system shall provide a Gold Rate History report with a rate trend chart.
+C
+FR-10.10
+Every report shall be exportable to Excel (.xlsx) and PDF, and shall support date-range, karigar, category and purity filters.
+M
+FR-10.11
+The system shall support scheduled email delivery of nominated reports (e.g. a daily WIP summary to the owner).
+C
+
+8.11 Module 11 — Administration, Security & Audit
+Req. ID
+Requirement
+Priority
+FR-11.01
+The system shall provide user management: create, deactivate, assign roles, and force a password reset.
+M
+FR-11.02
+The system shall enforce role-based access control per the matrix in Section 6.3. Cost, rate and margin data shall be invisible to Store, Production, Sales and Karigar roles.
+M
+FR-11.03
+The system shall maintain an immutable audit trail recording, for every create, update, delete and approve action: the user, timestamp, IP address, the entity affected, and the before/after values of every changed field.
+M
+FR-11.04
+The audit trail shall be read-only to every role, including Super Admin, and shall be exportable for any date range.
+M
+FR-11.05
+The system shall enforce a password policy (minimum length, complexity, expiry) and shall lock an account after a configurable number of failed login attempts.
+M
+FR-11.06
+The system shall support two-factor authentication by OTP for the Super Admin and Manager roles.
+S
+FR-11.07
+The system shall automatically terminate an idle session after a configurable period (default 30 minutes).
+M
+FR-11.08
+The system shall allow the Super Admin to configure company profile, letterhead, logo, serial number format, tolerances, rounding rules and default profit margin without developer involvement.
+M
+
+8.12 Module 12 — Data Migration from Excel & Registers
+Req. ID
+Requirement
+Priority
+FR-12.01
+The vendor shall provide Excel import templates for products, karigars, customers, gold rate history, opening stock and opening karigar metal balances.
+M
+FR-12.02
+The import shall perform validation before commit, producing an error report identifying every rejected row and the reason, with nothing partially committed.
+M
+FR-12.03
+The system shall support assignment of legacy serial numbers to migrated products, preserving the client’s existing numbering as an alternate reference alongside the new system number.
+M
+FR-12.04
+The system shall support bulk image import, mapping image files to serial numbers by filename convention or by a mapping sheet.
+S
+FR-12.05
+A parallel run shall be conducted: for an agreed period, a sample of jobs shall be recorded in both the legacy Excel and the new system, and outputs compared to prove equivalence (Success Criterion SC-05).
+M
+
+8.13 Module 13 — Notifications & Alerts
+Req. ID
+Requirement
+Priority
+FR-13.01
+The system shall raise an in-application notification to the Manager when a wastage exception is created.
+M
+FR-13.02
+The system shall notify the assigned karigar or production supervisor when a job stage is issued to them.
+S
+FR-13.03
+The system shall alert the Manager when a job becomes overdue against its target delivery date.
+S
+FR-13.04
+The system shall alert the Store Keeper when a raw material stock level falls below a configurable reorder threshold.
+C
+FR-13.05
+The system shall support email and WhatsApp delivery of nominated alerts, subject to the client providing a WhatsApp Business API account.
+C
+
+8.14 Module 14 — Deferred & Optional Capabilities
+Recorded for completeness and future phasing. Not committed in this release.
+Req. ID
+Requirement
+Priority
+FR-14.01
+Integration with a live gold rate feed to auto-populate the daily 24K rate.
+C
+FR-14.02
+Direct capture of weight from a digital weighing scale via serial or USB interface.
+C
+FR-14.03
+Offline capture mode for shop-floor screens, synchronising when connectivity is restored.
+C
+FR-14.04
+Hindi language interface for shop-floor and karigar-facing screens.
+S
+FR-14.05
+Native mobile applications for iOS and Android.
+W
+FR-14.06
+Customer-facing catalogue portal exposing selected finished designs.
+W
+FR-14.07
+Tally / accounting software export integration.
+C
+
+
+9. Business Rules
+Business rules constrain system behaviour independently of any single screen or module. They are stated here once and referenced throughout design and testing.
+Rule ID
+Business Rule
+BR-01
+Purity factors. 24K = 0.995 (or 1.000, configurable), 22K = 0.9166, 18K = 0.750, 14K = 0.585. All gold weights are converted to fine gold using these factors before any reconciliation.
+BR-02
+Derived rate. The rate for any purity below 24K defaults to `24K rate × purity factor`. For 18K this yields the client’s existing 75% derivation. A manual override is permitted only for the Costing and Manager roles, and is recorded in the audit trail.
+BR-03
+Rate immutability. A gold or stone rate, once referenced by an approved estimate, is frozen against that estimate. Changing the master rate never alters a historical estimate.
+BR-04
+Line amount. Gold line amount = weight (g) × rate per gram. Stone line amount = carat × rate per carat. There are no other amount formulas.
+BR-05
+Cost build-up. Cost = Gold total + Polki total + Coloured Stone total + Making Charges + Other Charges + Wastage Cost.
+BR-06
+Profit. Profit = Cost × Profit % ÷ 100. Net Amount = Cost + Profit. Profit percentage is never negative.
+BR-07
+Serial number. Auto-generated, unique, immutable and never reused, including when a product is cancelled, melted or scrapped.
+BR-08
+Estimate locking. An estimate in Approved status cannot be edited. Any change creates a new version and marks the prior version Superseded.
+BR-09
+Wastage. Net Wastage = Fine gold issued − fine gold in piece − fine gold in dust − fine gold returned. Wastage % = Net Wastage ÷ Fine gold issued × 100.
+BR-10
+Wastage tolerance. Wastage within the tolerance configured for the stage is absorbed automatically. Wastage above tolerance blocks stage approval until a Manager approves it with a recorded reason.
+BR-11
+Dust recovery. Dust is credited to inventory only at the actual pure gold recovered from the refiner, never at the nominal dust weight.
+BR-12
+Job closure. A job card cannot be closed while any material is unreconciled, any wastage exception is unresolved, or any labour entry is unapproved.
+BR-13
+Transaction immutability. Posted material and labour transactions are never edited or deleted. Corrections are made by an explicit reversing entry that references the original.
+BR-14
+Negative stock. A material issue that would drive stock negative is blocked, unless a Manager overrides it with a recorded reason.
+BR-15
+Rounding. Weights and carats are stored and displayed to three decimal places. Currency is computed to two decimal places. Rounding is applied at presentation, never mid-calculation, so that totals always equal the sum of their displayed lines.
+BR-16
+Data visibility. Cost, rate, margin and profit values are never rendered — in any screen, export, print or API response — to the Store, Production, Sales or Karigar roles.
+BR-17
+Visual search confidence. Where the highest similarity score is below the configured threshold, the system reports “no confident match” rather than presenting the nearest result as an identification.
+BR-18
+Master deactivation. A master record referenced by any transaction can be deactivated but never deleted.
+
+
+10. Conceptual Data Model & Key Entities
+The following entities form the core of the data model. This is a conceptual view for business validation; the physical schema will be produced during technical design.
+10.1 Entity Summary
+Entity
+Purpose
+Key Relationships
+Product
+The design/product record anchored by the serial number.
+1 → many Images, Job Cards, Estimates
+Product Image
+Sketch, WIP and final photographs; the source for visual search indexing.
+many → 1 Product
+Image Embedding
+The numerical vector representation of an image, used for similarity search.
+1 → 1 Product Image
+Job Card
+A unit of manufacturing work against a product.
+1 → many Job Stages
+Job Stage
+One process step, assigned to one karigar.
+many → 1 Job Card; many → 1 Karigar
+Material Issue
+Gold/stones issued to a karigar for a stage.
+many → 1 Job Stage
+Material Receipt
+Finished weight, dust and unused metal returned.
+many → 1 Job Stage
+Wastage Record
+Computed loss, tolerance check and approval state.
+1 → 1 Job Stage
+Dust Lot
+Accumulated dust despatched to a refiner.
+1 → many Material Receipts
+Labour Entry
+Work booked by a karigar against a stage.
+many → 1 Job Stage
+Karigar Ledger
+Metal held and money payable per karigar.
+many → 1 Karigar
+Estimate
+A versioned costing document.
+many → 1 Product; 1 → many Estimate Lines
+Estimate Line
+One cost line: gold, polki, stone, labour or other charge.
+many → 1 Estimate
+Rate Master
+Gold and stone rates with effective dates.
+referenced by Estimate Line snapshots
+Audit Log
+Immutable record of every mutating action.
+references every entity
+
+10.2 Field Dictionary — Product
+Field
+Type
+Mandatory
+Notes
+serial_no
+String (unique)
+Yes
+System-generated. Immutable. See Appendix B.
+legacy_ref
+String
+No
+The register serial number, preserved on migration.
+design_name
+String
+Yes
+
+category_id
+FK → Category
+Yes
+Ring, necklace, kada, earring…
+purity_id
+FK → Karat
+Yes
+24K / 22K / 18K / 14K
+gross_weight_g
+Decimal(10,3)
+Yes
+Grams, three decimals
+net_weight_g
+Decimal(10,3)
+Yes
+Gross less stone weight
+stone_weight_ct
+Decimal(10,3)
+No
+Total carats
+status
+Enum
+Yes
+Design / Estimated / In Production / Finished / Sold / Melted
+customer_id
+FK → Customer
+No
+Populated for made-to-order pieces
+created_by / created_at
+FK, Timestamp
+Yes
+System-populated
+
+10.3 Field Dictionary — Material Issue
+Field
+Type
+Mandatory
+Notes
+issue_no
+String (unique)
+Yes
+System-generated voucher number
+job_stage_id
+FK → Job Stage
+Yes
+
+karigar_id
+FK → Karigar
+Yes
+Metal account to be debited
+material_type
+Enum
+Yes
+Gold / Polki / Coloured Stone / Finding
+purity_id
+FK → Karat
+Conditional
+Mandatory when material_type = Gold
+gross_weight_g
+Decimal(10,3)
+Conditional
+For gold and findings
+fine_weight_g
+Decimal(10,3)
+Yes
+Derived: gross_weight_g × purity factor
+carat
+Decimal(10,3)
+Conditional
+For polki and coloured stones
+pieces
+Integer
+No
+Stone piece count
+issued_at / issued_by
+Timestamp, FK
+Yes
+System-populated
+is_reversed
+Boolean
+Yes
+Reversing entries only; original is never edited
+
+
+11. Non-Functional Requirements
+11.1 Performance
+ID
+Requirement
+Target
+NFR-1.01
+Page load time for standard transactional screens under normal load.
+≤ 2 seconds (95th percentile)
+NFR-1.02
+Estimate save and recalculation.
+≤ 1 second
+NFR-1.03
+Visual search result set returned for a catalogue of 50,000 indexed images.
+≤ 3 seconds
+NFR-1.04
+Report generation for a 12-month date range.
+≤ 10 seconds
+NFR-1.05
+Concurrent active users supported without degradation.
+50 (scalable to 200)
+NFR-1.06
+Image upload and thumbnail generation for a 10 MB photograph.
+≤ 5 seconds
+
+11.2 Security
+All traffic encrypted in transit via TLS 1.2 or higher. Data encrypted at rest, including object storage.
+Passwords stored using a modern adaptive hash (bcrypt or Argon2). Plaintext passwords are never stored, logged or emailed.
+Role-based authorisation enforced server-side on every request. Hiding a field in the user interface is never the only control (see BR-16).
+Protection against the OWASP Top 10, including SQL injection, cross-site scripting and cross-site request forgery.
+Rate limiting on authentication endpoints and on the visual search endpoint.
+All uploaded files scanned for malware and validated by content type, not by file extension.
+The audit trail is append-only and cannot be modified by any application role.
+11.3 Availability, Backup & Recovery
+ID
+Requirement
+Target
+NFR-3.01
+System uptime during client business hours.
+≥ 99.5% monthly
+NFR-3.02
+Automated database backup frequency.
+Daily full + point-in-time recovery
+NFR-3.03
+Backup retention period.
+30 days rolling
+NFR-3.04
+Recovery Point Objective (maximum tolerable data loss).
+≤ 1 hour
+NFR-3.05
+Recovery Time Objective (maximum tolerable downtime).
+≤ 4 hours
+NFR-3.06
+Backups restore-tested.
+Quarterly, with a written test record
+
+11.4 Usability
+The interface shall be mobile-responsive, usable on a phone or tablet on the shop floor without pinch-zooming.
+Data entry screens shall be keyboard-navigable end to end, since costing staff work at speed and rarely use a mouse.
+Weight and currency fields shall show live computed totals as values are typed, mirroring the immediacy of a spreadsheet.
+The estimate screen shall be laid out to visually resemble the client’s existing Excel sheet, easing adoption for staff who have used it for years.
+Destructive or irreversible actions shall require explicit confirmation and shall state precisely what will happen.
+Validation errors shall be shown inline against the offending field, never as a generic banner.
+11.5 Scalability & Maintainability
+The system shall accommodate 100,000 products and 500,000 images without architectural change.
+The visual search index shall scale to 500,000 vectors with sub-3-second query time.
+The application shall be built to a modular architecture so that individual modules can be extended without regression elsewhere.
+Configuration over code: tolerances, rates, formats, margins and rounding rules shall be changeable by the client, never requiring a code release.
+11.6 Compatibility
+Supported browsers: latest two major versions of Chrome, Edge, Firefox and Safari, on desktop and mobile.
+Minimum supported desktop resolution: 1366 × 768. Minimum mobile width: 360 px.
+Exports shall open cleanly in Microsoft Excel 2016 and later, and in Google Sheets.
+
+12. Visual Search — Technical Approach & Accuracy Expectations
+This section is written for the client’s benefit as much as the delivery team’s. Image-based product search is the most technically demanding element of this scope and the one most vulnerable to misunderstood expectations. It is described here plainly so that what is being bought is unambiguous at sign-off.
+12.1 How It Will Work
+Indexing. Every product image uploaded to the system is passed through a pre-trained deep-learning vision model, which converts the picture into a numerical vector — an “embedding” — of several hundred dimensions. This vector encodes the visual character of the piece: its silhouette, motif density, stone layout and texture.
+Storage. These vectors are stored in a vector index alongside the product’s serial number. Indexing happens automatically and incrementally on upload (FR-9.10); there is no manual retraining step for the client.
+Querying. When a staff member uploads a query photograph, it is pre-processed — background removed, orientation corrected, normalised — and converted into a vector by the same model.
+Matching. The system computes the similarity between the query vector and every indexed vector, and returns the closest matches ranked by score, each with its serial number and specifications.
+Refinement. Structured filters (category, purity, weight range) can be combined with the visual query to narrow the candidate set dramatically, which is the single most effective lever on real-world precision (FR-9.05).
+Feedback. When a user confirms which returned result was correct, that signal is recorded and used to tune ranking over time (FR-9.09).
+12.2 What the Client Must Understand
+**Visual search returns ranked probabilities, not certainties.** The system does not “know” which piece is in the photograph. It reports which indexed products look most like it, with a confidence score. In the overwhelming majority of cases with a reasonable photograph, the correct product will appear in the top few results. It will not always be the first result, and occasionally — with a poor photograph, or a design that closely resembles several others — it may not appear at all.
+This is a property of the technology, not a defect in the implementation. It is why FR-9.02 specifies a **ranked list of five results** rather than a single answer, and why FR-9.08 requires the system to say “no confident match found” rather than assert a weak match. A system that always returns exactly one answer would be more satisfying and considerably less trustworthy.
+12.3 Factors That Determine Accuracy
+Factor
+Effect on Accuracy
+Mitigation
+Catalogue image quality
+The single largest driver. Consistent lighting, plain background and a standard angle dramatically improve results.
+Provide a one-page photography guideline and a simple lightbox. Standardise capture at the point the finished piece is photographed (FR-8.02).
+Catalogue size and coverage
+A design that was never photographed can never be found. Coverage matters more than model sophistication.
+Bulk-import the existing photo archive (FR-8.07). Make final-product photography a mandatory step before job closure.
+Design similarity within the catalogue
+Many jewellery designs are genuinely near-identical, differing only in weight or stone count. No vision model can separate them from a photograph alone.
+Combine visual similarity with structured filters (FR-9.05). Present the top five, not the top one, and let the human decide.
+Query image conditions
+A blurry, angled photograph under yellow shop lighting will retrieve less reliably than a clean one.
+Automatic pre-processing (FR-9.06); in-app guidance on how to take the query photograph.
+Sketch vs finished piece
+A pencil sketch and a polished gold piece are visually very different objects. Cross-modal matching is intrinsically harder.
+Index sketches and finished photographs in the same space and match against both (FR-9.07). Expect lower accuracy on sketch queries than on photograph queries.
+
+12.4 Committed Accuracy Targets
+The following targets will be measured on a held-out evaluation set of at least 200 catalogue images supplied by the client, photographed under normal working conditions. These are the figures against which the module will be accepted.
+Metric
+Definition
+Target
+Stretch
+Top-1 accuracy
+The correct product is the first result returned.
+≥ 70%
+80%
+Top-5 accuracy
+The correct product appears anywhere in the first five results.
+≥ 85%
+92%
+Top-5 with filters
+As above, with category and weight-range filters applied.
+≥ 92%
+96%
+Sketch-query top-5
+Correct product in the first five, from a hand-drawn sketch query.
+≥ 60%
+70%
+False-confidence rate
+A wrong result presented above the confidence threshold.
+≤ 5%
+≤ 2%
+
+**These targets are conditional on Dependency D-02** — the client providing a minimum of 300 labelled, reasonable-quality product images before the visual search phase begins. If the supplied catalogue is materially smaller or of materially poorer quality, the targets will be renegotiated in writing before development of this module commences. The vendor will conduct a **feasibility spike in Phase 1** against a sample of the client’s real images and will report measured baseline accuracy before the client commits to the full module.
+12.5 Indicative Technology
+Component
+Indicative Choice
+Purpose
+Embedding model
+CLIP (ViT-L) or DINOv2, self-hosted
+Converts images into comparable vectors; strong zero-shot performance on retrieval without custom training.
+Vector index
+pgvector on PostgreSQL, or Qdrant / Milvus
+Fast approximate nearest-neighbour search at scale. pgvector keeps the stack simple at the client’s catalogue size.
+Pre-processing
+Background removal (rembg / SAM), auto-orientation
+Removes the backdrop and lighting variance that otherwise dominate the similarity score.
+Re-ranking
+Structured filters + optional fine-tuned re-ranker
+Applies business constraints the vision model cannot see: weight, purity, category.
+Fine-tuning (optional)
+Metric learning on client-labelled pairs
+Considered only if baseline accuracy falls short of target after the Phase 1 spike.
+
+
+13. Report Catalogue
+#
+Report
+Primary Audience
+Key Filters
+R-01
+Work-In-Progress Board
+Manager, Owner
+Stage, karigar, overdue only
+R-02
+Metal Position (Gold Ledger)
+Owner, Store
+Purity, date range
+R-03
+Karigar Metal Outstanding (with ageing)
+Owner, Manager, Store
+Karigar, ageing bucket
+R-04
+Wastage Analysis & Trend
+Owner, Manager
+Karigar, stage, category, date range
+R-05
+Dust Collection & Refining Recovery
+Owner, Store
+Refiner, date range
+R-06
+Karigar Labour & Payable Statement
+Owner, Accounts
+Karigar, period
+R-07
+Karigar Productivity Scorecard
+Owner, Manager
+Karigar, period, stage
+R-08
+Product Costing & Margin
+Owner, Costing
+Serial number, category, date range
+R-09
+Estimate vs Actual Variance
+Owner, Costing
+Serial number, date range
+R-10
+Stone Consumption (Polki & Coloured)
+Store, Costing
+Stone type, date range
+R-11
+Gold Rate History
+Costing
+Date range
+R-12
+Stock Valuation (raw material)
+Owner, Accounts
+As-on date
+R-13
+Physical Stock Variance
+Owner, Store
+Stock-take event
+R-14
+Audit Trail Extract
+Owner, Auditor
+User, entity, date range
+R-15
+Visual Search Accuracy Dashboard
+Owner, Vendor
+Date range
+
+
+14. Indicative Technical Architecture
+The following is an indicative technology stack, presented for the client’s information. The final architecture will be confirmed in the Technical Design Document produced during Phase 1. Nothing in this section is contractually binding on the specific products named; the vendor reserves the right to substitute equivalent technologies without reduction in the capabilities specified in Sections 8 and 11.
+Layer
+Indicative Technology
+Rationale
+Frontend
+React + TypeScript, responsive design system
+Mature ecosystem; mobile-responsive without a separate codebase.
+Backend API
+Node.js (NestJS) or Python (Django REST)
+Strong transactional integrity, mature ORM, straightforward to staff and maintain.
+Database
+PostgreSQL
+ACID guarantees essential for metal and money ledgers. Native `pgvector` support keeps visual search in the same database.
+Object Storage
+Amazon S3 or equivalent, server-side encrypted
+Durable, cheap image storage with signed-URL access control.
+Vector Search
+pgvector, or Qdrant if the catalogue outgrows it
+Approximate nearest-neighbour retrieval at the required latency.
+ML Inference
+Self-hosted CLIP / DINOv2 on a GPU or CPU inference container
+No per-query cost to a third party; client images never leave the client’s cloud account.
+Hosting
+AWS (Mumbai region) or equivalent Indian region
+Data residency within India; low latency to the client’s premises.
+Authentication
+JWT sessions with refresh rotation; optional OTP 2FA
+Standard, well-understood, auditable.
+Reporting
+Server-side generation to XLSX and PDF
+Consistent output independent of the user’s browser or printer.
+
+**A note on data residency and privacy.** The visual search model is **self-hosted**. Product images and design intellectual property are never transmitted to a third-party AI service for inference. This is a deliberate architectural choice: the client’s design catalogue is among its most valuable assets, and it will remain inside infrastructure the client controls.
+
+15. Acceptance Criteria & UAT Approach
+15.1 Acceptance Approach
+Each module will be demonstrated to the client at the end of its development sprint. Formal User Acceptance Testing will be conducted over a defined two-week window prior to go-live, using the client’s own historical data migrated into a UAT environment. The client will nominate at least one tester per role defined in Section 6.2.
+15.2 Sample Acceptance Criteria
+Ref
+Given / When / Then
+AC-01
+Given a new product is created, when it is saved, then the system assigns a unique serial number in the configured format, and no other user creating a product at the same instant receives the same number.
+AC-02
+Given the 24K rate is set to ₹9,200 per gram, when an 18K gold line of 10.000 g is added to an estimate, then the applied rate is ₹6,900.00 and the line amount is ₹69,000.00.
+AC-03
+Given an estimate with a Cost of ₹1,00,000 and a profit margin of 12%, when the estimate is saved, then Profit = ₹12,000.00 and Net Amount = ₹1,12,000.00.
+AC-04
+Given an estimate approved on 1 June at a 24K rate of ₹9,000, when the master rate is later changed to ₹9,500 and the estimate is reopened, then the estimate still displays ₹9,000 and its Net Amount is unchanged.
+AC-05
+Given 50.000 g of fine gold is issued to a karigar, when 47.500 g of finished piece and 1.200 g of dust are received, then the system computes Net Wastage = 1.300 g and Wastage % = 2.60%.
+AC-06
+Given the polishing stage tolerance is 2.00%, when a wastage of 2.60% is recorded, then a Wastage Exception is raised, the stage cannot be approved, and the Manager receives a notification.
+AC-07
+Given a job card with an unapproved labour entry, when a Manager attempts to close the job, then closure is refused with a message naming the outstanding entry.
+AC-08
+Given a user logged in with the Store Keeper role, when any product, estimate, or report screen is opened, then no cost, rate, profit or margin value is present anywhere in the response body, not merely hidden in the interface.
+AC-09
+Given a catalogue of at least 200 indexed images, when a clear photograph of a catalogued product is submitted to visual search, then the correct product appears within the top five results in at least 85% of trials across the evaluation set.
+AC-10
+Given a query image of a product that is not in the catalogue, when visual search is run, then the system reports “no confident match found” rather than presenting the nearest result as an identification.
+AC-11
+Given any posted material issue, when a user attempts to edit or delete it, then the action is refused and the user is directed to post a reversing entry.
+AC-12
+Given any create, update or approve action by any user, when the audit trail is inspected, then the user, timestamp, entity and before/after field values are present and cannot be altered by any role.
+AC-13
+Given thirty historical estimates from the legacy Excel workbook, when the same inputs are entered into the system, then the computed Net Amount matches the workbook to within ₹1 of rounding variance on every one.
+
+15.3 Defect Severity & Exit Criteria
+Severity
+Definition
+Exit Criterion for Go-Live
+Critical
+Data loss, incorrect financial calculation, security breach, or a business process that cannot be completed.
+Zero open
+High
+Major function broken with no workaround.
+Zero open
+Medium
+Function impaired but a workaround exists.
+≤ 5 open, each with an agreed fix date
+Low
+Cosmetic, wording, or minor usability.
+≤ 15 open, scheduled into stabilisation
+
+
+16. Implementation Plan & Indicative Timeline
+The plan below is indicative and assumes timely client availability per Assumption A-07. Phases are sequenced so that the client derives usable benefit from Phase 3 onward, well before final delivery. Durations are in calendar weeks and several phases overlap.
+Phase
+Scope
+Duration
+Key Deliverable
+0 — Discovery & Design
+Process walkthroughs, confirmation of tolerances and serial format, wireframes, technical design. Visual search feasibility spike on the client’s real images.
+2 weeks
+Signed BRD, wireframes, Technical Design Document, measured visual-search baseline
+1 — Foundation
+Environment setup, authentication, roles, user management, master data, audit trail.
+3 weeks
+Login, masters and audit working end to end
+2 — Product & Design Registry
+Serial number engine, product records, image upload, QR codes, catalogue search.
+3 weeks
+Register copy replaced
+3 — Manufacturing & Material
+Job cards, stage routing, material issue/receipt, karigar metal ledger, dust register, wastage engine and exceptions.
+4 weeks
+Client can stop using the register. First operational benefit.
+4 — Costing Engine
+Rate masters and history, estimate builder, versioning and approval, PDF quotation, Excel export, parallel-run validation.
+3 weeks
+Client can stop using the Excel workbook.
+5 — Labour & Payables
+Labour entry, rate bases, advances, recoveries, settlement statements, productivity reporting.
+2 weeks
+Karigar payables live
+6 — Visual Search
+Embedding pipeline, vector index, query interface, filters, confidence thresholds, feedback loop, accuracy dashboard.
+4 weeks
+Image-based product lookup meeting Section 12.4 targets
+7 — Reports & Dashboards
+Full report catalogue (Section 13), role-aware dashboards, exports, scheduled delivery.
+2 weeks
+Management visibility
+8 — Migration, UAT, Training & Go-Live
+Data and image migration, parallel run, UAT, training, cutover, hypercare.
+3 weeks
+Production go-live
+
+**Indicative total elapsed duration: 22–26 weeks**, allowing for overlap between phases and for client review cycles. A detailed, dated project plan will be issued on BRD sign-off.
+16.1 Training & Rollout
+Role-based training sessions, delivered on the client’s premises, using the client’s own migrated data rather than sample data.
+Quick-reference guides — one page per role, in simple language, laminated for shop-floor use.
+Screen-recorded walkthroughs of the ten most common tasks, accessible from within the application.
+A designated super-user trained on the client side to handle first-line questions, reducing dependence on the vendor.
+16.2 Post Go-Live Support
+Item
+Provision
+Hypercare period
+30 days of on-site or on-call priority support immediately following go-live.
+Warranty period
+90 days from go-live. Defects against this signed BRD are fixed at no charge.
+Support hours
+Monday–Saturday, 10:00–19:00 IST.
+Critical issue response
+Within 2 working hours.
+High issue response
+Within 8 working hours.
+Ongoing AMC
+Optional annual maintenance contract, quoted separately, covering hosting, monitoring, backups, security patching and a defined pool of enhancement hours.
+
+
+17. Risk Register
+Probability and Impact are rated High / Medium / Low. Risks are ordered by exposure.
+ID
+Risk
+P
+I
+Mitigation
+Owner
+RK-01
+Visual search accuracy falls short of the Section 12.4 targets because the client’s image catalogue is small, inconsistent or poorly lit.
+H
+H
+Feasibility spike in Phase 0 against real client images, with measured baseline reported before the module is committed. Photography guideline and lightbox provided. Targets renegotiated in writing if D-02 is not met.
+Vendor + Client
+RK-02
+Staff resist abandoning Excel and registers and continue to maintain them in parallel.
+H
+H
+Estimate screen deliberately modelled on the existing sheet (NFR 11.4). Excel export retained (FR-7.16). Owner-mandated cutover date, with the register formally withdrawn. Super-user champion identified early.
+Client
+RK-03
+Wastage tolerances are not currently defined anywhere, and karigars dispute the figures once they become visible.
+H
+M
+Tolerances agreed and signed off in Phase 0 (D-04). A three-month observation period during which tolerance breaches are recorded and reported but not recovered from karigars.
+Client
+RK-04
+Legacy data in registers is incomplete, so opening metal balances and historical costs cannot be reconstructed.
+M
+H
+Agree an explicit cut-off date. Opening balances entered as a one-time physical stock-take rather than reconstructed. Older records archived as read-only.
+Client
+RK-05
+Scope creep as additional cost heads, processes or reports surface during development.
+M
+M
+This BRD is the baseline. Change Control (Section 18). A contingency pool of enhancement hours may be agreed commercially.
+Both
+RK-06
+Client stakeholders are unavailable for review, UAT and training, delaying the schedule.
+M
+M
+Named Process Owner committed to 4 hours per week (A-01). Schedule dates agreed in advance. Delays formally logged and the timeline adjusted.
+Client
+RK-07
+Intermittent internet connectivity on the shop floor disrupts material issue and receipt entry.
+M
+M
+Site connectivity survey in Phase 0. Offline capture mode available as a Could-Have (FR-14.03) if the survey warrants it.
+Both
+RK-08
+Gold rate volatility causes disputes over estimates raised days before production.
+M
+L
+Rate snapshotting (FR-7.08) and estimate versioning (FR-7.11) make the applied rate explicit and defensible on every document.
+Vendor
+RK-09
+Design catalogue images constitute valuable IP and are exposed to a third-party AI service.
+L
+H
+The embedding model is self-hosted (Section 14). No image is transmitted to an external inference API. Data residency in an Indian cloud region.
+Vendor
+RK-10
+Cloud hosting cost exceeds the client’s expectation, particularly GPU inference for visual search.
+M
+M
+CPU inference benchmarked in Phase 0; GPU used only if required. Hosting cost estimated and agreed before Phase 6 commences.
+Vendor
+
+
+18. Change Control & Open Questions
+18.1 Change Control Procedure
+Any request that alters the scope defined in Sections 5 and 8 shall be raised in writing as a Change Request by either party.
+The vendor shall assess the change for effort, cost, schedule impact and technical risk within five working days.
+The client shall approve or reject the assessed Change Request in writing.
+An approved Change Request is appended to this BRD as an addendum and updates the baseline. Development proceeds only against an approved baseline.
+No verbal instruction, email in passing, or informal request on the shop floor constitutes an approved change.
+18.2 Open Questions Requiring Client Input
+These items must be resolved before or during Phase 0. Each is a genuine business decision the vendor cannot make on the client’s behalf.
+#
+Open Question
+Needed By
+OQ-01
+What exact serial number format does the client want? Must any legacy numbering be preserved as an alternate reference? (See Appendix B for options.)
+Phase 0
+OQ-02
+What are the wastage tolerance percentages per process stage, and do they differ by karigar category or by product category?
+Phase 0
+OQ-03
+Is wastage above tolerance recovered from the karigar, and if so, by what rule?
+Phase 0
+OQ-04
+Which purities beyond 24K and 18K are actually used — 22K, 14K, others?
+Phase 0
+OQ-05
+Are there cost heads absent from the Excel workbook that are handled informally today — hallmarking, certification, rhodium, packing, freight, wastage loading?
+Phase 0
+OQ-06
+Is the making-charge rate per gram, per piece, per carat, or a mix, and does it vary by karigar and by stage?
+Phase 0
+OQ-07
+Should GST appear on the printed estimate, and at what rate?
+Phase 1
+OQ-08
+What is the cut-off date for historical data migration? What opens as a physical stock-take instead?
+Phase 1
+OQ-09
+How many product images exist today, in what condition, and who will supply the labelled evaluation set (D-02)?
+Phase 0 — blocks RK-01
+OQ-10
+Will karigars be given logins, or will production staff enter on their behalf?
+Phase 1
+OQ-11
+Is Hindi language support on shop-floor screens required at go-live or deferred?
+Phase 1
+OQ-12
+Who will act as the client-side super-user and process owner (Assumption A-01)?
+Immediately
+
+
+19. Glossary
+Term
+Definition
+24K / 18K / 22K / 14K
+Karat — a measure of gold purity. 24K is pure gold. 18K is 75% gold by weight (purity factor 0.750), 22K is 91.66%, 14K is 58.5%.
+Purity Factor
+The decimal fraction of pure gold in an alloy. Used to convert gross weight into fine gold weight.
+Fine Gold
+The weight of pure gold contained in a piece: gross weight × purity factor. The common basis on which all metal is reconciled.
+Gross Weight (Gwt)
+The total weight of a piece including alloy and, depending on context, stones.
+Net Weight
+The weight of the metal alone, after deducting the weight of the stones.
+Polki
+Uncut, natural diamond in its raw cleaved form, traditionally set in gold. Measured in carats.
+Coloured Stone
+Any non-diamond gemstone — ruby, emerald, sapphire and similar. Measured in carats.
+Carat (Crt)
+A unit of gemstone weight equal to 200 milligrams. Not to be confused with karat (gold purity).
+Karigar
+A skilled craftsman who performs one or more manufacturing stages, either in-house or as an external contractor.
+Making Charges
+The labour cost of manufacturing a piece, charged per gram, per piece, per carat set, or as a daily wage.
+Gold Dust
+Fine gold particles generated during filing, cutting and polishing. Collected, accumulated into lots and sent for refining to recover the pure gold.
+Wastage (Chhij / Ghat)
+Fine gold lost during manufacturing that is not recovered in the finished piece or as dust. Measured as a percentage of gold issued.
+Tolerance
+The maximum wastage percentage accepted for a given process stage without management approval.
+Refining Recovery %
+The proportion of pure gold actually recovered from a dust lot by a refiner: pure gold received ÷ dust weight sent × 100.
+Job Card
+The system record representing a unit of manufacturing work against one product, comprising one or more process stages.
+Rough Estimate
+A pre-production costing based on expected weights, used to quote the customer.
+Final Costing
+A post-production costing based on the metal actually consumed, the stones actually set and the labour actually booked.
+Embedding
+A numerical vector representation of an image produced by a vision model, enabling mathematical comparison of visual similarity.
+Vector Index
+A specialised data structure that finds the nearest vectors to a query vector rapidly, even across hundreds of thousands of records.
+Top-5 Accuracy
+The proportion of queries for which the correct answer appears anywhere within the first five returned results.
+MoSCoW
+A prioritisation scheme: Must have, Should have, Could have, Won’t have (this release).
+UAT
+User Acceptance Testing — formal testing by the client’s own staff against agreed acceptance criteria, prior to go-live.
+
+
+Appendix A — Mapping: Existing Excel Workbook to System Fields
+This appendix demonstrates that no capability present in the client’s current workbook is lost in the transition, and identifies where the system extends beyond it.
+Excel Cell / Range
+Current Meaning
+System Equivalent
+Enhancement
+A1 — “ESTIMATE”
+Document type
+Estimate.type = Rough Estimate | Final Costing
+Two distinct document types, with variance reporting between them
+A3 — Date
+Estimate date
+Estimate.estimate_date
+Plus created_by, approved_by, approved_at
+F2 — Gwt
+Gross weight of the piece
+Product.gross_weight_g
+Validated against actual weighed material receipts
+A4 — S.no.
+Numbering of cost heads (1–4)
+Estimate line sequence
+Product.serial_no is now a real, unique, immutable product identifier
+B5–B6 — Pure Gold 24K / 18K
+Two fixed gold rows
+Estimate lines of type Gold, one per purity
+Unlimited purities; purity factor from the Karat master
+G5 — 24K rate
+Rate typed in by hand
+RateMaster.gold_rate, snapshotted onto the estimate line
+Full rate history; the applied rate is frozen against the estimate
+G6 — `=G5*75/100`
+18K rate derived as 75% of 24K
+Derived from Karat.purity_factor = 0.750
+Configurable, overridable, and auditable rather than hard-coded
+H5, H6 — `=F*G`
+Gold amount
+EstimateLine.amount = weight × rate
+Identical formula; server-computed and immutable
+B8, C8–C15 — Polki 1–8
+Up to 8 polki lines by carat
+Estimate lines of type Polki
+Unlimited lines. Linked to the Stone master and to actual stone consumption
+B17, C17–C21 — Colour stone 1–5
+Up to 5 coloured stone lines
+Estimate lines of type Coloured Stone
+Unlimited lines, with stone sub-type and quality
+H16 — `=H5+H6+H8+…+H15`
+Gold + polki subtotal
+Computed aggregate over line type
+Cannot silently exclude a row; totals always equal the sum of displayed lines
+H22 — `=H16+H17+…+H21`
+Total material cost
+Computed aggregate
+As above
+B23 — Making charges / Labour
+One manual labour line
+Sum of all LabourEntry records for the product
+Attributed per karigar, per stage, per rate basis
+H24 — `=H22+H23`
+Cost (Rs.)
+Estimate.cost_total
+Extended with Other Charges and Wastage Cost
+G25 / H25 — profit %
+Profit added manually
+Estimate.profit_pct, defaulted from master
+Role-restricted override, recorded in the audit trail
+H26 — `=H24+H25`
+Net Amount (Rs.)
+Estimate.net_amount
+Identical formula. Optional GST line for the printed document
+*(absent)*
+Gold issued to karigar
+MaterialIssue
+New capability
+*(absent)*
+Gold received back / dust
+MaterialReceipt, DustLot
+New capability
+*(absent)*
+Wastage
+WastageRecord with tolerance and approval
+New capability
+*(absent)*
+Sketch and product photograph
+ProductImage
+New capability
+*(absent)*
+Search a design by picture
+Visual Search (Module 9)
+New capability
+
+
+Appendix B — Serial Number Scheme (Proposed)
+The serial number is the backbone of the system. Every image, job card, material movement, labour entry and estimate hangs from it. The proposed format is composed of configurable segments so that the number itself carries meaning to a person reading it on a job tag.
+Proposed reference format: **NK-18K-2607-0042**
+Segment
+Example
+Meaning
+Configurable?
+Category code
+NK
+Necklace. Drawn from the Product Category master (RG = Ring, ER = Earring, KD = Kada…).
+Yes — codes defined by the client
+Purity code
+18K
+The gold purity of the piece.
+Yes — may be omitted from the format
+Year & month
+2607
+July 2026. Format YYMM.
+Yes — YY, YYMM, or omitted
+Sequence
+0042
+The 42nd product created within that category, purity and month. Zero-padded.
+Yes — padding width and reset frequency
+
+Alternative Formats for Client Consideration
+Option
+Example
+Characteristics
+Simple global sequence
+000001, 000002, …
+Simplest. Guarantees uniqueness. Carries no meaning to a reader.
+Year + sequence
+26-000123
+Easy to age a product at a glance. Sequence resets annually.
+Category + sequence
+NK-000123
+Groups by product type. Useful when categories are managed separately.
+Full format (proposed)
+NK-18K-2607-0042
+Maximum information at a glance. Recommended. Slightly longer to write on a physical tag.
+
+Whichever format is selected, the following hold without exception: the number is generated by the system and never typed by a user (FR-2.01); it is unique and enforced at the database level under concurrent creation (FR-2.03); it is never reused, even if the product is cancelled or melted (BR-07); and legacy register numbers are preserved as an alternate reference field (FR-12.03), so nothing the client has written down over the years is lost.
+
+Document Sign-off
+By signing below, the parties confirm that the requirements set out in this Business Requirements Document represent a complete and accurate statement of the business need, and agree that this document forms the baseline for solution design, development, testing and User Acceptance. Changes after signature will be governed by the Change Control procedure in Section 18.1.
+
+Particular attention is drawn to **Section 12.4 (Committed Accuracy Targets for Visual Search)** and to **Section 5.2 (Out of Scope)**. Signature confirms that both have been read and understood.
+
+
+
+For [CLIENT COMPANY NAME]
+For [YOUR COMPANY NAME]
+Name
+
+
+Designation
+
+
+Signature
+
+
+Date
+
+
+Company Seal
+
+
+
+
+
+— End of Document —

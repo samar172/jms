@@ -1,0 +1,179 @@
+import PdfPrinter from "pdfmake";
+import { TDocumentDefinitions } from "pdfmake/interfaces";
+import { Estimate, EstimateLine, Product, Karat, StoneType, Customer } from "@prisma/client";
+import { formatINR } from "@jms/shared";
+
+const fonts = {
+  Helvetica: {
+    normal: "Helvetica",
+    bold: "Helvetica-Bold",
+    italics: "Helvetica-Oblique",
+    bolditalics: "Helvetica-BoldOblique",
+  },
+};
+
+const printer = new PdfPrinter(fonts);
+
+type EstimateWithRelations = Estimate & {
+  product: Product & { customer?: Customer | null };
+  lines: (EstimateLine & { purity?: Karat | null; stoneType?: StoneType | null })[];
+};
+
+export async function generateEstimatePdf(estimate: EstimateWithRelations): Promise<Buffer> {
+  const isFinal = estimate.type === "FINAL_COSTING";
+  
+  // Format the lines into a table body
+  const tableBody: any[][] = [
+    [
+      { text: "Item/Head", style: "tableHeader" },
+      { text: "Description", style: "tableHeader" },
+      { text: "Qty", style: "tableHeader", alignment: "right" },
+      { text: "Rate", style: "tableHeader", alignment: "right" },
+      { text: "Amount", style: "tableHeader", alignment: "right" },
+    ],
+  ];
+
+  for (const line of estimate.lines) {
+    let desc = line.description || "";
+    if (line.purity) desc += ` (${line.purity.code})`;
+    if (line.stoneType) desc += ` (${line.stoneType.name})`;
+
+    tableBody.push([
+      line.head.replace(/_/g, " "),
+      desc,
+      { text: Number(line.quantity).toString(), alignment: "right" },
+      { text: formatINR(Number(line.rate)), alignment: "right" },
+      { text: formatINR(Number(line.amount)), alignment: "right" },
+    ]);
+  }
+
+  // If breakdown is hidden, we just show one line for the total piece
+  if (!estimate.showBreakdownOnPdf) {
+    tableBody.length = 1; // Clear out the detail lines
+    tableBody.push([
+      "Jewellery",
+      `${estimate.product.designName} (S/N: ${estimate.product.serialNo})`,
+      { text: "1", alignment: "right" },
+      { text: formatINR(Number(estimate.netAmount)), alignment: "right" },
+      { text: formatINR(Number(estimate.netAmount)), alignment: "right" },
+    ]);
+  } else {
+    // Add totals at the bottom of the table
+    tableBody.push([
+      { colSpan: 4, text: "Subtotal", alignment: "right", bold: true },
+      {}, {}, {},
+      { text: formatINR(Number(estimate.cost)), alignment: "right", bold: true }
+    ]);
+    if (Number(estimate.profit) > 0) {
+      tableBody.push([
+        { colSpan: 4, text: `Profit Margin (${Number(estimate.profitPct)}%)`, alignment: "right" },
+        {}, {}, {},
+        { text: formatINR(Number(estimate.profit)), alignment: "right" }
+      ]);
+    }
+  }
+
+  // GST Row
+  if (estimate.gstPct && Number(estimate.gstPct) > 0) {
+    const netBeforeGst = Number(estimate.cost) + Number(estimate.profit);
+    const gstAmount = netBeforeGst * (Number(estimate.gstPct) / 100);
+    tableBody.push([
+      { colSpan: 4, text: `GST (${Number(estimate.gstPct)}%)`, alignment: "right" },
+      {}, {}, {},
+      { text: formatINR(gstAmount), alignment: "right" }
+    ]);
+  }
+
+  // Grand Total Row
+  tableBody.push([
+    { colSpan: 4, text: "Grand Total", alignment: "right", bold: true, fillColor: "#f3f4f6" },
+    {}, {}, {},
+    { text: formatINR(Number(estimate.netAmount)), alignment: "right", bold: true, fillColor: "#f3f4f6" }
+  ]);
+
+  const docDefinition: TDocumentDefinitions = {
+    defaultStyle: { font: "Helvetica", fontSize: 10 },
+    content: [
+      {
+        columns: [
+          {
+            text: "YOUR JEWELLERY BRAND",
+            fontSize: 20,
+            bold: true,
+            color: "#d4af37", // Gold color
+          },
+          {
+            text: isFinal ? "INVOICE / FINAL COSTING" : "QUOTATION",
+            fontSize: 16,
+            bold: true,
+            alignment: "right",
+            color: "#6b7280",
+          }
+        ]
+      },
+      {
+        canvas: [{ type: "line", x1: 0, y1: 5, x2: 515, y2: 5, lineWidth: 1, lineColor: "#e5e7eb" }]
+      },
+      { text: "\n" },
+      {
+        columns: [
+          {
+            width: "50%",
+            text: [
+              { text: "Bill To:\n", bold: true },
+              estimate.product.customer ? estimate.product.customer.name : "Walk-in Customer",
+            ]
+          },
+          {
+            width: "50%",
+            alignment: "right",
+            text: [
+              { text: "Date: ", bold: true }, estimate.estimateDate.toLocaleDateString(), "\n",
+              { text: "Estimate No: ", bold: true }, `EST-${estimate.product.serialNo}-${estimate.version}`, "\n",
+              { text: "Design: ", bold: true }, estimate.product.designName, "\n"
+            ]
+          }
+        ]
+      },
+      { text: "\n\n" },
+      {
+        table: {
+          headerRows: 1,
+          widths: ["20%", "35%", "15%", "15%", "15%"],
+          body: tableBody
+        },
+        layout: "lightHorizontalLines"
+      },
+      { text: "\n\n\n" },
+      {
+        text: "Terms & Conditions",
+        bold: true,
+        fontSize: 9
+      },
+      {
+        text: "1. Quotation is valid for 7 days, subject to gold rate fluctuations.\n2. 50% advance required to initiate production.",
+        fontSize: 8,
+        color: "#6b7280"
+      }
+    ],
+    styles: {
+      tableHeader: {
+        bold: true,
+        color: "#374151"
+      }
+    }
+  };
+
+  return new Promise((resolve, reject) => {
+    try {
+      const pdfDoc = printer.createPdfKitDocument(docDefinition);
+      const chunks: Buffer[] = [];
+      pdfDoc.on("data", (chunk) => chunks.push(chunk));
+      pdfDoc.on("end", () => resolve(Buffer.concat(chunks)));
+      pdfDoc.on("error", reject);
+      pdfDoc.end();
+    } catch (err) {
+      reject(err);
+    }
+  });
+}

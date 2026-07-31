@@ -55,16 +55,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAccessToken(null);
     });
     (async () => {
-      const token = await refreshAccessToken();
-      if (token) {
-        try {
+      try {
+        const token = await refreshAccessToken();
+        if (token) {
           const me = await apiFetch<AuthUser>("/api/auth/me");
           setUser(me);
-        } catch (e) {
-          if (!(e instanceof ApiError)) throw e;
         }
+      } catch (e) {
+        if (!(e instanceof ApiError)) console.error("Auth init error:", e);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     })();
     return () => setUnauthorizedHandler(null);
   }, []);

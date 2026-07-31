@@ -12,6 +12,7 @@ import { requireAuth } from "./middleware/auth";
 import authRoutes from "./modules/auth/auth.routes";
 import mastersRoutes from "./modules/masters";
 import productsRoutes from "./modules/products/products.routes";
+import searchRoutes from "./modules/products/search.routes";
 import jobcardsRoutes from "./modules/jobcards/jobcards.routes";
 import materialsRoutes from "./modules/materials/materials.routes";
 import labourRoutes from "./modules/labour/labour.routes";
@@ -22,11 +23,12 @@ import usersRoutes from "./modules/users/users.routes";
 import settingsRoutes from "./modules/settings/settings.routes";
 import stockLedgerRoutes from "./modules/ledger/stock.routes";
 import customerLedgerRoutes from "./modules/ledger/customer.routes";
+import reportsRoutes from "./modules/reports/reports.routes";
 
 export const app = express();
 
 app.use(helmet());
-app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
+app.use(cors({ origin: (origin, callback) => callback(null, true), credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
 app.use(morgan("dev"));
@@ -43,6 +45,7 @@ app.get("/health", (_req, res) => res.json({ ok: true }));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/masters", requireAuth, mastersRoutes);
+app.use("/api/products", requireAuth, searchRoutes);
 app.use("/api/products", requireAuth, productsRoutes);
 app.use("/api/job-cards", requireAuth, jobcardsRoutes);
 app.use("/api/materials", requireAuth, materialsRoutes);
@@ -54,5 +57,6 @@ app.use("/api/users", requireAuth, usersRoutes);
 app.use("/api/settings", requireAuth, settingsRoutes);
 app.use("/api/ledger/stock", requireAuth, stockLedgerRoutes);
 app.use("/api/ledger/customers", requireAuth, customerLedgerRoutes);
+app.use("/api/reports", requireAuth, reportsRoutes);
 
 app.use(errorHandler);

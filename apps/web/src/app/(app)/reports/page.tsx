@@ -1,78 +1,70 @@
-"use client";
+import Link from "next/link";
+import { FileText, BarChart2, ShieldAlert, Coins } from "lucide-react";
 
-import { useApi } from "@/lib/hooks";
-import { formatPct } from "@/lib/format";
-
-interface JobStage {
-  status: string;
-  karigar?: { name: string } | null;
-  processStage: { name: string };
-  wastageRecord?: { wastagePct: string; tolerancePct: string; withinTolerance: boolean } | null;
-}
-interface JobCardRow {
-  id: string;
-  product: { serialNo: string; designName: string };
-  stages: JobStage[];
-}
-
-export default function ReportsPage() {
-  const { data: jobCards } = useApi<JobCardRow[]>("/api/job-cards?status=OPEN");
-
-  const wastageRows = (jobCards ?? []).flatMap((jc) =>
-    jc.stages
-      .filter((s) => s.wastageRecord)
-      .map((s) => ({
-        serialNo: jc.product.serialNo,
-        stage: s.processStage.name,
-        karigar: s.karigar?.name ?? "—",
-        ...s.wastageRecord!,
-      }))
-  );
-
+export default function ReportsDirectory() {
   return (
-    <div className="space-y-6">
-      <h1 className="text-xl font-semibold">Reports</h1>
-      <p className="text-sm text-text-muted max-w-2xl">
-        The full report catalogue (Section 13 of the BRD — Metal Position, Karigar Outstanding,
-        Stone Consumption, Gold Rate History, etc.) is a near-term follow-up. Below is a live
-        Wastage Analysis (R-04) built from data already captured by the job card workflow.
+    <div className="space-y-6 max-w-4xl">
+      <h1 className="text-2xl font-semibold">Reports & Dashboards</h1>
+      <p className="text-text-muted">
+        Select a report from the catalogue below to view real-time data from the manufacturing and stock ledgers.
       </p>
 
-      <div className="card overflow-hidden">
-        <div className="px-5 py-3 border-b border-border font-semibold">Wastage Analysis — Open Jobs</div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-text-muted border-b border-border bg-bg">
-              <th className="py-2 px-4 font-medium">Serial No.</th>
-              <th className="py-2 px-4 font-medium">Stage</th>
-              <th className="py-2 px-4 font-medium">Karigar</th>
-              <th className="py-2 px-4 font-medium text-right">Wastage %</th>
-              <th className="py-2 px-4 font-medium text-right">Tolerance</th>
-              <th className="py-2 px-4 font-medium">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {wastageRows.map((r, i) => (
-              <tr key={i} className="border-b border-border last:border-0">
-                <td className="py-2 px-4 font-mono text-gold">{r.serialNo}</td>
-                <td className="py-2 px-4">{r.stage}</td>
-                <td className="py-2 px-4">{r.karigar}</td>
-                <td className={`py-2 px-4 text-right tabular ${r.withinTolerance ? "" : "text-danger font-medium"}`}>
-                  {formatPct(r.wastagePct)}
-                </td>
-                <td className="py-2 px-4 text-right tabular text-text-muted">{formatPct(r.tolerancePct)}</td>
-                <td className="py-2 px-4">{r.withinTolerance ? "Within tolerance" : "Exception"}</td>
-              </tr>
-            ))}
-            {wastageRows.length === 0 && (
-              <tr>
-                <td colSpan={6} className="py-8 text-center text-text-muted">
-                  No wastage recorded on open jobs yet.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+      <div className="grid sm:grid-cols-2 gap-4">
+        <Link href="/reports/metal-position" className="card p-5 hover:border-gold transition-colors block">
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 rounded-full bg-gold-tint text-gold flex items-center justify-center shrink-0">
+              <Coins size={20} />
+            </div>
+            <div>
+              <h3 className="font-semibold text-lg mb-1">Metal Position (Gold Ledger)</h3>
+              <p className="text-sm text-text-muted">
+                Live view of all 24K fine gold held in the store and distributed across all karigars.
+              </p>
+            </div>
+          </div>
+        </Link>
+
+        <Link href="/reports/karigar-outstanding" className="card p-5 hover:border-gold transition-colors block">
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 rounded-full bg-gold-tint text-gold flex items-center justify-center shrink-0">
+              <BarChart2 size={20} />
+            </div>
+            <div>
+              <h3 className="font-semibold text-lg mb-1">Karigar Outstanding</h3>
+              <p className="text-sm text-text-muted">
+                Detailed ageing and balances of fine gold pending recovery from each karigar.
+              </p>
+            </div>
+          </div>
+        </Link>
+
+        <Link href="/reports/dust-recovery" className="card p-5 hover:border-gold transition-colors block">
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 rounded-full bg-gold-tint text-gold flex items-center justify-center shrink-0">
+              <ShieldAlert size={20} />
+            </div>
+            <div>
+              <h3 className="font-semibold text-lg mb-1">Dust Collection & Recovery</h3>
+              <p className="text-sm text-text-muted">
+                Track dust lots sent for refining and monitor the actual recovery percentages.
+              </p>
+            </div>
+          </div>
+        </Link>
+
+        <Link href="/reports/product-margin" className="card p-5 hover:border-gold transition-colors block">
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 rounded-full bg-gold-tint text-gold flex items-center justify-center shrink-0">
+              <FileText size={20} />
+            </div>
+            <div>
+              <h3 className="font-semibold text-lg mb-1">Product Margin Analysis</h3>
+              <p className="text-sm text-text-muted">
+                View realized profit margins on all final costings and approved estimates.
+              </p>
+            </div>
+          </div>
+        </Link>
       </div>
     </div>
   );
