@@ -39,8 +39,8 @@ router.get(
           include: {
             processStage: true,
             karigar: true,
-            materialIssues: true,
-            materialReceipts: true,
+            materialIssues: { where: { isReversed: false } },
+            materialReceipts: { where: { isReversed: false } },
             labourEntries: true,
             wastageRecord: true,
           },

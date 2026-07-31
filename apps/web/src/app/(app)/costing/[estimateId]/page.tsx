@@ -32,19 +32,24 @@ interface Estimate {
   wastageCost: string;
   cost: string;
   profit: string;
+  gstPct: string;
+  gstAmount: string;
   netAmount: string;
   lines: EstimateLine[];
   product: { serialNo: string; designName: string };
 }
 
-const HEADS: { key: EstimateLine["head"]; label: string; unit: string }[] = [
-  { key: "GOLD", label: "Gold", unit: "g" },
-  { key: "POLKI", label: "Polki", unit: "crt" },
-  { key: "COLOURED_STONE", label: "Coloured Stones", unit: "crt" },
-  { key: "MAKING", label: "Making Charges & Other", unit: "" },
-  { key: "OTHER", label: "Other Charges", unit: "" },
-  { key: "WASTAGE", label: "Wastage", unit: "g" },
+const HEADS: { key: EstimateLine["head"]; label: string; unit: string; hint: string }[] = [
+  { key: "GOLD", label: "Gold", unit: "g", hint: "Enter purity + weight — rate is filled in automatically from today's gold rate." },
+  { key: "POLKI", label: "Polki", unit: "crt", hint: "Enter stone type + weight in carats." },
+  { key: "COLOURED_STONE", label: "Coloured Stones", unit: "crt", hint: "Enter stone type + weight in carats." },
+  { key: "MAKING", label: "Making Charges", unit: "", hint: "Pulled in automatically from approved karigar labour entries." },
+  { key: "OTHER", label: "Other Charges", unit: "", hint: "Anything else — packaging, certification, hallmarking, etc." },
+  { key: "WASTAGE", label: "Wastage", unit: "g", hint: "Pulled in automatically from recorded gold wastage within tolerance." },
 ];
+
+const MATERIAL_HEADS: EstimateLine["head"][] = ["GOLD", "POLKI", "COLOURED_STONE"];
+const CHARGE_HEADS: EstimateLine["head"][] = ["MAKING", "OTHER", "WASTAGE"];
 
 export default function EstimatePage({ params }: { params: Promise<{ estimateId: string }> }) {
   const { estimateId } = use(params);
@@ -52,6 +57,7 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
   const { data: karats } = useKarats();
   const { data: stoneTypes } = useStoneTypes();
   const [profitPct, setProfitPct] = useState<string | null>(null);
+  const [gstPct, setGstPct] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   if (!estimate) return <div className="text-text-muted">Loading…</div>;
@@ -66,6 +72,17 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
     try {
       await apiFetch(`/api/estimates/${estimateId}`, { method: "PATCH", body: { profitPct: Number(profitPct) } });
       setProfitPct(null);
+      await mutate();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed");
+    }
+  }
+
+  async function saveGstPct() {
+    if (gstPct === null) return;
+    try {
+      await apiFetch(`/api/estimates/${estimateId}`, { method: "PATCH", body: { gstPct: Number(gstPct) } });
+      setGstPct(null);
       await mutate();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed");
@@ -137,46 +154,78 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
         </div>
       </div>
 
-      <div className="card p-3 bg-gold-tint text-sm flex items-center gap-2">
+      <div className="card p-3 bg-gold-tint text-sm flex flex-wrap items-center gap-2">
         <span>
           Gold Rate applied: <strong>{formatINR(Number(estimate.goldRateSnapshot24k))} / g (24K)</strong> as on{" "}
           {new Date(estimate.estimateDate).toLocaleDateString("en-IN")}
         </span>
-        <span className="text-text-muted">— Rates are frozen against this estimate.</span>
+        <span className="text-text-muted">— this rate is locked in and won't change even if today's rate moves.</span>
+      </div>
+
+      <div className="card p-4 text-sm leading-relaxed">
+        It costs <strong className="tabular">{formatINR(Number(estimate.cost))}</strong> to make this piece. Add{" "}
+        <strong>{Number(estimate.profitPct)}%</strong> profit and <strong>{Number(estimate.gstPct)}%</strong> GST, and the
+        customer pays <strong className="text-gold tabular">{formatINR(Number(estimate.netAmount))}</strong>.
       </div>
 
       {error && <p className="text-sm text-danger">{error}</p>}
 
       <div className="grid lg:grid-cols-[1fr_320px] gap-5">
-        <div className="space-y-4">
-          {HEADS.map((h) => (
-            <SectionCard
-              key={h.key}
-              head={h.key}
-              label={h.label}
-              unit={h.unit}
-              lines={linesByHead(h.key)}
-              subtotal={subtotal(h.key)}
-              editable={editable}
-              estimateId={estimateId}
-              karats={karats ?? []}
-              stoneTypes={stoneTypes ?? []}
-              onChange={mutate}
-              onDeleteLine={deleteLine}
-            />
-          ))}
+        <div className="space-y-6">
+          <div className="space-y-4">
+            <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wide">1. Materials — gold &amp; stones</h2>
+            {HEADS.filter((h) => MATERIAL_HEADS.includes(h.key)).map((h) => (
+              <SectionCard
+                key={h.key}
+                head={h.key}
+                label={h.label}
+                unit={h.unit}
+                hint={h.hint}
+                lines={linesByHead(h.key)}
+                subtotal={subtotal(h.key)}
+                editable={editable}
+                estimateId={estimateId}
+                karats={karats ?? []}
+                stoneTypes={stoneTypes ?? []}
+                onChange={mutate}
+                onDeleteLine={deleteLine}
+              />
+            ))}
+          </div>
+
+          <div className="space-y-4">
+            <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wide">2. Making, other charges &amp; wastage</h2>
+            {HEADS.filter((h) => CHARGE_HEADS.includes(h.key)).map((h) => (
+              <SectionCard
+                key={h.key}
+                head={h.key}
+                label={h.label}
+                unit={h.unit}
+                hint={h.hint}
+                lines={linesByHead(h.key)}
+                subtotal={subtotal(h.key)}
+                editable={editable}
+                estimateId={estimateId}
+                karats={karats ?? []}
+                stoneTypes={stoneTypes ?? []}
+                onChange={mutate}
+                onDeleteLine={deleteLine}
+              />
+            ))}
+          </div>
         </div>
 
-        <div className="card p-5 h-fit sticky top-20 space-y-2 text-sm">
-          <h2 className="font-semibold mb-2">Summary</h2>
-          <Row label="Material Cost" value={formatINR(Number(estimate.materialCost))} />
+        <div className="card p-5 h-fit lg:sticky lg:top-20 space-y-2 text-sm">
+          <h2 className="font-semibold mb-2">3. Final Bill</h2>
+          <Row label="Gold &amp; Stones" value={formatINR(Number(estimate.materialCost))} />
           <Row label="Making Charges" value={formatINR(Number(estimate.makingCharges))} />
           <Row label="Other Charges" value={formatINR(Number(estimate.otherCharges))} />
-          <Row label="Wastage Cost" value={formatINR(Number(estimate.wastageCost))} />
+          <Row label="Wastage" value={formatINR(Number(estimate.wastageCost))} />
           <div className="border-t border-border my-2" />
-          <Row label="Cost (₹)" value={formatINR(Number(estimate.cost))} bold />
+          <Row label="Total Cost" value={formatINR(Number(estimate.cost))} bold />
+          <p className="text-xs text-text-muted -mt-1">What it costs you to make this piece.</p>
           <div className="flex justify-between items-center">
-            <span className="text-text-muted">Profit %</span>
+            <span className="text-text-muted">Your Profit %</span>
             {editable ? (
               <input
                 className="input w-20 text-right"
@@ -190,12 +239,37 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
               <span className="tabular">{Number(estimate.profitPct)}%</span>
             )}
           </div>
-          <Row label="Profit" value={formatINR(Number(estimate.profit))} />
+          <Row label="Profit Amount" value={formatINR(Number(estimate.profit))} />
+          <div className="border-t border-border my-2" />
+          <div className="flex justify-between items-center">
+            <span className="text-text-muted">GST %</span>
+            {editable ? (
+              <input
+                className="input w-20 text-right"
+                type="number"
+                step="0.01"
+                defaultValue={estimate.gstPct}
+                onChange={(e) => setGstPct(e.target.value)}
+                onBlur={saveGstPct}
+              />
+            ) : (
+              <span className="tabular">{Number(estimate.gstPct)}%</span>
+            )}
+          </div>
+          <Row label="GST Amount" value={formatINR(Number(estimate.gstAmount))} />
           <div className="border-t-2 border-gold my-2" />
           <div className="flex justify-between items-baseline bg-gold-tint -mx-5 px-5 py-2.5 rounded">
-            <span className="font-semibold">Net Amount</span>
+            <div>
+              <div className="font-semibold">Customer Pays</div>
+              <div className="text-xs text-text-muted font-normal">Final bill, GST included</div>
+            </div>
             <span className="text-xl font-bold text-gold tabular">{formatINR(Number(estimate.netAmount))}</span>
           </div>
+          {editable && (
+            <p className="text-xs text-text-muted pt-1">
+              Once you hit "Approve &amp; Lock", this can't be edited — you'd need to create a new version instead.
+            </p>
+          )}
         </div>
       </div>
     </div>
@@ -215,6 +289,7 @@ function SectionCard({
   head,
   label,
   unit,
+  hint,
   lines,
   subtotal,
   editable,
@@ -227,6 +302,7 @@ function SectionCard({
   head: EstimateLine["head"];
   label: string;
   unit: string;
+  hint: string;
   lines: EstimateLine[];
   subtotal: number;
   editable: boolean;
@@ -240,12 +316,16 @@ function SectionCard({
 
   return (
     <div className="card overflow-hidden">
-      <div className="flex items-center justify-between px-5 py-3 border-l-4 border-l-gold bg-bg">
-        <h3 className="font-semibold">{label}</h3>
-        <span className="tabular font-medium">{formatINR(subtotal)}</span>
+      <div className="flex items-center justify-between px-5 py-3 border-l-4 border-l-gold bg-bg gap-3">
+        <div>
+          <h3 className="font-semibold">{label}</h3>
+          <p className="text-xs text-text-muted mt-0.5 hidden sm:block">{hint}</p>
+        </div>
+        <span className="tabular font-medium shrink-0">{formatINR(subtotal)}</span>
       </div>
       <div className="px-5 py-3">
         {lines.length > 0 && (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm mb-2">
             <tbody>
               {lines.map((l) => (
@@ -265,6 +345,7 @@ function SectionCard({
               ))}
             </tbody>
           </table>
+          </div>
         )}
         {editable && !["MAKING", "WASTAGE"].includes(head) && (
           <>

@@ -1,27 +1,34 @@
 "use client";
 
-import { Search, Bell, LogOut } from "lucide-react";
+import { Menu, Search, Bell, LogOut } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
 
-export function Topbar({ title }: { title?: string }) {
+export function Topbar({ title, onMenuClick }: { title?: string; onMenuClick?: () => void }) {
   const { user, logout } = useAuth();
   const router = useRouter();
 
   return (
-    <header className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-border bg-surface px-6 py-3">
-      <div className="flex items-center gap-3 flex-1">
-        {title && <h1 className="text-base font-semibold">{title}</h1>}
-        <div className="relative flex-1 max-w-sm ml-4">
+    <header className="sticky top-0 z-30 flex items-center justify-between gap-2 sm:gap-4 border-b border-border bg-surface px-3 sm:px-6 py-3">
+      <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+        <button
+          className="text-text-muted hover:text-text md:hidden shrink-0"
+          onClick={onMenuClick}
+          aria-label="Open menu"
+        >
+          <Menu size={22} />
+        </button>
+        {title && <h1 className="text-base font-semibold hidden sm:block">{title}</h1>}
+        <div className="relative flex-1 max-w-sm sm:ml-4">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
           <input
-            className="input pl-9 py-1.5 bg-bg"
+            className="input pl-9 py-1.5 bg-bg w-full"
             placeholder="Search serial number, design, karigar…"
           />
         </div>
       </div>
-      <div className="flex items-center gap-4">
-        <button className="relative text-text-muted hover:text-text">
+      <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+        <button className="relative text-text-muted hover:text-text hidden sm:inline-flex">
           <Bell size={18} />
         </button>
         {user && (

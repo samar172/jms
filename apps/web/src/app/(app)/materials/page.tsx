@@ -46,6 +46,7 @@ export default function MaterialsPage() {
       </p>
 
       <div className="card overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-text-muted border-b border-border bg-bg">
@@ -79,6 +80,7 @@ export default function MaterialsPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

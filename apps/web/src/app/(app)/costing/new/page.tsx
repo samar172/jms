@@ -22,6 +22,7 @@ function NewEstimateForm() {
   const [productId, setProductId] = useState(searchParams.get("productId") ?? "");
   const [type, setType] = useState<"ROUGH_ESTIMATE" | "FINAL_COSTING">("ROUGH_ESTIMATE");
   const [profitPct, setProfitPct] = useState("12");
+  const [gstPct, setGstPct] = useState("3");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -32,7 +33,7 @@ function NewEstimateForm() {
     try {
       const estimate = await apiFetch<{ id: string }>("/api/estimates", {
         method: "POST",
-        body: { productId, type, profitPct: Number(profitPct), lines: [] },
+        body: { productId, type, profitPct: Number(profitPct), gstPct: Number(gstPct), lines: [] },
       });
       router.push(`/costing/${estimate.id}`);
     } catch (err) {
@@ -70,9 +71,15 @@ function NewEstimateForm() {
             <option value="FINAL_COSTING">Final Costing</option>
           </select>
         </div>
-        <div>
-          <label className="label">Profit %</label>
-          <input type="number" step="0.01" className="input" value={profitPct} onChange={(e) => setProfitPct(e.target.value)} />
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="label">Profit %</label>
+            <input type="number" step="0.01" className="input" value={profitPct} onChange={(e) => setProfitPct(e.target.value)} />
+          </div>
+          <div>
+            <label className="label">GST %</label>
+            <input type="number" step="0.01" className="input" value={gstPct} onChange={(e) => setGstPct(e.target.value)} />
+          </div>
         </div>
         {error && <p className="text-sm text-danger">{error}</p>}
         <div className="flex justify-end gap-2 pt-2 border-t border-border">

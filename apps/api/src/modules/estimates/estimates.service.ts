@@ -18,7 +18,11 @@ export async function recalculateEstimateTotals(estimateId: string) {
     amount: Number(l.amount),
   }));
 
-  const totals = computeEstimateTotals(linesForTotals, Number(estimate.profitPct));
+  const totals = computeEstimateTotals(
+    linesForTotals,
+    Number(estimate.profitPct),
+    Number(estimate.gstPct)
+  );
 
   return prisma.estimate.update({
     where: { id: estimateId },
@@ -29,6 +33,7 @@ export async function recalculateEstimateTotals(estimateId: string) {
       wastageCost: totals.wastageCost,
       cost: totals.cost,
       profit: totals.profit,
+      gstAmount: totals.gstAmount,
       netAmount: totals.netAmount,
     },
     include: { lines: true },

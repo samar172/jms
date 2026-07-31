@@ -103,6 +103,7 @@ export default function KarigarDetailPage({ params }: { params: Promise<{ id: st
 
       <div className="card overflow-hidden">
         <div className="px-5 py-3 border-b border-border font-semibold">Metal &amp; Payable Ledger</div>
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-text-muted border-b border-border bg-bg">
@@ -134,6 +135,7 @@ export default function KarigarDetailPage({ params }: { params: Promise<{ id: st
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

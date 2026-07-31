@@ -84,6 +84,8 @@ export interface EstimateTotals {
   cost: number;
   profitPct: number;
   profit: number;
+  gstPct: number;
+  gstAmount: number;
   netAmount: number;
 }
 
@@ -92,11 +94,15 @@ const sumHead = (lines: EstimateLineForTotals[], head: EstimateLineHead) =>
 
 /**
  * Replicates the legacy workbook cells H16, H22, H24, H25, H26 (BRD 3.3.2 / Appendix A),
- * generalised beyond the 8-polki / 5-stone row caps.
+ * generalised beyond the 8-polki / 5-stone row caps. GST (BR-14) is applied on top of
+ * cost + profit, and must always be folded into netAmount — this is the one figure that
+ * gets billed to the customer and posted to the customer ledger, so it can never be
+ * "cost + profit" alone once GST is configured.
  */
 export function computeEstimateTotals(
   lines: EstimateLineForTotals[],
-  profitPct: number
+  profitPct: number,
+  gstPct: number = 0
 ): EstimateTotals {
   const gold = sumHead(lines, "GOLD");
   const polki = sumHead(lines, "POLKI");
@@ -109,7 +115,8 @@ export function computeEstimateTotals(
 
   const cost = round2(materialCost + makingCharges + otherCharges + wastageCost);
   const profit = round2((cost * profitPct) / 100);
-  const netAmount = round2(cost + profit);
+  const gstAmount = round2(((cost + profit) * gstPct) / 100);
+  const netAmount = round2(cost + profit + gstAmount);
 
   return {
     materialCost,
@@ -119,6 +126,8 @@ export function computeEstimateTotals(
     cost,
     profitPct,
     profit,
+    gstPct,
+    gstAmount,
     netAmount,
   };
 }

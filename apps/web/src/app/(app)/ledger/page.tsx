@@ -70,6 +70,7 @@ function KarigarsTab() {
 
   return (
     <div className="card overflow-hidden">
+      <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="text-left text-text-muted border-b border-border bg-bg">
@@ -102,6 +103,7 @@ function KarigarsTab() {
           </tfoot>
         )}
       </table>
+      </div>
       {data?.length === 0 && <p className="text-center text-text-muted py-8">No karigars yet.</p>}
     </div>
   );
@@ -127,6 +129,7 @@ function CustomersTab() {
 
   return (
     <div className="card overflow-hidden">
+      <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="text-left text-text-muted border-b border-border bg-bg">
@@ -173,6 +176,7 @@ function CustomersTab() {
           ))}
         </tbody>
       </table>
+      </div>
       {customers?.length === 0 && <p className="text-center text-text-muted py-8">No customers yet.</p>}
     </div>
   );
@@ -227,6 +231,7 @@ function CustomerDetail({ customerId, onChange }: { customerId: string; onChange
         </button>
         {error && <p className="text-sm text-danger">{error}</p>}
       </form>
+      <div className="overflow-x-auto">
       <table className="w-full text-xs">
         <tbody>
           {data?.entries.map((e) => (
@@ -239,6 +244,7 @@ function CustomerDetail({ customerId, onChange }: { customerId: string; onChange
           ))}
         </tbody>
       </table>
+      </div>
       {data?.entries.length === 0 && <p className="text-text-muted">No entries yet.</p>}
     </div>
   );
@@ -286,6 +292,7 @@ function StockTab() {
             />
           </div>
         )}
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-text-muted border-b border-border bg-bg">
@@ -313,10 +320,12 @@ function StockTab() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       <div className="card overflow-hidden">
         <div className="px-5 py-3 border-b border-border font-semibold">Recent Entries</div>
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-text-muted border-b border-border bg-bg">
@@ -341,6 +350,7 @@ function StockTab() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

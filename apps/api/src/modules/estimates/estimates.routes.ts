@@ -23,7 +23,7 @@ const lineInputSchema = z.object({
   stoneTypeId: z.string().optional(),
   chargeTypeId: z.string().optional(),
   karigarName: z.string().optional(),
-  quantity: z.number(),
+  quantity: z.number().positive(),
   rate: z.number().nonnegative().optional(),
 });
 
@@ -50,6 +50,7 @@ const createSchema = z.object({
   type: z.enum(["ROUGH_ESTIMATE", "FINAL_COSTING"]),
   estimateDate: z.coerce.date().default(() => new Date()),
   profitPct: z.number().min(0),
+  gstPct: z.number().min(0).max(100).optional(),
   lines: z.array(lineInputSchema).default([]),
 });
 
@@ -96,6 +97,7 @@ router.post(
         estimateDate: body.estimateDate,
         goldRateSnapshot24k: goldRate24k, // FR-7.08: rate is frozen from this point on (BR-03)
         profitPct: body.profitPct,
+        ...(body.gstPct !== undefined ? { gstPct: body.gstPct } : {}),
         createdById: req.user!.id,
         lines: { create: linesData },
       },

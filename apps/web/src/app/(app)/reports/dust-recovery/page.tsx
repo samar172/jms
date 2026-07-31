@@ -53,6 +53,7 @@ export default function DustRecoveryReportPage() {
           </div>
 
           <div className="card overflow-hidden mt-6">
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-text-muted border-b border-border bg-bg">
@@ -91,6 +92,7 @@ export default function DustRecoveryReportPage() {
                 )}
               </tbody>
             </table>
+            </div>
           </div>
         </>
       )}

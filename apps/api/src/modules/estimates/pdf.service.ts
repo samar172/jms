@@ -48,14 +48,16 @@ export async function generateEstimatePdf(estimate: EstimateWithRelations): Prom
   }
 
   // If breakdown is hidden, we just show one line for the total piece
+  // (pre-GST — GST and Grand Total rows are appended below, same as the itemised view).
   if (!estimate.showBreakdownOnPdf) {
     tableBody.length = 1; // Clear out the detail lines
+    const preGstAmount = Number(estimate.cost) + Number(estimate.profit);
     tableBody.push([
       "Jewellery",
       `${estimate.product.designName} (S/N: ${estimate.product.serialNo})`,
       { text: "1", alignment: "right" },
-      { text: formatINR(Number(estimate.netAmount)), alignment: "right" },
-      { text: formatINR(Number(estimate.netAmount)), alignment: "right" },
+      { text: formatINR(preGstAmount), alignment: "right" },
+      { text: formatINR(preGstAmount), alignment: "right" },
     ]);
   } else {
     // Add totals at the bottom of the table
@@ -74,13 +76,11 @@ export async function generateEstimatePdf(estimate: EstimateWithRelations): Prom
   }
 
   // GST Row
-  if (estimate.gstPct && Number(estimate.gstPct) > 0) {
-    const netBeforeGst = Number(estimate.cost) + Number(estimate.profit);
-    const gstAmount = netBeforeGst * (Number(estimate.gstPct) / 100);
+  if (Number(estimate.gstPct) > 0) {
     tableBody.push([
       { colSpan: 4, text: `GST (${Number(estimate.gstPct)}%)`, alignment: "right" },
       {}, {}, {},
-      { text: formatINR(gstAmount), alignment: "right" }
+      { text: formatINR(Number(estimate.gstAmount)), alignment: "right" }
     ]);
   }
 

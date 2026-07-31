@@ -62,6 +62,7 @@ export default function SettingsPage() {
           <button className="btn btn-primary">Set Rate</button>
           {error && <p className="text-sm text-danger">{error}</p>}
         </form>
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-text-muted border-b border-border">
@@ -78,10 +79,12 @@ export default function SettingsPage() {
             ))}
           </tbody>
         </table>
+        </div>
       </section>
 
       <section className="card p-5">
         <h2 className="font-semibold mb-3">Karat / Purity Factors</h2>
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <tbody>
             {karats?.map((k) => (
@@ -92,10 +95,12 @@ export default function SettingsPage() {
             ))}
           </tbody>
         </table>
+        </div>
       </section>
 
       <section className="card p-5">
         <h2 className="font-semibold mb-3">Process Stages &amp; Wastage Tolerances</h2>
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <tbody>
             {stages?.map((s) => (
@@ -106,6 +111,7 @@ export default function SettingsPage() {
             ))}
           </tbody>
         </table>
+        </div>
       </section>
 
       <section className="card p-5">

@@ -6,7 +6,7 @@ import { useApi, useKarigars } from "@/lib/hooks";
 import { apiFetch, ApiError } from "@/lib/api";
 import { JobStageStatusPill } from "@/components/StatusPill";
 import { formatINR, formatWeight, formatPct } from "@/lib/format";
-import { computeWastage } from "@jms/shared";
+import { computeWastage, fineWeight } from "@jms/shared";
 import { hi } from "@/lib/hi";
 
 interface WastageRecord {
@@ -319,9 +319,9 @@ function ReceiptForm({
 
   const preview = computeWastage({
     fineIssuedG,
-    finePieceG: (Number(finishedPieceWeightG) || 0) * purityFactor,
-    fineDustG: (Number(dustWeightG) || 0) * purityFactor,
-    fineReturnedG: (Number(unusedReturnedWeightG) || 0) * purityFactor,
+    finePieceG: fineWeight(Number(finishedPieceWeightG) || 0, purityFactor),
+    fineDustG: fineWeight(Number(dustWeightG) || 0, purityFactor),
+    fineReturnedG: fineWeight(Number(unusedReturnedWeightG) || 0, purityFactor),
   });
   const withinTolerance = preview.wastagePct <= tolerancePct;
 

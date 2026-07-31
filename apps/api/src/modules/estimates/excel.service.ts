@@ -55,12 +55,13 @@ export async function generateEstimateExcel(estimate: EstimateWithRelations): Pr
   sheet.getRow(6).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF374151" } };
 
   if (!estimate.showBreakdownOnPdf) {
+    const preGstAmount = Number(estimate.cost) + Number(estimate.profit);
     sheet.addRow({
       head: "Jewellery",
       description: `${estimate.product.designName} (S/N: ${estimate.product.serialNo})`,
       qty: 1,
-      rate: Number(estimate.netAmount),
-      amount: Number(estimate.netAmount),
+      rate: preGstAmount,
+      amount: preGstAmount,
     });
   } else {
     for (const line of estimate.lines) {
@@ -88,10 +89,8 @@ export async function generateEstimateExcel(estimate: EstimateWithRelations): Pr
     }
   }
 
-  if (estimate.gstPct && Number(estimate.gstPct) > 0) {
-    const netBeforeGst = Number(estimate.cost) + Number(estimate.profit);
-    const gstAmount = netBeforeGst * (Number(estimate.gstPct) / 100);
-    const gstRow = sheet.addRow({ description: `GST (${Number(estimate.gstPct)}%)`, amount: gstAmount });
+  if (Number(estimate.gstPct) > 0) {
+    const gstRow = sheet.addRow({ description: `GST (${Number(estimate.gstPct)}%)`, amount: Number(estimate.gstAmount) });
     gstRow.getCell("description").alignment = { horizontal: "right" };
   }
 
