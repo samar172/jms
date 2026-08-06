@@ -125,10 +125,24 @@ router.get(
       .enum(["DRAFT", "SUBMITTED", "APPROVED", "SUPERSEDED"])
       .optional()
       .parse(req.query.status);
+    const search = z.string().optional().parse(req.query.search);
     res.json(
       await prisma.estimate.findMany({
-        where: status ? { status } : undefined,
-        include: { product: true },
+        where: {
+          ...(status ? { status } : {}),
+          ...(search
+            ? {
+                product: {
+                  OR: [
+                    { serialNo: { contains: search, mode: "insensitive" as const } },
+                    { designName: { contains: search, mode: "insensitive" as const } },
+                    { customer: { name: { contains: search, mode: "insensitive" as const } } },
+                  ],
+                },
+              }
+            : {}),
+        },
+        include: { product: { include: { customer: true } } },
         orderBy: { createdAt: "desc" },
         take: 100,
       })
@@ -399,6 +413,125 @@ router.post(
     });
 
     res.json(approved);
+  })
+);
+
+// --- Admin unlock (FR-7.13) ---------------------------------------------------
+// A Submitted estimate is read-only to normal users, but an admin may need to
+// send it back for corrections before it's approved. Approved estimates are
+// deliberately excluded — BR-08 makes those permanently immutable because an
+// approval already posts a CustomerLedgerEntry (invoice) against their
+// netAmount; silently reopening one would desync the two. Revise via a new
+// version (or /convert-to-final-costing) instead.
+router.post(
+  "/:id/unlock",
+  requireRole("SUPER_ADMIN"),
+  asyncHandler(async (req, res) => {
+    const estimate = await prisma.estimate.findUnique({ where: { id: req.params.id } });
+    if (!estimate) throw notFound("Estimate not found");
+    if (estimate.status === "APPROVED") {
+      throw badRequest("An approved estimate can never be unlocked — it has already been billed to the customer. Create a new version instead.");
+    }
+    if (estimate.status === "DRAFT") throw badRequest("Estimate is already editable");
+
+    const unlocked = await prisma.estimate.update({
+      where: { id: req.params.id },
+      data: { status: "DRAFT" },
+    });
+
+    await recordAudit(prisma, {
+      userId: req.user!.id,
+      action: "UPDATE",
+      entityType: "Estimate",
+      entityId: unlocked.id,
+      before: estimate,
+      after: unlocked,
+      ipAddress: req.ip ?? null,
+    });
+
+    res.json(unlocked);
+  })
+);
+
+// --- Convert to Final Costing (FR-7.14) --------------------------------------
+// One-click way to start a Final Costing pre-filled from an existing (usually
+// approved) Rough Estimate's lines, instead of manually re-entering everything
+// on /costing/new. Always creates a new estimate — never mutates the source.
+router.post(
+  "/:id/convert-to-final-costing",
+  asyncHandler(async (req, res) => {
+    const source = await prisma.estimate.findUnique({
+      where: { id: req.params.id },
+      include: { lines: true },
+    });
+    if (!source) throw notFound("Estimate not found");
+    if (source.type === "FINAL_COSTING") throw badRequest("This estimate is already a Final Costing");
+
+    const estimateDate = new Date();
+    const goldRateRow = await prisma.goldRate.findFirst({
+      where: { effectiveFrom: { lte: estimateDate } },
+      orderBy: { effectiveFrom: "desc" },
+    });
+    if (!goldRateRow) throw badRequest("No gold rate configured on or before today");
+    const goldRate24k = Number(goldRateRow.ratePerGram24k);
+
+    const priorCount = await prisma.estimate.count({
+      where: { productId: source.productId, type: "FINAL_COSTING" },
+    });
+
+    // Gold lines are repriced at today's rate (that's the point of converting
+    // a rough estimate days/weeks later); other heads keep their original
+    // negotiated rate rather than being silently overwritten.
+    const purityIds = [...new Set(source.lines.map((l) => l.purityId).filter((id): id is string => !!id))];
+    const purities = purityIds.length
+      ? await prisma.karat.findMany({ where: { id: { in: purityIds } } })
+      : [];
+    const purityFactorById = new Map(purities.map((p) => [p.id, Number(p.purityFactor)]));
+
+    const linesData = source.lines.map((l) => {
+      const purityFactor = l.purityId ? purityFactorById.get(l.purityId) : undefined;
+      const rate =
+        l.head === "GOLD" && purityFactor !== undefined ? derivedGoldRate(goldRate24k, purityFactor) : Number(l.rate);
+      return {
+        head: l.head,
+        description: l.description,
+        purityId: l.purityId,
+        stoneTypeId: l.stoneTypeId,
+        chargeTypeId: l.chargeTypeId,
+        karigarName: l.karigarName,
+        quantity: l.quantity,
+        rate,
+        amount: lineAmount(Number(l.quantity), rate),
+        sourceType: "MANUAL" as const,
+      };
+    });
+
+    const estimate = await prisma.estimate.create({
+      data: {
+        productId: source.productId,
+        type: "FINAL_COSTING",
+        version: priorCount + 1,
+        estimateDate,
+        goldRateSnapshot24k: goldRate24k,
+        profitPct: source.profitPct,
+        gstPct: source.gstPct,
+        createdById: req.user!.id,
+        lines: { create: linesData },
+      },
+    });
+
+    const withTotals = await recalculateEstimateTotals(estimate.id);
+
+    await recordAudit(prisma, {
+      userId: req.user!.id,
+      action: "CREATE",
+      entityType: "Estimate",
+      entityId: estimate.id,
+      after: withTotals,
+      ipAddress: req.ip ?? null,
+    });
+
+    res.status(201).json(withTotals);
   })
 );
 

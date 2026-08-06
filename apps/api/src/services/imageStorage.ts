@@ -1,4 +1,8 @@
 import { v2 as cloudinary } from "cloudinary";
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import crypto from "node:crypto";
+import sharp from "sharp";
 import { env } from "../env";
 
 // We rely on the CLOUDINARY_URL environment variable to automatically configure the SDK.
@@ -9,18 +13,60 @@ if (env.CLOUDINARY_URL) {
   });
 }
 
+const EXT_BY_MIME: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/heic": "heic",
+  "image/heif": "heif",
+};
+
 /**
- * Uploads an image buffer directly to Cloudinary.
- * Returns the secure URL of the uploaded image and a generated thumbnail URL.
+ * Stores a product image and returns its URL plus a thumbnail URL.
+ * Uses Cloudinary when CLOUDINARY_URL is configured; otherwise falls back to
+ * local disk under UPLOAD_DIR (served statically at /uploads — see app.ts),
+ * so image upload works out of the box without external credentials.
  */
 export async function storeProductImage(
   productId: string,
-  buffer: Buffer
+  buffer: Buffer,
+  mimetype: string
 ): Promise<{ url: string; thumbnailUrl: string }> {
-  if (!env.CLOUDINARY_URL) {
-    throw new Error("CLOUDINARY_URL is not configured.");
+  return env.CLOUDINARY_URL
+    ? storeProductImageCloudinary(productId, buffer)
+    : storeProductImageLocal(productId, buffer, mimetype);
+}
+
+async function storeProductImageLocal(
+  productId: string,
+  buffer: Buffer,
+  mimetype: string
+): Promise<{ url: string; thumbnailUrl: string }> {
+  const ext = EXT_BY_MIME[mimetype] ?? "jpg";
+  const dir = path.join(path.resolve(env.UPLOAD_DIR), "products", productId);
+  await fs.mkdir(dir, { recursive: true });
+
+  const filename = `${crypto.randomUUID()}.${ext}`;
+  await fs.writeFile(path.join(dir, filename), buffer);
+  const url = `/uploads/products/${productId}/${filename}`;
+
+  let thumbnailUrl = url;
+  try {
+    const thumbBuffer = await sharp(buffer).resize(400, 400, { fit: "cover" }).webp({ quality: 80 }).toBuffer();
+    const thumbFilename = `thumb_${crypto.randomUUID()}.webp`;
+    await fs.writeFile(path.join(dir, thumbFilename), thumbBuffer);
+    thumbnailUrl = `/uploads/products/${productId}/${thumbFilename}`;
+  } catch (err) {
+    console.error("Failed to generate local thumbnail, using original image instead:", err);
   }
 
+  return { url, thumbnailUrl };
+}
+
+async function storeProductImageCloudinary(
+  productId: string,
+  buffer: Buffer
+): Promise<{ url: string; thumbnailUrl: string }> {
   return new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
       {
@@ -55,9 +101,18 @@ export async function storeProductImage(
 }
 
 /**
- * Deletes an image from Cloudinary (using its URL to infer the public_id).
+ * Deletes an image from wherever it was stored (Cloudinary or local disk).
  */
 export async function deleteProductImageFile(url: string): Promise<void> {
+  if (url.startsWith("/uploads/")) {
+    try {
+      await fs.unlink(path.join(path.resolve(env.UPLOAD_DIR), url.slice("/uploads/".length)));
+    } catch (err) {
+      console.error("Failed to delete local image file:", err);
+    }
+    return;
+  }
+
   if (!env.CLOUDINARY_URL || !url.includes("cloudinary.com")) return;
 
   try {

@@ -71,6 +71,10 @@ async function main() {
       { name: "Ruby", category: "COLOURED_STONE" as const, defaultRatePerCarat: 1500 },
       { name: "Emerald", category: "COLOURED_STONE" as const, defaultRatePerCarat: 1800 },
       { name: "Sapphire", category: "COLOURED_STONE" as const, defaultRatePerCarat: 1600 },
+      { name: "Tourmaline", category: "COLOURED_STONE" as const },
+      { name: "Topaz", category: "COLOURED_STONE" as const },
+      { name: "Navratna", category: "COLOURED_STONE" as const },
+      { name: "Pearls", category: "COLOURED_STONE" as const },
       { name: "Diamond", category: "DIAMOND" as const, defaultRatePerCarat: 45000 },
     ].map((s) =>
       prisma.stoneType.findFirst({ where: { name: s.name } }).then((existing) =>

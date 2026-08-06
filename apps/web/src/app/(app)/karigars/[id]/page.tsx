@@ -35,8 +35,8 @@ export default function KarigarDetailPage({ params }: { params: Promise<{ id: st
   const { id } = use(params);
   const { user } = useAuth();
   const { data: karigar } = useApi<Karigar>(`/api/masters/karigars/${id}`);
-  const { data: summary } = useApi<Summary>(`/api/labour/karigars/${id}/summary`);
-  const { data: ledger } = useApi<LedgerEntry[]>(`/api/labour/karigars/${id}/ledger`);
+  const { data: summary, mutate: mutateSummary } = useApi<Summary>(`/api/labour/karigars/${id}/summary`);
+  const { data: ledger, mutate: mutateLedger } = useApi<LedgerEntry[]>(`/api/labour/karigars/${id}/ledger`);
   const [advanceAmount, setAdvanceAmount] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -52,6 +52,7 @@ export default function KarigarDetailPage({ params }: { params: Promise<{ id: st
         body: { karigarId: id, amount: Number(advanceAmount) },
       });
       setAdvanceAmount("");
+      await Promise.all([mutateSummary(), mutateLedger()]);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed");
     }

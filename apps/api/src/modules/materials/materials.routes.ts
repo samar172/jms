@@ -266,8 +266,13 @@ router.post(
       where: { jobStageId: req.params.jobStageId },
     });
     if (!before) throw notFound("No wastage record for this stage");
-    if (before.exceptionStatus !== "PENDING") {
-      throw badRequest("This wastage record has no pending exception");
+    if (before.exceptionStatus === "NONE") {
+      throw badRequest("This wastage record has no exception to decide");
+    }
+    // A Manager can only act on a fresh exception. Revising one that's
+    // already been Approved/Rejected is a Super-Admin-only override.
+    if (before.exceptionStatus !== "PENDING" && req.user!.role !== "SUPER_ADMIN") {
+      throw badRequest("This exception has already been decided — only a Super Admin can revise it");
     }
 
     const body = approveWastageSchema.parse(req.body);
@@ -283,6 +288,23 @@ router.post(
         recoveryAmount: body.recoveryAmount,
       },
     });
+
+    // Ledger entries are append-only (BR-13) — if a prior decision already
+    // posted a recovery against the karigar, reverse it first rather than
+    // editing it in place, then post the new decision's recovery (if any).
+    if (before.recoveredFromKarigar && before.recoveryAmount) {
+      const stage = await prisma.jobStage.findUnique({ where: { id: req.params.jobStageId } });
+      await prisma.karigarLedgerEntry.create({
+        data: {
+          karigarId: stage!.karigarId!,
+          type: "WASTAGE_RECOVERY",
+          amount: -Number(before.recoveryAmount),
+          referenceType: "WastageRecord",
+          referenceId: record.id,
+          note: "Reversal of prior wastage recovery decision",
+        },
+      });
+    }
 
     if (body.approve && body.recoverFromKarigar && body.recoveryAmount) {
       const stage = await prisma.jobStage.findUnique({ where: { id: req.params.jobStageId } });

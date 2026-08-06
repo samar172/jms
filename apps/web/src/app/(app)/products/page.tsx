@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { Plus, Search } from "lucide-react";
 import { useApi, useCategories, useKarats } from "@/lib/hooks";
 import type { ProductCardData } from "@/components/ProductCard";
 import { ProductCard } from "@/components/ProductCard";
@@ -16,13 +17,15 @@ interface ProductListResponse {
 
 const STATUSES = ["DESIGN", "ESTIMATED", "IN_PRODUCTION", "FINISHED", "SOLD", "MELTED"];
 
-export default function ProductsPage() {
+function ProductsPageInner() {
+  const searchParams = useSearchParams();
   const { data: categories } = useCategories();
   const { data: karats } = useKarats();
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [subcategoryId, setSubcategoryId] = useState<string | null>(null);
   const [purityId, setPurityId] = useState("");
   const [status, setStatus] = useState("");
+  const [search, setSearch] = useState(searchParams.get("search") ?? "");
   const [page, setPage] = useState(1);
   const pageSize = 20;
 
@@ -31,6 +34,7 @@ export default function ProductsPage() {
   if (subcategoryId) params.set("subcategoryId", subcategoryId);
   if (purityId) params.set("purityId", purityId);
   if (status) params.set("status", status);
+  if (search) params.set("search", search);
 
   const { data } = useApi<ProductListResponse>(`/api/products?${params.toString()}`);
   const activeCategory = categories?.find((c) => c.id === categoryId);
@@ -94,6 +98,18 @@ export default function ProductsPage() {
       )}
 
       <div className="card p-3 flex flex-wrap gap-3 items-center">
+        <div className="relative w-full sm:w-64">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+          <input
+            className="input pl-9 w-full"
+            placeholder="Search design name or serial number…"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+          />
+        </div>
         <select className="input w-auto" value={purityId} onChange={(e) => setPurityId(e.target.value)}>
           <option value="">All purities</option>
           {karats?.map((k) => (
@@ -143,5 +159,13 @@ export default function ProductsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function ProductsPage() {
+  return (
+    <Suspense>
+      <ProductsPageInner />
+    </Suspense>
   );
 }

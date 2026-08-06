@@ -277,7 +277,7 @@ router.post(
       .parse(req.body.type ?? "SKETCH");
     const isPrimary = req.body.isPrimary === "true";
 
-    const { url, thumbnailUrl } = await storeProductImage(product.id, req.file.buffer);
+    const { url, thumbnailUrl } = await storeProductImage(product.id, req.file.buffer, req.file.mimetype);
 
     if (isPrimary) {
       await prisma.productImage.updateMany({

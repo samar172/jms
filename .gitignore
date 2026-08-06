@@ -9,3 +9,4 @@ build/
 coverage/
 .turbo/
 apps/api/uploads/
+.vercel

@@ -44,6 +44,12 @@ export interface Customer {
   name: string;
   contact?: string;
 }
+export interface Vendor {
+  id: string;
+  name: string;
+  type: "REFINER" | "SUPPLIER";
+  contact?: string;
+}
 export interface CustomerBalance {
   id: string;
   name: string;
@@ -63,5 +69,6 @@ export const useStoneTypes = () => useApi<StoneType[]>("/api/masters/stone-types
 export const useProcessStages = () => useApi<ProcessStage[]>("/api/masters/process-stages");
 export const useKarigars = () => useApi<Karigar[]>("/api/masters/karigars");
 export const useCustomers = () => useApi<Customer[]>("/api/masters/customers");
+export const useVendors = () => useApi<Vendor[]>("/api/masters/vendors");
 export const useStockLedgerEnabled = () =>
   useApi<{ enabled: boolean }>("/api/settings/stock-ledger-enabled");

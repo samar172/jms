@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Menu, Search, Bell, LogOut } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
@@ -7,6 +8,7 @@ import { useRouter } from "next/navigation";
 export function Topbar({ title, onMenuClick }: { title?: string; onMenuClick?: () => void }) {
   const { user, logout } = useAuth();
   const router = useRouter();
+  const [query, setQuery] = useState("");
 
   return (
     <header className="sticky top-0 z-30 flex items-center justify-between gap-2 sm:gap-4 border-b border-border bg-surface px-3 sm:px-6 py-3">
@@ -23,7 +25,14 @@ export function Topbar({ title, onMenuClick }: { title?: string; onMenuClick?: (
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
           <input
             className="input pl-9 py-1.5 bg-bg w-full"
-            placeholder="Search serial number, design, karigar…"
+            placeholder="Search serial number, design…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && query.trim()) {
+                router.push(`/products?search=${encodeURIComponent(query.trim())}`);
+              }
+            }}
           />
         </div>
       </div>

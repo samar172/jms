@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, Fragment } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { useApi, useCustomers, useStockLedgerEnabled, useKarats, useStoneTypes } from "@/lib/hooks";
+import { useApi, useStockLedgerEnabled, useKarats, useStoneTypes } from "@/lib/hooks";
 import { apiFetch, ApiError } from "@/lib/api";
 import { formatINR, formatWeight, formatDateTime } from "@/lib/format";
+import { useAuth } from "@/lib/auth-context";
+import { AddKarigarForm } from "@/components/AddKarigarForm";
 
 type Tab = "karigars" | "customers" | "stock";
 
@@ -64,12 +66,34 @@ interface KarigarSummary {
 }
 
 function KarigarsTab() {
-  const { data } = useApi<KarigarSummary[]>("/api/labour/karigars-summary");
+  const { user } = useAuth();
+  const { data, mutate } = useApi<KarigarSummary[]>("/api/labour/karigars-summary");
+  const [showAdd, setShowAdd] = useState(false);
   const totalGoldHeld = data?.reduce((s, k) => s + k.goldHeldG, 0) ?? 0;
   const totalPayable = data?.reduce((s, k) => s + k.netPayable, 0) ?? 0;
+  const canManage = user?.role === "SUPER_ADMIN" || user?.role === "MANAGER";
 
   return (
-    <div className="card overflow-hidden">
+    <div className="space-y-3">
+      {canManage && (
+        <div className="flex justify-end">
+          <button className="btn btn-outline text-xs" onClick={() => setShowAdd((v) => !v)}>
+            {showAdd ? "Cancel" : "+ New Karigar"}
+          </button>
+        </div>
+      )}
+      {showAdd && (
+        <div className="card p-4">
+          <AddKarigarForm
+            onCreated={() => {
+              setShowAdd(false);
+              mutate();
+            }}
+            onCancel={() => setShowAdd(false)}
+          />
+        </div>
+      )}
+      <div className="card overflow-hidden">
       <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
@@ -105,6 +129,7 @@ function KarigarsTab() {
       </table>
       </div>
       {data?.length === 0 && <p className="text-center text-text-muted py-8">No karigars yet.</p>}
+      </div>
     </div>
   );
 }
@@ -115,20 +140,33 @@ interface CustomerBalance {
   contact?: string;
   balanceDue: number;
 }
-interface CustomerLedgerEntry {
-  id: string;
-  type: string;
-  amount: string;
-  note: string | null;
-  createdAt: string;
-}
-
 function CustomersTab() {
-  const { data: customers, mutate: mutateCustomers } = useApi<CustomerBalance[]>("/api/ledger/customers");
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const { user } = useAuth();
+  const { data: customers, mutate } = useApi<CustomerBalance[]>("/api/ledger/customers");
+  const [showAdd, setShowAdd] = useState(false);
+  const canManage = user?.role === "SUPER_ADMIN" || user?.role === "MANAGER" || user?.role === "SALES";
 
   return (
-    <div className="card overflow-hidden">
+    <div className="space-y-3">
+      {canManage && (
+        <div className="flex justify-end">
+          <button className="btn btn-outline text-xs" onClick={() => setShowAdd((v) => !v)}>
+            {showAdd ? "Cancel" : "+ New Customer"}
+          </button>
+        </div>
+      )}
+      {showAdd && (
+        <div className="card p-4">
+          <AddCustomerForm
+            onCreated={() => {
+              setShowAdd(false);
+              mutate();
+            }}
+            onCancel={() => setShowAdd(false)}
+          />
+        </div>
+      )}
+      <div className="card overflow-hidden">
       <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
@@ -140,113 +178,88 @@ function CustomersTab() {
         </thead>
         <tbody>
           {customers?.map((c) => (
-            <Fragment key={c.id}>
-              <tr className="border-b border-border last:border-0 hover:bg-bg">
-                <td className="py-2.5 px-4">
-                  <div className="font-medium">{c.name}</div>
-                  {c.contact && <div className="text-text-muted text-xs">{c.contact}</div>}
-                </td>
-                <td
-                  className={`py-2.5 px-4 text-right tabular font-medium ${
-                    c.balanceDue > 0 ? "text-danger" : c.balanceDue < 0 ? "text-success" : ""
-                  }`}
-                >
-                  {formatINR(Math.abs(c.balanceDue))}
-                  {c.balanceDue !== 0 && (
-                    <span className="text-xs text-text-muted ml-1">{c.balanceDue > 0 ? "owes" : "advance"}</span>
-                  )}
-                </td>
-                <td className="py-2.5 px-4 text-right">
-                  <button
-                    className="btn btn-ghost text-xs"
-                    onClick={() => setExpandedId(expandedId === c.id ? null : c.id)}
-                  >
-                    {expandedId === c.id ? "Hide" : "Details"}
-                  </button>
-                </td>
-              </tr>
-              {expandedId === c.id && (
-                <tr>
-                  <td colSpan={3} className="bg-bg px-4 py-3">
-                    <CustomerDetail customerId={c.id} onChange={mutateCustomers} />
-                  </td>
-                </tr>
-              )}
-            </Fragment>
+            <tr key={c.id} className="border-b border-border last:border-0 hover:bg-bg">
+              <td className="py-2.5 px-4">
+                <div className="font-medium">{c.name}</div>
+                {c.contact && <div className="text-text-muted text-xs">{c.contact}</div>}
+              </td>
+              <td
+                className={`py-2.5 px-4 text-right tabular font-medium ${
+                  c.balanceDue > 0 ? "text-danger" : c.balanceDue < 0 ? "text-success" : ""
+                }`}
+              >
+                {formatINR(Math.abs(c.balanceDue))}
+                {c.balanceDue !== 0 && (
+                  <span className="text-xs text-text-muted ml-1">{c.balanceDue > 0 ? "owes" : "advance"}</span>
+                )}
+              </td>
+              <td className="py-2.5 px-4 text-right">
+                <Link href={`/customers/${c.id}`} className="btn btn-ghost text-xs">
+                  View Profile →
+                </Link>
+              </td>
+            </tr>
           ))}
         </tbody>
       </table>
       </div>
       {customers?.length === 0 && <p className="text-center text-text-muted py-8">No customers yet.</p>}
+      </div>
     </div>
   );
 }
 
-function CustomerDetail({ customerId, onChange }: { customerId: string; onChange: () => void }) {
-  const { data, mutate } = useApi<{ entries: CustomerLedgerEntry[]; balanceDue: number }>(
-    `/api/ledger/customers/${customerId}/ledger`
-  );
-  const [type, setType] = useState<"ADVANCE_RECEIVED" | "PAYMENT_RECEIVED">("PAYMENT_RECEIVED");
-  const [amount, setAmount] = useState("");
-  const [error, setError] = useState<string | null>(null);
+function AddCustomerForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: () => void }) {
+  const [name, setName] = useState("");
+  const [contact, setContact] = useState("");
+  const [address, setAddress] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  async function record(e: React.FormEvent<HTMLFormElement>) {
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
     try {
-      await apiFetch(`/api/ledger/customers/${customerId}/ledger`, {
+      await apiFetch("/api/masters/customers", {
         method: "POST",
-        body: { type, amount: Number(amount) },
+        body: { name, contact: contact || undefined, address: address || undefined },
       });
-      setAmount("");
-      await mutate();
-      await onChange();
+      setName("");
+      setContact("");
+      setAddress("");
+      onCreated();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed");
+      setError(err instanceof ApiError ? err.message : "Failed to add customer");
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <div className="space-y-3">
-      <form onSubmit={record} className="flex items-end gap-2">
-        <select className="input w-auto" value={type} onChange={(e) => setType(e.target.value as typeof type)}>
-          <option value="PAYMENT_RECEIVED">Payment Received</option>
-          <option value="ADVANCE_RECEIVED">Advance Received</option>
-        </select>
-        <input
-          required
-          type="number"
-          step="0.01"
-          placeholder="Amount"
-          className="input w-32"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-        />
-        <button className="btn btn-primary" disabled={submitting}>
-          Record
-        </button>
-        {error && <p className="text-sm text-danger">{error}</p>}
-      </form>
-      <div className="overflow-x-auto">
-      <table className="w-full text-xs">
-        <tbody>
-          {data?.entries.map((e) => (
-            <tr key={e.id} className="border-b border-border last:border-0">
-              <td className="py-1.5 text-text-muted">{formatDateTime(e.createdAt)}</td>
-              <td className="py-1.5">{e.type.replace(/_/g, " ")}</td>
-              <td className="py-1.5 text-right tabular">{formatINR(Number(e.amount))}</td>
-              <td className="py-1.5 text-text-muted">{e.note ?? "—"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <form onSubmit={submit} className="flex flex-wrap items-end gap-2">
+      <div>
+        <label className="label">Name</label>
+        <input required className="input w-40" value={name} onChange={(e) => setName(e.target.value)} />
       </div>
-      {data?.entries.length === 0 && <p className="text-text-muted">No entries yet.</p>}
-    </div>
+      <div>
+        <label className="label">Contact (optional)</label>
+        <input className="input w-36" value={contact} onChange={(e) => setContact(e.target.value)} />
+      </div>
+      <div>
+        <label className="label">Address (optional)</label>
+        <input className="input w-48" value={address} onChange={(e) => setAddress(e.target.value)} />
+      </div>
+      <button className="btn btn-primary" disabled={submitting}>
+        {submitting ? "Adding…" : "+ Add Customer"}
+      </button>
+      {onCancel && (
+        <button type="button" className="btn btn-ghost" onClick={onCancel}>
+          Cancel
+        </button>
+      )}
+      {error && <p className="text-sm text-danger w-full">{error}</p>}
+    </form>
   );
 }
 

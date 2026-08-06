@@ -5,6 +5,7 @@ import { prisma } from "../../db";
 import { requireRole } from "../../middleware/auth";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { recordAudit } from "../../services/audit";
+import { notFound } from "../../utils/httpError";
 import { round2 } from "@jms/shared";
 
 const router = Router();
@@ -38,6 +39,36 @@ router.get(
         balanceDue: balanceOf(c.ledgerEntries),
       }))
     );
+  })
+);
+
+// --- Full customer profile/dashboard: purchase history, designs, job cards,
+// costing history, estimates, balance and payment history in one call.
+router.get(
+  "/:id/profile",
+  requireRole("SUPER_ADMIN", "MANAGER", "COSTING", "SALES", "AUDITOR"),
+  asyncHandler(async (req, res) => {
+    const customer = await prisma.customer.findUnique({
+      where: { id: req.params.id },
+      include: {
+        products: {
+          orderBy: { createdAt: "desc" },
+          include: {
+            category: true,
+            purity: true,
+            images: { where: { isActive: true, isPrimary: true }, take: 1 },
+            jobCards: {
+              orderBy: { createdAt: "desc" },
+              include: { stages: { include: { processStage: true, karigar: true }, orderBy: { sequenceOrder: "asc" } } },
+            },
+            estimates: { orderBy: [{ type: "asc" }, { version: "desc" }] },
+          },
+        },
+        ledgerEntries: { orderBy: { createdAt: "desc" } },
+      },
+    });
+    if (!customer) throw notFound("Customer not found");
+    res.json({ ...customer, balanceDue: balanceOf(customer.ledgerEntries) });
   })
 );
 

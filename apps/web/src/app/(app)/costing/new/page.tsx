@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, Suspense } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useApi } from "@/lib/hooks";
 import { apiFetch, ApiError } from "@/lib/api";
@@ -48,7 +49,12 @@ function NewEstimateForm() {
       <h1 className="text-xl font-semibold">New Estimate</h1>
       <form onSubmit={onSubmit} className="card p-6 space-y-4">
         <div>
-          <label className="label">Product</label>
+          <div className="flex items-center justify-between mb-2">
+            <label className="label mb-0">Product</label>
+            <Link href="/products/new" target="_blank" className="text-xs text-gold hover:underline">
+              + Add New Design
+            </Link>
+          </div>
           <input
             className="input mb-2"
             placeholder="Search by serial number or design name…"
@@ -63,6 +69,7 @@ function NewEstimateForm() {
               </option>
             ))}
           </select>
+          <p className="text-xs text-text-muted mt-1">Design not listed yet? Add it in the new tab, then search for it here.</p>
         </div>
         <div>
           <label className="label">Estimate Type</label>

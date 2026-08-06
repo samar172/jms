@@ -8,6 +8,8 @@ import { JobStageStatusPill } from "@/components/StatusPill";
 import { formatINR, formatWeight, formatPct } from "@/lib/format";
 import { computeWastage, fineWeight } from "@jms/shared";
 import { hi } from "@/lib/hi";
+import { AddKarigarForm } from "@/components/AddKarigarForm";
+import { useAuth } from "@/lib/auth-context";
 
 interface WastageRecord {
   id: string;
@@ -16,6 +18,7 @@ interface WastageRecord {
   tolerancePct: string;
   withinTolerance: boolean;
   exceptionStatus: "NONE" | "PENDING" | "APPROVED" | "REJECTED";
+  exceptionReason?: string | null;
 }
 interface LabourEntry {
   id: string;
@@ -53,7 +56,7 @@ interface JobCardDetail {
 export default function JobCardDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { data: jobCard, mutate } = useApi<JobCardDetail>(`/api/job-cards/${id}`);
-  const { data: karigars } = useKarigars();
+  const { data: karigars, mutate: mutateKarigars } = useKarigars();
   const [busyStage, setBusyStage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -102,6 +105,7 @@ export default function JobCardDetailPage({ params }: { params: Promise<{ id: st
               stage={stage}
               purityFactor={Number(jobCard.product.purity.purityFactor)}
               karigars={karigars ?? []}
+              onKarigarCreated={() => mutateKarigars()}
               busy={busyStage === stage.id}
               setBusy={(v) => setBusyStage(v ? stage.id : null)}
               onChange={() => mutate()}
@@ -116,6 +120,7 @@ function StageCard({
   stage,
   purityFactor,
   karigars,
+  onKarigarCreated,
   busy,
   setBusy,
   onChange,
@@ -123,6 +128,7 @@ function StageCard({
   stage: Stage;
   purityFactor: number;
   karigars: { id: string; name: string }[];
+  onKarigarCreated: () => void;
   busy: boolean;
   setBusy: (v: boolean) => void;
   onChange: () => void;
@@ -130,6 +136,7 @@ function StageCard({
   const [karigarId, setKarigarId] = useState(stage.karigarId ?? "");
   const [showIssueForm, setShowIssueForm] = useState(false);
   const [showReceiptForm, setShowReceiptForm] = useState(false);
+  const [showAddKarigar, setShowAddKarigar] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function assignKarigar() {
@@ -174,7 +181,7 @@ function StageCard({
 
       {error && <p className="text-sm text-danger mb-2">{error}</p>}
 
-      <div className="flex items-center gap-2 mb-3">
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
         <select className="input w-auto" value={karigarId} onChange={(e) => setKarigarId(e.target.value)}>
           <option value="">Unassigned</option>
           {karigars.map((k) => (
@@ -186,7 +193,22 @@ function StageCard({
         <button className="btn btn-outline" disabled={busy || !karigarId} onClick={assignKarigar}>
           Assign
         </button>
+        <button type="button" className="text-xs text-gold hover:underline" onClick={() => setShowAddKarigar((v) => !v)}>
+          {showAddKarigar ? "Cancel" : "+ New Karigar"}
+        </button>
       </div>
+      {showAddKarigar && (
+        <div className="bg-bg p-3 rounded-lg mb-3">
+          <AddKarigarForm
+            onCreated={(k) => {
+              setKarigarId(k.id);
+              setShowAddKarigar(false);
+              onKarigarCreated();
+            }}
+            onCancel={() => setShowAddKarigar(false)}
+          />
+        </div>
+      )}
 
       {stage.materialIssues.length === 0 ? (
         <button className="btn btn-outline mb-3" onClick={() => setShowIssueForm((s) => !s)} disabled={!stage.karigarId}>
@@ -218,6 +240,7 @@ function StageCard({
           stageId={stage.id}
           karigarId={stage.karigarId!}
           fineIssuedG={stage.materialIssues.reduce((s, i) => s + Number(i.fineWeightG), 0)}
+          grossIssuedG={stage.materialIssues.reduce((s, i) => s + Number(i.grossWeightG ?? 0), 0)}
           purityFactor={purityFactor}
           tolerancePct={Number(stage.processStage.wastageTolerancePct)}
           onDone={() => {
@@ -296,10 +319,17 @@ function IssueForm({ stageId, karigarId, onDone }: { stageId: string; karigarId:
   );
 }
 
+interface DustLot {
+  id: string;
+  lotNo: string;
+  status: string;
+}
+
 function ReceiptForm({
   stageId,
   karigarId,
   fineIssuedG,
+  grossIssuedG,
   purityFactor,
   tolerancePct,
   onDone,
@@ -307,13 +337,17 @@ function ReceiptForm({
   stageId: string;
   karigarId: string;
   fineIssuedG: number;
+  grossIssuedG: number;
   purityFactor: number;
   tolerancePct: number;
   onDone: () => void;
 }) {
+  const { data: dustLots } = useApi<DustLot[]>("/api/materials/dust-lots");
+  const openDustLots = dustLots?.filter((l) => l.status === "OPEN") ?? [];
   const [finishedPieceWeightG, setFinishedPieceWeightG] = useState("");
   const [dustWeightG, setDustWeightG] = useState("0");
   const [unusedReturnedWeightG, setUnusedReturnedWeightG] = useState("0");
+  const [dustLotId, setDustLotId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -324,6 +358,8 @@ function ReceiptForm({
     fineReturnedG: fineWeight(Number(unusedReturnedWeightG) || 0, purityFactor),
   });
   const withinTolerance = preview.wastagePct <= tolerancePct;
+  const totalReturnedRawG =
+    (Number(finishedPieceWeightG) || 0) + (Number(dustWeightG) || 0) + (Number(unusedReturnedWeightG) || 0);
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -338,6 +374,7 @@ function ReceiptForm({
           finishedPieceWeightG: Number(finishedPieceWeightG) || 0,
           dustWeightG: Number(dustWeightG) || 0,
           unusedReturnedWeightG: Number(unusedReturnedWeightG) || 0,
+          dustLotId: Number(dustWeightG) > 0 && dustLotId ? dustLotId : undefined,
         },
       });
       onDone();
@@ -351,9 +388,19 @@ function ReceiptForm({
   return (
     <form onSubmit={submit} className="bg-bg p-4 rounded-lg mb-3 grid sm:grid-cols-2 gap-4">
       <div className="space-y-4">
-        <div className="text-sm text-text-muted">
-          Fine Gold Issued <span className="text-xs">({hi.receipt.fineGoldIssued})</span>:{" "}
-          <span className="font-medium text-text tabular">{formatWeight(fineIssuedG)}</span>
+        <div className="rounded-lg border border-border p-3 space-y-1">
+          <div className="text-sm text-text-muted">
+            Gross Weight Issued <span className="text-xs">(karigar ko diya gaya kul vazan — weigh returns against this)</span>:{" "}
+            <span className="font-medium text-text tabular">{formatWeight(grossIssuedG)}</span>
+          </div>
+          <div className="text-xs text-text-muted">
+            Fine Gold Issued <span className="text-xs">({hi.receipt.fineGoldIssued})</span>:{" "}
+            <span className="tabular">{formatWeight(fineIssuedG)}</span>
+          </div>
+          <p className="text-xs text-text-muted pt-1">
+            Enter weights exactly as weighed on the scale (raw, not fine). Their total should come close to the
+            Gross Weight Issued above, not the Fine Gold Issued figure.
+          </p>
         </div>
         <div>
           <label className="label-lg">
@@ -383,6 +430,16 @@ function ReceiptForm({
             value={dustWeightG}
             onChange={(e) => setDustWeightG(e.target.value)}
           />
+          {Number(dustWeightG) > 0 && (
+            <select className="input mt-2" value={dustLotId} onChange={(e) => setDustLotId(e.target.value)}>
+              <option value="">Don&apos;t add to a dust lot</option>
+              {openDustLots.map((lot) => (
+                <option key={lot.id} value={lot.id}>
+                  Add to {lot.lotNo}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
         <div>
           <label className="label-lg">
@@ -397,6 +454,9 @@ function ReceiptForm({
             value={unusedReturnedWeightG}
             onChange={(e) => setUnusedReturnedWeightG(e.target.value)}
           />
+        </div>
+        <div className="text-xs text-text-muted tabular">
+          Returned so far: {formatWeight(totalReturnedRawG)} of {formatWeight(grossIssuedG)} gross issued
         </div>
       </div>
       <div className={`rounded-lg p-4 flex flex-col justify-center items-center ${withinTolerance ? "bg-success-tint" : "bg-danger-tint"}`}>
@@ -423,8 +483,14 @@ function ReceiptForm({
 }
 
 function WastageDisplay({ wastage, stageId, onChange }: { wastage: WastageRecord; stageId: string; onChange: () => void }) {
+  const { user } = useAuth();
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [revising, setRevising] = useState(false);
+  const canRevise = user?.role === "SUPER_ADMIN";
+  const isPending = wastage.exceptionStatus === "PENDING";
+  const isDecided = wastage.exceptionStatus === "APPROVED" || wastage.exceptionStatus === "REJECTED";
+  const showForm = isPending || revising;
 
   async function decide(approve: boolean) {
     setSubmitting(true);
@@ -433,6 +499,7 @@ function WastageDisplay({ wastage, stageId, onChange }: { wastage: WastageRecord
         method: "POST",
         body: { approve, reason: reason || "No reason provided" },
       });
+      setRevising(false);
       onChange();
     } finally {
       setSubmitting(false);
@@ -445,10 +512,20 @@ function WastageDisplay({ wastage, stageId, onChange }: { wastage: WastageRecord
         <span className="text-sm font-medium">
           Wastage {formatPct(wastage.wastagePct)} ({wastage.withinTolerance ? "within tolerance" : "exceeds tolerance"})
         </span>
-        <span className="pill pill-neutral">{wastage.exceptionStatus}</span>
+        <div className="flex items-center gap-2">
+          <span className="pill pill-neutral">{wastage.exceptionStatus}</span>
+          {canRevise && isDecided && !revising && (
+            <button className="text-xs text-gold hover:underline" onClick={() => setRevising(true)}>
+              Edit Decision
+            </button>
+          )}
+        </div>
       </div>
-      {wastage.exceptionStatus === "PENDING" && (
+      {showForm && (
         <div className="mt-3 space-y-2">
+          {revising && wastage.exceptionReason && (
+            <p className="text-xs text-text-muted">Current reason on file: {wastage.exceptionReason}</p>
+          )}
           <textarea
             className="input-lg"
             placeholder={`Reason for excess wastage (required) · ${hi.receipt.reasonRequired}`}
@@ -462,6 +539,11 @@ function WastageDisplay({ wastage, stageId, onChange }: { wastage: WastageRecord
             <button className="btn btn-outline btn-lg flex-1" disabled={submitting || !reason} onClick={() => decide(false)}>
               Reject · {hi.receipt.reject}
             </button>
+            {revising && (
+              <button type="button" className="btn btn-ghost btn-lg" onClick={() => setRevising(false)}>
+                Cancel
+              </button>
+            )}
           </div>
         </div>
       )}

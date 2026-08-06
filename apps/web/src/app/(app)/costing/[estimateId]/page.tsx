@@ -2,10 +2,13 @@
 
 import { use, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useApi, useKarats, useStoneTypes } from "@/lib/hooks";
 import { apiFetch, ApiError } from "@/lib/api";
 import { EstimateStatusPill } from "@/components/StatusPill";
 import { formatINR } from "@/lib/format";
+import { deriveRate } from "@jms/shared";
+import { useAuth } from "@/lib/auth-context";
 
 interface EstimateLine {
   id: string;
@@ -53,16 +56,20 @@ const CHARGE_HEADS: EstimateLine["head"][] = ["MAKING", "OTHER", "WASTAGE"];
 
 export default function EstimatePage({ params }: { params: Promise<{ estimateId: string }> }) {
   const { estimateId } = use(params);
+  const router = useRouter();
+  const { user } = useAuth();
   const { data: estimate, mutate } = useApi<Estimate>(`/api/estimates/${estimateId}`);
   const { data: karats } = useKarats();
   const { data: stoneTypes } = useStoneTypes();
   const [profitPct, setProfitPct] = useState<string | null>(null);
   const [gstPct, setGstPct] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [converting, setConverting] = useState(false);
 
   if (!estimate) return <div className="text-text-muted">Loading…</div>;
 
   const editable = estimate.status === "DRAFT";
+  const canUnlock = user?.role === "SUPER_ADMIN" && estimate.status === "SUBMITTED";
   const linesByHead = (head: EstimateLine["head"]) => estimate.lines.filter((l) => l.head === head);
   const subtotal = (head: EstimateLine["head"]) =>
     linesByHead(head).reduce((sum, l) => sum + Number(l.amount), 0);
@@ -113,6 +120,30 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
     await mutate();
   }
 
+  async function unlock() {
+    setError(null);
+    try {
+      await apiFetch(`/api/estimates/${estimateId}/unlock`, { method: "POST" });
+      await mutate();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed");
+    }
+  }
+
+  async function convertToFinalCosting() {
+    setError(null);
+    setConverting(true);
+    try {
+      const created = await apiFetch<{ id: string }>(`/api/estimates/${estimateId}/convert-to-final-costing`, {
+        method: "POST",
+      });
+      router.push(`/costing/${created.id}`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed");
+      setConverting(false);
+    }
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex items-start justify-between flex-wrap gap-3">
@@ -143,6 +174,16 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
           )}
           {!editable && (
             <>
+              {estimate.type === "ROUGH_ESTIMATE" && (
+                <button className="btn btn-outline" onClick={convertToFinalCosting} disabled={converting}>
+                  {converting ? "Converting…" : "Convert to Final Costing"}
+                </button>
+              )}
+              {canUnlock && (
+                <button className="btn btn-outline" onClick={unlock}>
+                  Unlock for Editing
+                </button>
+              )}
               <a href={`/api/estimates/${estimateId}/pdf`} target="_blank" rel="noreferrer" className="btn btn-outline">
                 Export PDF
               </a>
@@ -187,6 +228,7 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
                 estimateId={estimateId}
                 karats={karats ?? []}
                 stoneTypes={stoneTypes ?? []}
+                goldRate24k={Number(estimate.goldRateSnapshot24k)}
                 onChange={mutate}
                 onDeleteLine={deleteLine}
               />
@@ -208,6 +250,7 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
                 estimateId={estimateId}
                 karats={karats ?? []}
                 stoneTypes={stoneTypes ?? []}
+                goldRate24k={Number(estimate.goldRateSnapshot24k)}
                 onChange={mutate}
                 onDeleteLine={deleteLine}
               />
@@ -296,6 +339,7 @@ function SectionCard({
   estimateId,
   karats,
   stoneTypes,
+  goldRate24k,
   onChange,
   onDeleteLine,
 }: {
@@ -307,8 +351,9 @@ function SectionCard({
   subtotal: number;
   editable: boolean;
   estimateId: string;
-  karats: { id: string; code: string }[];
+  karats: { id: string; code: string; purityFactor: string }[];
   stoneTypes: { id: string; name: string; category: string }[];
+  goldRate24k: number;
   onChange: () => void;
   onDeleteLine: (id: string) => void;
 }) {
@@ -323,6 +368,16 @@ function SectionCard({
         </div>
         <span className="tabular font-medium shrink-0">{formatINR(subtotal)}</span>
       </div>
+      {head === "GOLD" && karats.length > 0 && (
+        <div className="px-5 py-2 border-b border-border bg-bg/50 flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted">
+          <span className="font-medium text-text">Indicative rate/g today:</span>
+          {karats.map((k) => (
+            <span key={k.id} className="tabular">
+              {k.code}: <span className="text-text font-medium">{formatINR(deriveRate(goldRate24k, Number(k.purityFactor)))}</span>
+            </span>
+          ))}
+        </div>
+      )}
       <div className="px-5 py-3">
         {lines.length > 0 && (
           <div className="overflow-x-auto">
@@ -358,6 +413,7 @@ function SectionCard({
                 estimateId={estimateId}
                 karats={karats}
                 stoneTypes={stoneTypes}
+                goldRate24k={goldRate24k}
                 onDone={() => {
                   setShowForm(false);
                   onChange();
@@ -376,12 +432,14 @@ function AddLineForm({
   estimateId,
   karats,
   stoneTypes,
+  goldRate24k,
   onDone,
 }: {
   head: EstimateLine["head"];
   estimateId: string;
-  karats: { id: string; code: string }[];
+  karats: { id: string; code: string; purityFactor: string }[];
   stoneTypes: { id: string; name: string; category: string }[];
+  goldRate24k: number;
   onDone: () => void;
 }) {
   const [description, setDescription] = useState("");
@@ -396,6 +454,11 @@ function AddLineForm({
     head === "POLKI"
       ? stoneTypes.filter((s) => s.category === "POLKI")
       : stoneTypes.filter((s) => s.category !== "POLKI");
+
+  const selectedKarat = karats.find((k) => k.id === purityId);
+  const indicativeRate = selectedKarat ? deriveRate(goldRate24k, Number(selectedKarat.purityFactor)) : null;
+  const indicativeAmount =
+    indicativeRate !== null && quantity ? Math.round(indicativeRate * Number(quantity) * 100) / 100 : null;
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -440,6 +503,9 @@ function AddLineForm({
               </option>
             ))}
           </select>
+          {indicativeRate !== null && (
+            <p className="text-xs text-text-muted mt-1 tabular">Indicative: {formatINR(indicativeRate)}/g</p>
+          )}
         </div>
       )}
       {(head === "POLKI" || head === "COLOURED_STONE") && (
@@ -461,11 +527,24 @@ function AddLineForm({
       </div>
       <div>
         <label className="label">Rate (optional)</label>
-        <input type="number" step="0.01" className="input w-28" value={rate} onChange={(e) => setRate(e.target.value)} />
+        <input
+          type="number"
+          step="0.01"
+          className="input w-28"
+          value={rate}
+          placeholder={indicativeRate !== null ? String(indicativeRate) : undefined}
+          onChange={(e) => setRate(e.target.value)}
+        />
       </div>
       <button className="btn btn-primary" disabled={submitting}>
         {submitting ? "Adding…" : "Add"}
       </button>
+      {head === "GOLD" && indicativeAmount !== null && (
+        <p className="text-xs text-text-muted w-full tabular">
+          Indicative amount at today's rate: <span className="text-text font-medium">{formatINR(indicativeAmount)}</span>{" "}
+          (leave Rate blank to auto-fill exactly this on save)
+        </p>
+      )}
       {error && <p className="text-sm text-danger w-full">{error}</p>}
     </form>
   );

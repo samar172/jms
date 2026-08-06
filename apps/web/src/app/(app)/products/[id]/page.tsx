@@ -4,12 +4,14 @@ import { use, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Copy } from "lucide-react";
-import { useApi } from "@/lib/hooks";
-import { apiFetch, resolveMediaUrl } from "@/lib/api";
+import { useApi, useCustomers } from "@/lib/hooks";
+import { apiFetch, ApiError, resolveMediaUrl } from "@/lib/api";
 import { ProductStatusPill, JobStageStatusPill } from "@/components/StatusPill";
 import { formatWeight, formatCarat, formatDate, formatINR } from "@/lib/format";
 import { useAuth } from "@/lib/auth-context";
 import { canSeeCost } from "@jms/shared";
+
+const PRODUCT_STATUSES = ["DESIGN", "ESTIMATED", "IN_PRODUCTION", "FINISHED", "SOLD", "MELTED"] as const;
 
 interface ProductImage {
   id: string;
@@ -44,6 +46,7 @@ interface ProductDetail {
   id: string;
   serialNo: string;
   designName: string;
+  description: string | null;
   status: string;
   grossWeightG: string;
   netWeightG: string;
@@ -53,6 +56,7 @@ interface ProductDetail {
   category: { name: string };
   subcategory?: { name: string } | null;
   purity: { code: string };
+  customer?: { id: string; name: string } | null;
   images: ProductImage[];
   jobCards: JobCard[];
   estimates: Estimate[];
@@ -72,10 +76,12 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
   const [activeImage, setActiveImage] = useState<ProductImage | null>(null);
   const [cloning, setCloning] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   if (!product) return <div className="text-text-muted">Loading…</div>;
 
   const showCost = user ? canSeeCost(user.role) : false;
+  const canEdit = user?.role === "SUPER_ADMIN" || user?.role === "MANAGER";
   const primaryImage = activeImage ?? product.images[0];
   const latestEstimate = product.estimates[0];
   const allStages = product.jobCards.flatMap((jc) => jc.stages).sort((a, b) => a.processStage.sequenceOrder - b.processStage.sequenceOrder);
@@ -109,6 +115,11 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
           <p className="text-text-muted">{product.designName}</p>
         </div>
         <div className="flex gap-2">
+          {canEdit && (
+            <button className="btn btn-outline no-print" onClick={() => setEditing((v) => !v)}>
+              {editing ? "Cancel Edit" : "Edit Product"}
+            </button>
+          )}
           <button className="btn btn-outline" onClick={clone} disabled={cloning}>
             <Copy size={16} /> {cloning ? "Cloning…" : "Clone Design"}
           </button>
@@ -176,27 +187,46 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
         </div>
 
         <div className="lg:col-span-2 space-y-4">
-          <div className="card p-5">
-            <h2 className="font-semibold mb-3">Specifications</h2>
-            <dl className="grid grid-cols-2 gap-y-2 text-sm">
-              <dt className="text-text-muted">Category</dt>
-              <dd>{product.category.name}</dd>
-              <dt className="text-text-muted">Subcategory</dt>
-              <dd>{product.subcategory?.name ?? "—"}</dd>
-              <dt className="text-text-muted">Purity</dt>
-              <dd>{product.purity.code}</dd>
-              <dt className="text-text-muted">Gross Weight</dt>
-              <dd className="tabular">{formatWeight(product.grossWeightG)}</dd>
-              <dt className="text-text-muted">Net Weight</dt>
-              <dd className="tabular">{formatWeight(product.netWeightG)}</dd>
-              <dt className="text-text-muted">Stone Weight</dt>
-              <dd className="tabular">{formatCarat(product.stoneWeightCt)}</dd>
-              <dt className="text-text-muted">Size</dt>
-              <dd>{product.size ?? "—"}</dd>
-              <dt className="text-text-muted">Created</dt>
-              <dd>{formatDate(product.createdAt)}</dd>
-            </dl>
-          </div>
+          {editing ? (
+            <EditProductForm
+              product={product}
+              onDone={() => {
+                setEditing(false);
+                mutate();
+              }}
+              onCancel={() => setEditing(false)}
+            />
+          ) : (
+            <div className="card p-5">
+              <h2 className="font-semibold mb-3">Specifications</h2>
+              <dl className="grid grid-cols-2 gap-y-2 text-sm">
+                <dt className="text-text-muted">Category</dt>
+                <dd>{product.category.name}</dd>
+                <dt className="text-text-muted">Subcategory</dt>
+                <dd>{product.subcategory?.name ?? "—"}</dd>
+                <dt className="text-text-muted">Purity</dt>
+                <dd>{product.purity.code}</dd>
+                <dt className="text-text-muted">Gross Weight</dt>
+                <dd className="tabular">{formatWeight(product.grossWeightG)}</dd>
+                <dt className="text-text-muted">Net Weight</dt>
+                <dd className="tabular">{formatWeight(product.netWeightG)}</dd>
+                <dt className="text-text-muted">Stone Weight</dt>
+                <dd className="tabular">{formatCarat(product.stoneWeightCt)}</dd>
+                <dt className="text-text-muted">Size</dt>
+                <dd>{product.size ?? "—"}</dd>
+                <dt className="text-text-muted">Customer</dt>
+                <dd>{product.customer?.name ?? "—"}</dd>
+                <dt className="text-text-muted">Created</dt>
+                <dd>{formatDate(product.createdAt)}</dd>
+                {product.description && (
+                  <>
+                    <dt className="text-text-muted">Description</dt>
+                    <dd>{product.description}</dd>
+                  </>
+                )}
+              </dl>
+            </div>
+          )}
 
           {showCost && (
             <div className="card p-5">
@@ -261,6 +291,98 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
         </ol>
       </div>
     </div>
+  );
+}
+
+function EditProductForm({
+  product,
+  onDone,
+  onCancel,
+}: {
+  product: ProductDetail;
+  onDone: () => void;
+  onCancel: () => void;
+}) {
+  const { data: customers } = useCustomers();
+  const [designName, setDesignName] = useState(product.designName);
+  const [description, setDescription] = useState(product.description ?? "");
+  const [size, setSize] = useState(product.size ?? "");
+  const [status, setStatus] = useState(product.status);
+  const [customerId, setCustomerId] = useState(product.customer?.id ?? "");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    try {
+      await apiFetch(`/api/products/${product.id}`, {
+        method: "PATCH",
+        body: {
+          designName,
+          description: description || undefined,
+          size: size || undefined,
+          status,
+          customerId: customerId || undefined,
+        },
+      });
+      onDone();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to update product");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="card p-5 space-y-3">
+      <h2 className="font-semibold mb-1">Edit Product</h2>
+      <div>
+        <label className="label">Design Name</label>
+        <input required className="input" value={designName} onChange={(e) => setDesignName(e.target.value)} />
+      </div>
+      <div>
+        <label className="label">Description</label>
+        <textarea className="input" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="label">Size</label>
+          <input className="input" value={size} onChange={(e) => setSize(e.target.value)} />
+        </div>
+        <div>
+          <label className="label">Status</label>
+          <select className="input" value={status} onChange={(e) => setStatus(e.target.value)}>
+            {PRODUCT_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <div>
+        <label className="label">Customer</label>
+        <select className="input" value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
+          <option value="">No customer</option>
+          {customers?.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      {error && <p className="text-sm text-danger">{error}</p>}
+      <div className="flex justify-end gap-2 pt-2 border-t border-border">
+        <button type="button" className="btn btn-ghost" onClick={onCancel}>
+          Cancel
+        </button>
+        <button className="btn btn-primary" disabled={submitting}>
+          {submitting ? "Saving…" : "Save Changes"}
+        </button>
+      </div>
+    </form>
   );
 }
 

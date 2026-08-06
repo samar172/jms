@@ -1,14 +1,38 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useKarigars } from "@/lib/hooks";
+import { AddKarigarForm } from "@/components/AddKarigarForm";
+import { useAuth } from "@/lib/auth-context";
 
 export default function KarigarsPage() {
-  const { data: karigars } = useKarigars();
+  const { user } = useAuth();
+  const { data: karigars, mutate } = useKarigars();
+  const [showAdd, setShowAdd] = useState(false);
+  const canManage = user?.role === "SUPER_ADMIN" || user?.role === "MANAGER";
 
   return (
     <div className="space-y-5">
-      <h1 className="text-xl font-semibold">Karigars</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold">Karigars</h1>
+        {canManage && (
+          <button className="btn btn-outline" onClick={() => setShowAdd((v) => !v)}>
+            {showAdd ? "Cancel" : "+ New Karigar"}
+          </button>
+        )}
+      </div>
+      {showAdd && (
+        <div className="card p-4">
+          <AddKarigarForm
+            onCreated={() => {
+              setShowAdd(false);
+              mutate();
+            }}
+            onCancel={() => setShowAdd(false)}
+          />
+        </div>
+      )}
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {karigars?.map((k) => (
           <Link key={k.id} href={`/karigars/${k.id}`} className="card p-4 flex items-center gap-3 hover:shadow-md">
