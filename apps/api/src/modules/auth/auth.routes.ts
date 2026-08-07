@@ -22,7 +22,7 @@ router.post(
     res.cookie(authService.REFRESH_COOKIE_NAME, refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
       maxAge: authService.REFRESH_COOKIE_MAX_AGE_MS,
     });
     res.json({ accessToken, user });
@@ -38,7 +38,7 @@ router.post(
     res.cookie(authService.REFRESH_COOKIE_NAME, refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
       maxAge: authService.REFRESH_COOKIE_MAX_AGE_MS,
     });
     res.json({ accessToken, user });
@@ -46,7 +46,11 @@ router.post(
 );
 
 router.post("/logout", (_req, res) => {
-  res.clearCookie(authService.REFRESH_COOKIE_NAME);
+  res.clearCookie(authService.REFRESH_COOKIE_NAME, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+  });
   res.status(204).send();
 });
 
