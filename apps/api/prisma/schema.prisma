@@ -180,6 +180,7 @@ model Karigar {
   materialReceipts MaterialReceipt[]
   labourEntries   LabourEntry[]
   ledgerEntries   KarigarLedgerEntry[]
+  estimates       Estimate[]
 
   @@index([isActive])
 }
@@ -587,6 +588,8 @@ model Estimate {
   id             String         @id @default(cuid())
   productId      String
   product        Product        @relation(fields: [productId], references: [id])
+  karigarId      String?
+  karigar        Karigar?       @relation(fields: [karigarId], references: [id])
   type           EstimateType
   version        Int
   status         EstimateStatus @default(DRAFT)
@@ -649,6 +652,8 @@ model EstimateLine {
   chargeType    ChargeType?        @relation(fields: [chargeTypeId], references: [id])
   karigarName   String?
   quantity      Decimal            @db.Decimal(10, 3)
+  pieces        Int?
+  rateBasis     LabourRateBasis?   // POLKI/COLOURED_STONE only — PER_CARAT (default, uses quantity) or PER_PIECE (uses pieces)
   rate          Decimal            @db.Decimal(12, 2)
   amount        Decimal            @db.Decimal(12, 2)
   sourceType    EstimateLineSource @default(MANUAL)

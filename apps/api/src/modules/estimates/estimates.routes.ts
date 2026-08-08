@@ -24,8 +24,20 @@ const lineInputSchema = z.object({
   chargeTypeId: z.string().optional(),
   karigarName: z.string().optional(),
   quantity: z.number().positive(),
+  pieces: z.number().int().positive().optional(),
+  rateBasis: z.enum(["PER_CARAT", "PER_PIECE"]).optional(),
   rate: z.number().nonnegative().optional(),
 });
+
+// Polki/Coloured Stone lines are normally priced per carat (rate x quantity,
+// the weight). A karigar sometimes quotes a flat rate per piece instead —
+// when rateBasis is PER_PIECE, price off the piece count instead of weight.
+function resolveLineAmount(line: z.infer<typeof lineInputSchema>, rate: number): number {
+  if (line.rateBasis === "PER_PIECE" && line.pieces) {
+    return lineAmount(line.pieces, rate);
+  }
+  return lineAmount(line.quantity, rate);
+}
 
 async function resolveLineRate(
   line: z.infer<typeof lineInputSchema>,
@@ -47,6 +59,8 @@ async function resolveLineRate(
 
 const createSchema = z.object({
   productId: z.string().min(1),
+  customerId: z.string().optional(),
+  karigarId: z.string().optional(),
   type: z.enum(["ROUGH_ESTIMATE", "FINAL_COSTING"]),
   estimateDate: z.coerce.date().default(() => new Date()),
   profitPct: z.number().min(0),
@@ -82,16 +96,29 @@ router.post(
           chargeTypeId: line.chargeTypeId,
           karigarName: line.karigarName,
           quantity: line.quantity,
+          pieces: line.pieces,
+          rateBasis: line.rateBasis,
           rate,
-          amount: lineAmount(line.quantity, rate),
+          amount: resolveLineAmount(line, rate),
           sourceType: "MANUAL" as const,
         };
       })
     );
 
+    // The customer picker on the create form writes through to the Product,
+    // which remains the single source of truth for "who is this piece for"
+    // (JobCard, CustomerLedgerEntry etc. all key off Product.customerId).
+    if (body.customerId) {
+      await prisma.product.update({
+        where: { id: body.productId },
+        data: { customerId: body.customerId },
+      });
+    }
+
     const estimate = await prisma.estimate.create({
       data: {
         productId: body.productId,
+        karigarId: body.karigarId,
         type: body.type,
         version,
         estimateDate: body.estimateDate,
@@ -142,7 +169,7 @@ router.get(
               }
             : {}),
         },
-        include: { product: { include: { customer: true } } },
+        include: { product: { include: { customer: true } }, karigar: true },
         orderBy: { createdAt: "desc" },
         take: 100,
       })
@@ -168,7 +195,11 @@ router.get(
   asyncHandler(async (req, res) => {
     const estimate = await prisma.estimate.findUnique({
       where: { id: req.params.id },
-      include: { lines: { orderBy: { sortOrder: "asc" } }, product: true },
+      include: {
+        lines: { orderBy: { sortOrder: "asc" } },
+        product: { include: { customer: true } },
+        karigar: true,
+      },
     });
     if (!estimate) throw notFound("Estimate not found");
     res.json(estimate);
@@ -186,6 +217,8 @@ const updateSchema = z.object({
   profitPct: z.number().min(0).optional(),
   showBreakdownOnPdf: z.boolean().optional(),
   gstPct: z.number().min(0).max(100).optional(),
+  karigarId: z.string().nullable().optional(),
+  customerId: z.string().optional(),
 });
 
 router.patch(
@@ -195,7 +228,10 @@ router.patch(
     if (!before) throw notFound("Estimate not found");
     assertEditable(before.status);
 
-    const body = updateSchema.parse(req.body);
+    const { customerId, ...body } = updateSchema.parse(req.body);
+    if (customerId) {
+      await prisma.product.update({ where: { id: before.productId }, data: { customerId } });
+    }
     await prisma.estimate.update({ where: { id: req.params.id }, data: body });
     const withTotals = await recalculateEstimateTotals(req.params.id);
 
@@ -233,8 +269,10 @@ router.post(
         chargeTypeId: line.chargeTypeId,
         karigarName: line.karigarName,
         quantity: line.quantity,
+        pieces: line.pieces,
+        rateBasis: line.rateBasis,
         rate,
-        amount: lineAmount(line.quantity, rate),
+        amount: resolveLineAmount(line, rate),
       },
     });
 
@@ -413,6 +451,60 @@ router.post(
     });
 
     res.json(approved);
+  })
+);
+
+// --- Super Admin amend (post-approval correction) ----------------------------
+// BR-08 keeps an Approved estimate immutable to everyone else, but a Super
+// Admin can still need to fix a genuine mistake after the fact. Rather than
+// silently reopening it (which would desync the customer ledger from the
+// estimate's netAmount), reverse the original invoice with a matching
+// negative CustomerLedgerEntry, then drop the estimate back to Draft — the
+// normal edit + /approve flow posts a fresh, correct entry when it's
+// re-approved. Both entries stay on the ledger permanently (BR-13).
+router.post(
+  "/:id/amend",
+  requireRole("SUPER_ADMIN"),
+  asyncHandler(async (req, res) => {
+    const estimate = await prisma.estimate.findUnique({
+      where: { id: req.params.id },
+      include: { product: true },
+    });
+    if (!estimate) throw notFound("Estimate not found");
+    if (estimate.status !== "APPROVED") {
+      throw badRequest("Only an approved estimate needs amending — a Draft or Submitted one is already editable.");
+    }
+
+    if (estimate.type === "FINAL_COSTING" && estimate.product.customerId) {
+      await prisma.customerLedgerEntry.create({
+        data: {
+          customerId: estimate.product.customerId,
+          type: "ADJUSTMENT",
+          amount: -Number(estimate.netAmount),
+          referenceType: "Estimate",
+          referenceId: estimate.id,
+          note: `Reversal — amending final costing for ${estimate.product.serialNo}`,
+          createdById: req.user!.id,
+        },
+      });
+    }
+
+    const amended = await prisma.estimate.update({
+      where: { id: req.params.id },
+      data: { status: "DRAFT" },
+    });
+
+    await recordAudit(prisma, {
+      userId: req.user!.id,
+      action: "UPDATE",
+      entityType: "Estimate",
+      entityId: amended.id,
+      before: estimate,
+      after: amended,
+      ipAddress: req.ip ?? null,
+    });
+
+    res.json(amended);
   })
 );
 

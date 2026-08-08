@@ -3,7 +3,7 @@
 import { use, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useApi, useKarats, useStoneTypes } from "@/lib/hooks";
+import { useApi, useKarats, useStoneTypes, useKarigars, useCustomers } from "@/lib/hooks";
 import { apiFetch, ApiError } from "@/lib/api";
 import { EstimateStatusPill } from "@/components/StatusPill";
 import { formatINR } from "@/lib/format";
@@ -16,6 +16,8 @@ interface EstimateLine {
   description: string | null;
   karigarName: string | null;
   quantity: string;
+  pieces: number | null;
+  rateBasis: "PER_CARAT" | "PER_PIECE" | null;
   rate: string;
   amount: string;
   sourceType: string;
@@ -23,6 +25,8 @@ interface EstimateLine {
 interface Estimate {
   id: string;
   productId: string;
+  karigarId: string | null;
+  karigar: { id: string; name: string } | null;
   type: string;
   version: number;
   status: string;
@@ -39,16 +43,16 @@ interface Estimate {
   gstAmount: string;
   netAmount: string;
   lines: EstimateLine[];
-  product: { serialNo: string; designName: string };
+  product: { serialNo: string; designName: string; customerId: string | null; customer: { id: string; name: string } | null };
 }
 
 const HEADS: { key: EstimateLine["head"]; label: string; unit: string; hint: string }[] = [
-  { key: "GOLD", label: "Gold", unit: "g", hint: "Enter purity + weight — rate is filled in automatically from today's gold rate." },
-  { key: "POLKI", label: "Polki", unit: "crt", hint: "Enter stone type + weight in carats." },
-  { key: "COLOURED_STONE", label: "Coloured Stones", unit: "crt", hint: "Enter stone type + weight in carats." },
-  { key: "MAKING", label: "Making Charges", unit: "", hint: "Pulled in automatically from approved karigar labour entries." },
+  { key: "GOLD", label: "Gold", unit: "g", hint: "Enter purity + weight in grams — rate is filled in automatically from today's gold rate." },
+  { key: "POLKI", label: "Polki", unit: "ct", hint: "Enter stone type + weight in carats (or a flat rate per piece)." },
+  { key: "COLOURED_STONE", label: "Coloured Stones", unit: "kt", hint: "Enter stone type + weight in karat (1 karat = 100 cent), or a flat rate per piece." },
+  { key: "MAKING", label: "Making Charges", unit: "", hint: "Pull in from approved karigar labour entries, or add a flat lumpsum amount." },
   { key: "OTHER", label: "Other Charges", unit: "", hint: "Anything else — packaging, certification, hallmarking, etc." },
-  { key: "WASTAGE", label: "Wastage", unit: "g", hint: "Pulled in automatically from recorded gold wastage within tolerance." },
+  { key: "WASTAGE", label: "Wastage", unit: "g", hint: "Add a % of a gold line's weight (your usual method, priced at the 24K rate) or a flat lumpsum — or pull in actual recorded wastage once production is done." },
 ];
 
 const MATERIAL_HEADS: EstimateLine["head"][] = ["GOLD", "POLKI", "COLOURED_STONE"];
@@ -61,15 +65,19 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
   const { data: estimate, mutate } = useApi<Estimate>(`/api/estimates/${estimateId}`);
   const { data: karats } = useKarats();
   const { data: stoneTypes } = useStoneTypes();
+  const { data: karigars } = useKarigars();
+  const { data: customers } = useCustomers();
   const [profitPct, setProfitPct] = useState<string | null>(null);
   const [gstPct, setGstPct] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [converting, setConverting] = useState(false);
+  const [amending, setAmending] = useState(false);
 
   if (!estimate) return <div className="text-text-muted">Loading…</div>;
 
   const editable = estimate.status === "DRAFT";
   const canUnlock = user?.role === "SUPER_ADMIN" && estimate.status === "SUBMITTED";
+  const canAmend = user?.role === "SUPER_ADMIN" && estimate.status === "APPROVED";
   const linesByHead = (head: EstimateLine["head"]) => estimate.lines.filter((l) => l.head === head);
   const subtotal = (head: EstimateLine["head"]) =>
     linesByHead(head).reduce((sum, l) => sum + Number(l.amount), 0);
@@ -115,6 +123,12 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
     await mutate();
   }
 
+  async function removePulledWastage() {
+    const pulled = estimate!.lines.filter((l) => l.head === "WASTAGE" && l.sourceType === "FROM_WASTAGE");
+    await Promise.all(pulled.map((l) => apiFetch(`/api/estimates/lines/${l.id}`, { method: "DELETE" })));
+    await mutate();
+  }
+
   async function deleteLine(lineId: string) {
     await apiFetch(`/api/estimates/lines/${lineId}`, { method: "DELETE" });
     await mutate();
@@ -124,6 +138,45 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
     setError(null);
     try {
       await apiFetch(`/api/estimates/${estimateId}/unlock`, { method: "POST" });
+      await mutate();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed");
+    }
+  }
+
+  async function amend() {
+    setError(null);
+    if (
+      !window.confirm(
+        "This reverses the invoice already posted to the customer's ledger and reopens the estimate for editing. A corrected invoice is posted when you re-approve. Continue?"
+      )
+    ) {
+      return;
+    }
+    setAmending(true);
+    try {
+      await apiFetch(`/api/estimates/${estimateId}/amend`, { method: "POST" });
+      await mutate();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed");
+    } finally {
+      setAmending(false);
+    }
+  }
+
+  async function saveKarigar(karigarId: string) {
+    try {
+      await apiFetch(`/api/estimates/${estimateId}`, { method: "PATCH", body: { karigarId: karigarId || null } });
+      await mutate();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed");
+    }
+  }
+
+  async function saveCustomer(customerId: string) {
+    if (!customerId) return;
+    try {
+      await apiFetch(`/api/estimates/${estimateId}`, { method: "PATCH", body: { customerId } });
       await mutate();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed");
@@ -167,6 +220,11 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
               <button className="btn btn-outline" onClick={pullWastage}>
                 Pull Wastage
               </button>
+              {linesByHead("WASTAGE").some((l) => l.sourceType === "FROM_WASTAGE") && (
+                <button className="btn btn-outline" onClick={removePulledWastage}>
+                  Remove Pulled Wastage
+                </button>
+              )}
               <button className="btn btn-primary" onClick={approve}>
                 Approve &amp; Lock
               </button>
@@ -184,6 +242,11 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
                   Unlock for Editing
                 </button>
               )}
+              {canAmend && (
+                <button className="btn btn-outline text-danger" onClick={amend} disabled={amending}>
+                  {amending ? "Amending…" : "Amend (Super Admin)"}
+                </button>
+              )}
               <a href={`/api/estimates/${estimateId}/pdf`} target="_blank" rel="noreferrer" className="btn btn-outline">
                 Export PDF
               </a>
@@ -195,12 +258,39 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
         </div>
       </div>
 
-      <div className="card p-3 bg-gold-tint text-sm flex flex-wrap items-center gap-2">
-        <span>
-          Gold Rate applied: <strong>{formatINR(Number(estimate.goldRateSnapshot24k))} / g (24K)</strong> as on{" "}
-          {new Date(estimate.estimateDate).toLocaleDateString("en-IN")}
-        </span>
-        <span className="text-text-muted">— this rate is locked in and won't change even if today's rate moves.</span>
+      <div className="card p-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+        <div className="flex items-center gap-2">
+          <span className="text-text-muted">Customer:</span>
+          {estimate.product.customer ? (
+            <span className="font-medium">{estimate.product.customer.name}</span>
+          ) : editable ? (
+            <select className="input py-1" defaultValue="" onChange={(e) => saveCustomer(e.target.value)}>
+              <option value="">Not set…</option>
+              {customers?.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className="text-text-muted">Not set</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-text-muted">Karigar:</span>
+          {editable ? (
+            <select className="input py-1" value={estimate.karigarId ?? ""} onChange={(e) => saveKarigar(e.target.value)}>
+              <option value="">Not set…</option>
+              {karigars?.map((k) => (
+                <option key={k.id} value={k.id}>
+                  {k.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className="font-medium">{estimate.karigar?.name ?? "Not set"}</span>
+          )}
+        </div>
       </div>
 
       <div className="card p-4 text-sm leading-relaxed">
@@ -228,6 +318,7 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
                 estimateId={estimateId}
                 karats={karats ?? []}
                 stoneTypes={stoneTypes ?? []}
+                goldLines={linesByHead("GOLD")}
                 goldRate24k={Number(estimate.goldRateSnapshot24k)}
                 onChange={mutate}
                 onDeleteLine={deleteLine}
@@ -250,6 +341,7 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
                 estimateId={estimateId}
                 karats={karats ?? []}
                 stoneTypes={stoneTypes ?? []}
+                goldLines={linesByHead("GOLD")}
                 goldRate24k={Number(estimate.goldRateSnapshot24k)}
                 onChange={mutate}
                 onDeleteLine={deleteLine}
@@ -339,6 +431,7 @@ function SectionCard({
   estimateId,
   karats,
   stoneTypes,
+  goldLines,
   goldRate24k,
   onChange,
   onDeleteLine,
@@ -353,6 +446,7 @@ function SectionCard({
   estimateId: string;
   karats: { id: string; code: string; purityFactor: string }[];
   stoneTypes: { id: string; name: string; category: string }[];
+  goldLines: EstimateLine[];
   goldRate24k: number;
   onChange: () => void;
   onDeleteLine: (id: string) => void;
@@ -386,8 +480,17 @@ function SectionCard({
               {lines.map((l) => (
                 <tr key={l.id} className="border-b border-border last:border-0">
                   <td className="py-1.5 pr-2">{l.description ?? l.karigarName ?? "—"}</td>
-                  <td className="py-1.5 pr-2 text-right tabular">{Number(l.quantity)} {unit}</td>
-                  <td className="py-1.5 pr-2 text-right tabular text-text-muted">{formatINR(Number(l.rate))}</td>
+                  <td className="py-1.5 pr-2 text-right tabular">
+                    {l.rateBasis === "PER_PIECE" && l.pieces
+                      ? `${l.pieces} pc`
+                      : unit
+                        ? `${Number(l.quantity)} ${unit}${l.pieces ? ` (${l.pieces} pc)` : ""}`
+                        : "—"}
+                  </td>
+                  <td className="py-1.5 pr-2 text-right tabular text-text-muted">
+                    {formatINR(Number(l.rate))}
+                    {l.rateBasis === "PER_PIECE" ? "/pc" : ""}
+                  </td>
                   <td className="py-1.5 pr-2 text-right tabular font-medium">{formatINR(Number(l.amount))}</td>
                   {editable && (
                     <td className="py-1.5 text-right">
@@ -402,12 +505,33 @@ function SectionCard({
           </table>
           </div>
         )}
-        {editable && !["MAKING", "WASTAGE"].includes(head) && (
+        {editable && (
           <>
             <button className="btn btn-ghost text-xs" onClick={() => setShowForm((s) => !s)}>
               + Add {label} Line
             </button>
-            {showForm && (
+            {showForm && head === "MAKING" && (
+              <LumpsumAddForm
+                head={head}
+                estimateId={estimateId}
+                onDone={() => {
+                  setShowForm(false);
+                  onChange();
+                }}
+              />
+            )}
+            {showForm && head === "WASTAGE" && (
+              <WastageAddForm
+                estimateId={estimateId}
+                goldLines={goldLines}
+                goldRate24k={goldRate24k}
+                onDone={() => {
+                  setShowForm(false);
+                  onChange();
+                }}
+              />
+            )}
+            {showForm && !["MAKING", "WASTAGE"].includes(head) && (
               <AddLineForm
                 head={head}
                 estimateId={estimateId}
@@ -424,6 +548,177 @@ function SectionCard({
         )}
       </div>
     </div>
+  );
+}
+
+function LumpsumAddForm({
+  head,
+  estimateId,
+  onDone,
+}: {
+  head: EstimateLine["head"];
+  estimateId: string;
+  onDone: () => void;
+}) {
+  const [description, setDescription] = useState("");
+  const [amount, setAmount] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    try {
+      await apiFetch(`/api/estimates/${estimateId}/lines`, {
+        method: "POST",
+        body: { head, description: description || undefined, quantity: 1, rate: Number(amount) },
+      });
+      onDone();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to add line");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="flex flex-wrap items-end gap-2 mt-2 bg-bg p-3 rounded-lg">
+      <div>
+        <label className="label">Description</label>
+        <input className="input w-40" value={description} onChange={(e) => setDescription(e.target.value)} />
+      </div>
+      <div>
+        <label className="label">Lumpsum Amount (₹)</label>
+        <input required type="number" step="0.01" min="0.01" className="input w-32" value={amount} onChange={(e) => setAmount(e.target.value)} />
+      </div>
+      <button className="btn btn-primary" disabled={submitting}>
+        {submitting ? "Adding…" : "Add"}
+      </button>
+      {error && <p className="text-sm text-danger w-full">{error}</p>}
+    </form>
+  );
+}
+
+// Matches how wastage is actually worked out on paper today (e.g. the Chowker
+// N-562 costing sheet): a % of a specific gold line's weight, always priced
+// at the locked-in 24K rate — not the purity-adjusted rate of that line.
+function WastageAddForm({
+  estimateId,
+  goldLines,
+  goldRate24k,
+  onDone,
+}: {
+  estimateId: string;
+  goldLines: EstimateLine[];
+  goldRate24k: number;
+  onDone: () => void;
+}) {
+  const [mode, setMode] = useState<"PERCENT" | "LUMPSUM">(goldLines.length > 0 ? "PERCENT" : "LUMPSUM");
+  const [goldLineId, setGoldLineId] = useState(goldLines[0]?.id ?? "");
+  const [pct, setPct] = useState("7");
+  const [description, setDescription] = useState("");
+  const [amount, setAmount] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const basisLine = goldLines.find((l) => l.id === goldLineId);
+  const wastageWeightG = basisLine && pct ? round(Number(basisLine.quantity) * (Number(pct) / 100), 3) : null;
+  const wastageAmount = wastageWeightG !== null ? round(wastageWeightG * goldRate24k, 2) : null;
+
+  function round(n: number, dp: number) {
+    const f = 10 ** dp;
+    return Math.round(n * f) / f;
+  }
+
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    try {
+      if (mode === "PERCENT") {
+        if (wastageWeightG === null) throw new Error("Pick a gold line and a %");
+        await apiFetch(`/api/estimates/${estimateId}/lines`, {
+          method: "POST",
+          body: {
+            head: "WASTAGE",
+            description: description || `${pct}% wastage on ${basisLine?.description ?? "gold"}`,
+            quantity: wastageWeightG,
+            rate: goldRate24k,
+          },
+        });
+      } else {
+        await apiFetch(`/api/estimates/${estimateId}/lines`, {
+          method: "POST",
+          body: { head: "WASTAGE", description: description || undefined, quantity: 1, rate: Number(amount) },
+        });
+      }
+      onDone();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to add line");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="flex flex-wrap items-end gap-2 mt-2 bg-bg p-3 rounded-lg">
+      <div className="flex items-center gap-3 w-full text-sm">
+        <label className="flex items-center gap-1.5">
+          <input type="radio" checked={mode === "PERCENT"} onChange={() => setMode("PERCENT")} disabled={goldLines.length === 0} />
+          % of gold weight
+        </label>
+        <label className="flex items-center gap-1.5">
+          <input type="radio" checked={mode === "LUMPSUM"} onChange={() => setMode("LUMPSUM")} />
+          Lumpsum
+        </label>
+        {goldLines.length === 0 && mode === "PERCENT" && (
+          <span className="text-xs text-text-muted">Add a Gold line first to use % of weight.</span>
+        )}
+      </div>
+      {mode === "PERCENT" ? (
+        <>
+          <div>
+            <label className="label">Gold line</label>
+            <select required className="input" value={goldLineId} onChange={(e) => setGoldLineId(e.target.value)}>
+              {goldLines.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.description ?? "Gold"} — {Number(l.quantity)}g
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label">Wastage %</label>
+            <input required type="number" step="0.01" className="input w-24" value={pct} onChange={(e) => setPct(e.target.value)} />
+          </div>
+          <div>
+            <label className="label">Description (optional)</label>
+            <input className="input w-40" value={description} onChange={(e) => setDescription(e.target.value)} />
+          </div>
+        </>
+      ) : (
+        <>
+          <div>
+            <label className="label">Description</label>
+            <input className="input w-40" value={description} onChange={(e) => setDescription(e.target.value)} />
+          </div>
+          <div>
+            <label className="label">Lumpsum Amount (₹)</label>
+            <input required type="number" step="0.01" min="0.01" className="input w-32" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          </div>
+        </>
+      )}
+      <button className="btn btn-primary" disabled={submitting}>
+        {submitting ? "Adding…" : "Add"}
+      </button>
+      {mode === "PERCENT" && wastageWeightG !== null && wastageAmount !== null && (
+        <p className="text-xs text-text-muted w-full tabular">
+          {wastageWeightG}g at today&apos;s locked 24K rate = <span className="text-text font-medium">{formatINR(wastageAmount)}</span>
+        </p>
+      )}
+      {error && <p className="text-sm text-danger w-full">{error}</p>}
+    </form>
   );
 }
 
@@ -446,10 +741,15 @@ function AddLineForm({
   const [purityId, setPurityId] = useState("");
   const [stoneTypeId, setStoneTypeId] = useState("");
   const [quantity, setQuantity] = useState("");
+  const [pieces, setPieces] = useState("");
+  const [rateBasis, setRateBasis] = useState<"PER_CARAT" | "PER_PIECE">("PER_CARAT");
   const [rate, setRate] = useState("");
+  const [useTodaysRate, setUseTodaysRate] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const isStone = head === "POLKI" || head === "COLOURED_STONE";
+  const unitLabel = head === "GOLD" ? "g" : head === "POLKI" ? "ct" : "kt";
   const relevantStoneTypes =
     head === "POLKI"
       ? stoneTypes.filter((s) => s.category === "POLKI")
@@ -471,9 +771,11 @@ function AddLineForm({
           head,
           description: description || undefined,
           purityId: head === "GOLD" ? purityId : undefined,
-          stoneTypeId: head === "POLKI" || head === "COLOURED_STONE" ? stoneTypeId : undefined,
+          stoneTypeId: isStone ? stoneTypeId : undefined,
           quantity: Number(quantity),
-          rate: rate ? Number(rate) : undefined,
+          pieces: isStone && pieces ? Number(pieces) : undefined,
+          rateBasis: isStone ? rateBasis : undefined,
+          rate: head === "GOLD" && useTodaysRate ? undefined : rate ? Number(rate) : undefined,
         },
       });
       onDone();
@@ -508,41 +810,79 @@ function AddLineForm({
           )}
         </div>
       )}
-      {(head === "POLKI" || head === "COLOURED_STONE") && (
-        <div>
-          <label className="label">Stone Type</label>
-          <select required className="input" value={stoneTypeId} onChange={(e) => setStoneTypeId(e.target.value)}>
-            <option value="">Select…</option>
-            {relevantStoneTypes.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </div>
+      {isStone && (
+        <>
+          <div>
+            <label className="label">Stone Type</label>
+            <select required className="input" value={stoneTypeId} onChange={(e) => setStoneTypeId(e.target.value)}>
+              <option value="">Select…</option>
+              {relevantStoneTypes.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label">Quality rate is per</label>
+            <select className="input" value={rateBasis} onChange={(e) => setRateBasis(e.target.value as typeof rateBasis)}>
+              <option value="PER_CARAT">{head === "POLKI" ? "Carat" : "Karat"}</option>
+              <option value="PER_PIECE">Piece</option>
+            </select>
+          </div>
+        </>
       )}
       <div>
-        <label className="label">Quantity</label>
+        <label className="label">Quantity ({unitLabel}){head === "COLOURED_STONE" ? " · 100 cent = 1kt" : ""}</label>
         <input required type="number" step="0.001" className="input w-24" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
       </div>
-      <div>
-        <label className="label">Rate (optional)</label>
-        <input
-          type="number"
-          step="0.01"
-          className="input w-28"
-          value={rate}
-          placeholder={indicativeRate !== null ? String(indicativeRate) : undefined}
-          onChange={(e) => setRate(e.target.value)}
-        />
-      </div>
+      {isStone && (
+        <div>
+          <label className="label">Pieces {rateBasis === "PER_CARAT" ? "(reference only)" : ""}</label>
+          <input
+            required={rateBasis === "PER_PIECE"}
+            type="number"
+            step="1"
+            min="1"
+            className="input w-20"
+            value={pieces}
+            onChange={(e) => setPieces(e.target.value)}
+          />
+        </div>
+      )}
+      {head === "GOLD" ? (
+        <div className="flex items-center gap-2 pb-2">
+          <input
+            id="autorate"
+            type="checkbox"
+            checked={useTodaysRate}
+            onChange={(e) => setUseTodaysRate(e.target.checked)}
+          />
+          <label htmlFor="autorate" className="text-sm">
+            Use today&apos;s rate
+          </label>
+        </div>
+      ) : null}
+      {(head !== "GOLD" || !useTodaysRate) && (
+        <div>
+          <label className="label">Rate {isStone ? `(per ${rateBasis === "PER_PIECE" ? "piece" : head === "POLKI" ? "carat" : "karat"})` : "(optional)"}</label>
+          <input
+            type="number"
+            step="0.01"
+            required={isStone && rateBasis === "PER_PIECE"}
+            className="input w-28"
+            value={rate}
+            placeholder={indicativeRate !== null ? String(indicativeRate) : undefined}
+            onChange={(e) => setRate(e.target.value)}
+          />
+        </div>
+      )}
       <button className="btn btn-primary" disabled={submitting}>
         {submitting ? "Adding…" : "Add"}
       </button>
-      {head === "GOLD" && indicativeAmount !== null && (
+      {head === "GOLD" && useTodaysRate && indicativeAmount !== null && (
         <p className="text-xs text-text-muted w-full tabular">
-          Indicative amount at today's rate: <span className="text-text font-medium">{formatINR(indicativeAmount)}</span>{" "}
-          (leave Rate blank to auto-fill exactly this on save)
+          Amount at today&apos;s rate: <span className="text-text font-medium">{formatINR(indicativeAmount)}</span>
         </p>
       )}
       {error && <p className="text-sm text-danger w-full">{error}</p>}

@@ -3,13 +3,14 @@
 import { useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useApi } from "@/lib/hooks";
+import { useApi, useKarigars, useCustomers } from "@/lib/hooks";
 import { apiFetch, ApiError } from "@/lib/api";
 
 interface ProductOption {
   id: string;
   serialNo: string;
   designName: string;
+  customerId?: string | null;
 }
 
 function NewEstimateForm() {
@@ -22,10 +23,17 @@ function NewEstimateForm() {
 
   const [productId, setProductId] = useState(searchParams.get("productId") ?? "");
   const [type, setType] = useState<"ROUGH_ESTIMATE" | "FINAL_COSTING">("ROUGH_ESTIMATE");
+  const [customerId, setCustomerId] = useState("");
+  const [karigarId, setKarigarId] = useState("");
   const [profitPct, setProfitPct] = useState("12");
   const [gstPct, setGstPct] = useState("3");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const { data: customers } = useCustomers();
+  const { data: karigars } = useKarigars();
+
+  const selectedProduct = productResults?.items.find((p) => p.id === productId);
+  const productHasCustomer = !!selectedProduct?.customerId;
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -34,7 +42,15 @@ function NewEstimateForm() {
     try {
       const estimate = await apiFetch<{ id: string }>("/api/estimates", {
         method: "POST",
-        body: { productId, type, profitPct: Number(profitPct), gstPct: Number(gstPct), lines: [] },
+        body: {
+          productId,
+          type,
+          profitPct: Number(profitPct),
+          gstPct: Number(gstPct),
+          lines: [],
+          ...(customerId && !productHasCustomer ? { customerId } : {}),
+          ...(karigarId ? { karigarId } : {}),
+        },
       });
       router.push(`/costing/${estimate.id}`);
     } catch (err) {
@@ -70,6 +86,39 @@ function NewEstimateForm() {
             ))}
           </select>
           <p className="text-xs text-text-muted mt-1">Design not listed yet? Add it in the new tab, then search for it here.</p>
+        </div>
+        {productId && (
+          <div>
+            <label className="label">Customer</label>
+            {productHasCustomer ? (
+              <p className="input bg-bg/50 text-text-muted">
+                {customers?.find((c) => c.id === selectedProduct?.customerId)?.name ?? "Already set on this product"}
+              </p>
+            ) : (
+              <>
+                <select className="input" value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
+                  <option value="">No customer yet…</option>
+                  {customers?.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-text-muted mt-1">This product has no customer yet — picking one here sets it.</p>
+              </>
+            )}
+          </div>
+        )}
+        <div>
+          <label className="label">Karigar</label>
+          <select className="input" value={karigarId} onChange={(e) => setKarigarId(e.target.value)}>
+            <option value="">No karigar yet…</option>
+            {karigars?.map((k) => (
+              <option key={k.id} value={k.id}>
+                {k.name}
+              </option>
+            ))}
+          </select>
         </div>
         <div>
           <label className="label">Estimate Type</label>
