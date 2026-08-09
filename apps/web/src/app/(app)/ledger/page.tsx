@@ -15,31 +15,33 @@ export default function LedgerPage() {
   const [tab, setTab] = useState<Tab>("karigars");
 
   return (
-    <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-semibold">Ledger</h1>
-        <p className="text-sm text-text-muted">
+    <div>
+      <div className="mb-2">
+        <div className="text-[11px] text-mute mb-1">Finance</div>
+        <h1 className="text-[19px] font-semibold text-ink mb-2">Ledger</h1>
+        <p className="text-xs text-ink2 mb-2">
           The full khata — gold and money movement across karigars, customers{stockEnabled?.enabled ? " and store stock" : ""}.
         </p>
-      </div>
-
-      <div className="flex gap-2 border-b border-border">
-        <TabButton active={tab === "karigars"} onClick={() => setTab("karigars")}>
-          Karigars
-        </TabButton>
-        <TabButton active={tab === "customers"} onClick={() => setTab("customers")}>
-          Customers
-        </TabButton>
-        {stockEnabled?.enabled && (
-          <TabButton active={tab === "stock"} onClick={() => setTab("stock")}>
-            Store Stock
+        <div className="flex gap-2">
+          <TabButton active={tab === "karigars"} onClick={() => setTab("karigars")}>
+            Karigars
           </TabButton>
-        )}
+          <TabButton active={tab === "customers"} onClick={() => setTab("customers")}>
+            Customers
+          </TabButton>
+          {stockEnabled?.enabled && (
+            <TabButton active={tab === "stock"} onClick={() => setTab("stock")}>
+              Store Stock
+            </TabButton>
+          )}
+        </div>
       </div>
 
-      {tab === "karigars" && <KarigarsTab />}
-      {tab === "customers" && <CustomersTab />}
-      {tab === "stock" && stockEnabled?.enabled && <StockTab />}
+      <div className="mt-3.5">
+        {tab === "karigars" && <KarigarsTab />}
+        {tab === "customers" && <CustomersTab />}
+        {tab === "stock" && stockEnabled?.enabled && <StockTab />}
+      </div>
     </div>
   );
 }
@@ -48,8 +50,8 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
   return (
     <button
       onClick={onClick}
-      className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
-        active ? "border-gold text-gold" : "border-transparent text-text-muted hover:text-text"
+      className={`px-3 py-1.5 text-[12.5px] border-b-2 -mb-px ${
+        active ? "border-accent text-accent font-semibold" : "border-transparent text-ink2 hover:text-ink"
       }`}
     >
       {children}
@@ -74,16 +76,16 @@ function KarigarsTab() {
   const canManage = user?.role === "SUPER_ADMIN" || user?.role === "MANAGER";
 
   return (
-    <div className="space-y-3">
+    <div>
       {canManage && (
-        <div className="flex justify-end">
-          <button className="btn btn-outline text-xs" onClick={() => setShowAdd((v) => !v)}>
+        <div className="flex justify-end mb-2">
+          <button className="console-btn" onClick={() => setShowAdd((v) => !v)}>
             {showAdd ? "Cancel" : "+ New Karigar"}
           </button>
         </div>
       )}
       {showAdd && (
-        <div className="card p-4">
+        <div className="console-panel p-4 mb-3">
           <AddKarigarForm
             onCreated={() => {
               setShowAdd(false);
@@ -93,42 +95,42 @@ function KarigarsTab() {
           />
         </div>
       )}
-      <div className="card overflow-hidden">
-      <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-left text-text-muted border-b border-border bg-bg">
-            <th className="py-2.5 px-4 font-medium">Karigar</th>
-            <th className="py-2.5 px-4 font-medium text-right">Gold Held</th>
-            <th className="py-2.5 px-4 font-medium text-right">Net Payable</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data?.map((k) => (
-            <tr key={k.id} className="border-b border-border last:border-0 hover:bg-bg">
-              <td className="py-2.5 px-4">
-                <Link href={`/karigars/${k.id}`} className="font-medium text-gold">
-                  {k.name}
-                </Link>
-                <span className="text-text-muted text-xs ml-2">{k.code}</span>
-              </td>
-              <td className="py-2.5 px-4 text-right tabular">{formatWeight(k.goldHeldG)}</td>
-              <td className="py-2.5 px-4 text-right tabular font-medium">{formatINR(k.netPayable)}</td>
-            </tr>
-          ))}
-        </tbody>
-        {data && data.length > 0 && (
-          <tfoot>
-            <tr className="border-t-2 border-border font-semibold bg-bg">
-              <td className="py-2.5 px-4">Total</td>
-              <td className="py-2.5 px-4 text-right tabular">{formatWeight(totalGoldHeld)}</td>
-              <td className="py-2.5 px-4 text-right tabular">{formatINR(totalPayable)}</td>
-            </tr>
-          </tfoot>
-        )}
-      </table>
-      </div>
-      {data?.length === 0 && <p className="text-center text-text-muted py-8">No karigars yet.</p>}
+      <div className="console-panel overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="console-table">
+            <thead>
+              <tr>
+                <th>Karigar</th>
+                <th className="num">Gold Held</th>
+                <th className="num">Net Payable</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data?.map((k) => (
+                <tr key={k.id}>
+                  <td>
+                    <Link href={`/karigars/${k.id}`} className="rid">
+                      {k.name}
+                    </Link>
+                    <span className="text-mute text-xs ml-2">{k.code}</span>
+                  </td>
+                  <td className="num mono">{formatWeight(k.goldHeldG)}</td>
+                  <td className="num mono font-semibold">{formatINR(k.netPayable)}</td>
+                </tr>
+              ))}
+            </tbody>
+            {data && data.length > 0 && (
+              <tfoot>
+                <tr className="font-semibold bg-neu-bg">
+                  <td className="px-2.5 py-2">Total</td>
+                  <td className="num mono px-2.5 py-2">{formatWeight(totalGoldHeld)}</td>
+                  <td className="num mono px-2.5 py-2">{formatINR(totalPayable)}</td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
+        {data?.length === 0 && <p className="text-center text-mute py-8 text-sm">No karigars yet.</p>}
       </div>
     </div>
   );
@@ -147,16 +149,16 @@ function CustomersTab() {
   const canManage = user?.role === "SUPER_ADMIN" || user?.role === "MANAGER" || user?.role === "SALES";
 
   return (
-    <div className="space-y-3">
+    <div>
       {canManage && (
-        <div className="flex justify-end">
-          <button className="btn btn-outline text-xs" onClick={() => setShowAdd((v) => !v)}>
+        <div className="flex justify-end mb-2">
+          <button className="console-btn" onClick={() => setShowAdd((v) => !v)}>
             {showAdd ? "Cancel" : "+ New Customer"}
           </button>
         </div>
       )}
       {showAdd && (
-        <div className="card p-4">
+        <div className="console-panel p-4 mb-3">
           <AddCustomerForm
             onCreated={() => {
               setShowAdd(false);
@@ -166,44 +168,43 @@ function CustomersTab() {
           />
         </div>
       )}
-      <div className="card overflow-hidden">
-      <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-left text-text-muted border-b border-border bg-bg">
-            <th className="py-2.5 px-4 font-medium">Customer</th>
-            <th className="py-2.5 px-4 font-medium text-right">Balance Due</th>
-            <th className="py-2.5 px-4 font-medium" />
-          </tr>
-        </thead>
-        <tbody>
-          {customers?.map((c) => (
-            <tr key={c.id} className="border-b border-border last:border-0 hover:bg-bg">
-              <td className="py-2.5 px-4">
-                <div className="font-medium">{c.name}</div>
-                {c.contact && <div className="text-text-muted text-xs">{c.contact}</div>}
-              </td>
-              <td
-                className={`py-2.5 px-4 text-right tabular font-medium ${
-                  c.balanceDue > 0 ? "text-danger" : c.balanceDue < 0 ? "text-success" : ""
-                }`}
-              >
-                {formatINR(Math.abs(c.balanceDue))}
-                {c.balanceDue !== 0 && (
-                  <span className="text-xs text-text-muted ml-1">{c.balanceDue > 0 ? "owes" : "advance"}</span>
-                )}
-              </td>
-              <td className="py-2.5 px-4 text-right">
-                <Link href={`/customers/${c.id}`} className="btn btn-ghost text-xs">
-                  View Profile →
-                </Link>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      </div>
-      {customers?.length === 0 && <p className="text-center text-text-muted py-8">No customers yet.</p>}
+      <div className="console-panel overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="console-table">
+            <thead>
+              <tr>
+                <th>Customer</th>
+                <th className="num">Balance Due</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {customers?.map((c) => (
+                <tr key={c.id}>
+                  <td>
+                    <div className="font-medium text-ink">{c.name}</div>
+                    {c.contact && <div className="text-mute text-[11px]">{c.contact}</div>}
+                  </td>
+                  <td
+                    className="num mono font-semibold"
+                    style={{ color: c.balanceDue > 0 ? "var(--color-err-tx)" : c.balanceDue < 0 ? "var(--color-ok-tx)" : undefined }}
+                  >
+                    {formatINR(Math.abs(c.balanceDue))}
+                    {c.balanceDue !== 0 && (
+                      <span className="text-xs text-mute ml-1 font-normal">{c.balanceDue > 0 ? "owes" : "advance"}</span>
+                    )}
+                  </td>
+                  <td className="text-right">
+                    <Link href={`/customers/${c.id}`} className="text-accent text-xs font-semibold">
+                      View Profile →
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {customers?.length === 0 && <p className="text-center text-mute py-8 text-sm">No customers yet.</p>}
       </div>
     </div>
   );
@@ -239,26 +240,26 @@ function AddCustomerForm({ onCreated, onCancel }: { onCreated: () => void; onCan
   return (
     <form onSubmit={submit} className="flex flex-wrap items-end gap-2">
       <div>
-        <label className="label">Name</label>
-        <input required className="input w-40" value={name} onChange={(e) => setName(e.target.value)} />
+        <label className="console-field-label">Name</label>
+        <input required className="console-field w-40" value={name} onChange={(e) => setName(e.target.value)} />
       </div>
       <div>
-        <label className="label">Contact (optional)</label>
-        <input className="input w-36" value={contact} onChange={(e) => setContact(e.target.value)} />
+        <label className="console-field-label">Contact (optional)</label>
+        <input className="console-field w-36" value={contact} onChange={(e) => setContact(e.target.value)} />
       </div>
       <div>
-        <label className="label">Address (optional)</label>
-        <input className="input w-48" value={address} onChange={(e) => setAddress(e.target.value)} />
+        <label className="console-field-label">Address (optional)</label>
+        <input className="console-field w-48" value={address} onChange={(e) => setAddress(e.target.value)} />
       </div>
-      <button className="btn btn-primary" disabled={submitting}>
+      <button className="console-btn primary" disabled={submitting}>
         {submitting ? "Adding…" : "+ Add Customer"}
       </button>
       {onCancel && (
-        <button type="button" className="btn btn-ghost" onClick={onCancel}>
+        <button type="button" className="console-btn" onClick={onCancel}>
           Cancel
         </button>
       )}
-      {error && <p className="text-sm text-danger w-full">{error}</p>}
+      {error && <p className="text-sm text-err-tx w-full">{error}</p>}
     </form>
   );
 }
@@ -285,16 +286,16 @@ function StockTab() {
   const [showPurchase, setShowPurchase] = useState(false);
 
   return (
-    <div className="space-y-4">
-      <div className="card overflow-hidden">
-        <div className="px-5 py-3 border-b border-border font-semibold flex items-center justify-between">
+    <div className="space-y-3.5">
+      <div className="console-panel overflow-hidden">
+        <div className="ph">
           Balances
-          <button className="btn btn-outline text-xs" onClick={() => setShowPurchase((s) => !s)}>
+          <button className="console-btn" onClick={() => setShowPurchase((s) => !s)}>
             + Record Purchase
           </button>
         </div>
         {showPurchase && (
-          <div className="p-4 border-b border-border">
+          <div className="p-3.5 border-b border-line">
             <PurchaseForm
               karats={karats ?? []}
               stoneTypes={stoneTypes ?? []}
@@ -306,63 +307,63 @@ function StockTab() {
           </div>
         )}
         <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-text-muted border-b border-border bg-bg">
-              <th className="py-2 px-4 font-medium">Material</th>
-              <th className="py-2 px-4 font-medium text-right">Balance</th>
-            </tr>
-          </thead>
-          <tbody>
-            {balances?.map((b, i) => (
-              <tr key={i} className="border-b border-border last:border-0">
-                <td className="py-2 px-4">
-                  {b.materialType} {b.purity ?? b.stoneType ?? ""}
-                </td>
-                <td className="py-2 px-4 text-right tabular">
-                  {b.purity ? formatWeight(b.balance) : `${b.balance.toFixed(3)} crt`}
-                </td>
-              </tr>
-            ))}
-            {balances?.length === 0 && (
+          <table className="console-table">
+            <thead>
               <tr>
-                <td colSpan={2} className="py-8 text-center text-text-muted">
-                  No stock recorded yet.
-                </td>
+                <th>Material</th>
+                <th className="num">Balance</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {balances?.map((b, i) => (
+                <tr key={i}>
+                  <td>
+                    {b.materialType} {b.purity ?? b.stoneType ?? ""}
+                  </td>
+                  <td className="num mono">{b.purity ? formatWeight(b.balance) : `${b.balance.toFixed(3)} crt`}</td>
+                </tr>
+              ))}
+              {balances?.length === 0 && (
+                <tr>
+                  <td colSpan={2} className="py-8 text-center text-mute">
+                    No stock recorded yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
-      <div className="card overflow-hidden">
-        <div className="px-5 py-3 border-b border-border font-semibold">Recent Entries</div>
+      <div className="console-panel overflow-hidden">
+        <div className="ph">Recent Entries</div>
         <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-text-muted border-b border-border bg-bg">
-              <th className="py-2 px-4 font-medium">Date</th>
-              <th className="py-2 px-4 font-medium">Material</th>
-              <th className="py-2 px-4 font-medium">Direction</th>
-              <th className="py-2 px-4 font-medium text-right">Qty</th>
-              <th className="py-2 px-4 font-medium">Note</th>
-            </tr>
-          </thead>
-          <tbody>
-            {entries?.map((e) => (
-              <tr key={e.id} className="border-b border-border last:border-0">
-                <td className="py-2 px-4 text-text-muted">{formatDateTime(e.createdAt)}</td>
-                <td className="py-2 px-4">
-                  {e.materialType} {e.purity?.code ?? e.stoneType?.name ?? ""}
-                </td>
-                <td className={`py-2 px-4 ${e.direction === "IN" ? "text-success" : "text-danger"}`}>{e.direction}</td>
-                <td className="py-2 px-4 text-right tabular">{Number(e.quantity).toFixed(3)}</td>
-                <td className="py-2 px-4 text-text-muted">{e.note ?? "—"}</td>
+          <table className="console-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Material</th>
+                <th>Direction</th>
+                <th className="num">Qty</th>
+                <th>Note</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {entries?.map((e) => (
+                <tr key={e.id}>
+                  <td className="text-ink2">{formatDateTime(e.createdAt)}</td>
+                  <td>
+                    {e.materialType} {e.purity?.code ?? e.stoneType?.name ?? ""}
+                  </td>
+                  <td>
+                    <span className={`console-pill ${e.direction === "IN" ? "ok" : "err"}`}>{e.direction}</span>
+                  </td>
+                  <td className="num mono">{Number(e.quantity).toFixed(3)}</td>
+                  <td className="text-ink2">{e.note ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -411,14 +412,14 @@ function PurchaseForm({
 
   return (
     <form onSubmit={submit} className="flex flex-wrap items-end gap-2">
-      <select className="input w-auto" value={materialType} onChange={(e) => setMaterialType(e.target.value as typeof materialType)}>
+      <select className="console-field w-auto" value={materialType} onChange={(e) => setMaterialType(e.target.value as typeof materialType)}>
         <option value="GOLD">Gold</option>
         <option value="POLKI">Polki</option>
         <option value="COLOURED_STONE">Coloured Stone</option>
         <option value="FINDING">Finding</option>
       </select>
       {materialType === "GOLD" ? (
-        <select required className="input w-auto" value={purityId} onChange={(e) => setPurityId(e.target.value)}>
+        <select required className="console-field w-auto" value={purityId} onChange={(e) => setPurityId(e.target.value)}>
           <option value="">Purity…</option>
           {karats.map((k) => (
             <option key={k.id} value={k.id}>
@@ -427,7 +428,7 @@ function PurchaseForm({
           ))}
         </select>
       ) : (
-        <select required className="input w-auto" value={stoneTypeId} onChange={(e) => setStoneTypeId(e.target.value)}>
+        <select required className="console-field w-auto" value={stoneTypeId} onChange={(e) => setStoneTypeId(e.target.value)}>
           <option value="">Stone type…</option>
           {stoneTypes.map((s) => (
             <option key={s.id} value={s.id}>
@@ -441,7 +442,7 @@ function PurchaseForm({
         type="number"
         step="0.001"
         placeholder="Quantity"
-        className="input w-28"
+        className="console-field w-28"
         value={quantity}
         onChange={(e) => setQuantity(e.target.value)}
       />
@@ -449,14 +450,14 @@ function PurchaseForm({
         type="number"
         step="0.01"
         placeholder="Rate (optional)"
-        className="input w-32"
+        className="console-field w-32"
         value={rate}
         onChange={(e) => setRate(e.target.value)}
       />
-      <button className="btn btn-primary" disabled={submitting}>
+      <button className="console-btn primary" disabled={submitting}>
         {submitting ? "Saving…" : "Record Purchase"}
       </button>
-      {error && <p className="text-sm text-danger w-full">{error}</p>}
+      {error && <p className="text-sm text-err-tx w-full">{error}</p>}
     </form>
   );
 }

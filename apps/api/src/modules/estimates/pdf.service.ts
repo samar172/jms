@@ -1,4 +1,3 @@
-import PdfPrinter from "pdfmake";
 import { TDocumentDefinitions } from "pdfmake/interfaces";
 import { Estimate, EstimateLine, Product, Karat, StoneType, Customer } from "@prisma/client";
 import { formatINR } from "@jms/shared";
@@ -12,10 +11,25 @@ const fonts = {
   },
 };
 
+// @types/pdfmake (0.3.x) types the newer browser-style createPdf() API, but
+// the installed pdfmake package (0.2.x) is the older server-side build that
+// exports a constructable PdfPrinter class instead — the two don't line up,
+// so this is typed by hand against what's actually installed rather than
+// fighting the mismatched .d.ts.
+interface PdfKitDocument extends NodeJS.ReadableStream {
+  end(): void;
+}
+interface PdfPrinterInstance {
+  createPdfKitDocument(docDefinition: TDocumentDefinitions): PdfKitDocument;
+}
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const PdfPrinter = require("pdfmake") as new (fontDescriptors: typeof fonts) => PdfPrinterInstance;
+
 const printer = new PdfPrinter(fonts);
 
 type EstimateWithRelations = Estimate & {
-  product: Product & { customer?: Customer | null };
+  product: Product;
+  customer?: Customer | null;
   lines: (EstimateLine & { purity?: Karat | null; stoneType?: StoneType | null })[];
 };
 
@@ -121,7 +135,7 @@ export async function generateEstimatePdf(estimate: EstimateWithRelations): Prom
             width: "50%",
             text: [
               { text: "Bill To:\n", bold: true },
-              estimate.product.customer ? estimate.product.customer.name : "Walk-in Customer",
+              estimate.customer ? estimate.customer.name : "Walk-in Customer",
             ]
           },
           {

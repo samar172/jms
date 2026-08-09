@@ -60,7 +60,7 @@ export default function JobCardDetailPage({ params }: { params: Promise<{ id: st
   const [busyStage, setBusyStage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  if (!jobCard) return <div className="text-text-muted">Loading…</div>;
+  if (!jobCard) return <div className="text-mute">Loading…</div>;
 
   async function closeJobCard() {
     setError(null);
@@ -76,26 +76,31 @@ export default function JobCardDetailPage({ params }: { params: Promise<{ id: st
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-start justify-between">
-        <div>
-          <Link href={`/products/${jobCard.product.serialNo}`} className="font-mono text-gold font-semibold">
-            {jobCard.product.serialNo}
+    <div>
+      <div className="mb-2">
+        <div className="text-[11px] text-mute mb-1">
+          <Link href="/job-cards" className="hover:text-accent">
+            Manufacturing
           </Link>
-          <h1 className="text-xl font-semibold">{jobCard.product.designName}</h1>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="pill pill-neutral">{jobCard.status}</span>
+        <div className="flex items-start justify-between flex-wrap gap-2">
+          <h1 className="text-[19px] font-semibold flex items-center gap-2.5 flex-wrap text-ink">
+            <Link href={`/products/${jobCard.product.serialNo}`} className="mono text-accent">
+              {jobCard.product.serialNo}
+            </Link>
+            {jobCard.product.designName}
+            <span className="console-pill neu">{jobCard.status}</span>
+          </h1>
           {jobCard.status !== "CLOSED" && (
-            <button className="btn btn-primary" onClick={closeJobCard}>
+            <button className="console-btn primary" onClick={closeJobCard}>
               Close Job Card
             </button>
           )}
         </div>
       </div>
-      {error && <div className="card p-3 border-danger text-danger text-sm">{error}</div>}
+      {error && <div className="console-panel p-3 border-err-bd text-err-tx text-sm mb-3.5">{error}</div>}
 
-      <div className="space-y-4">
+      <div className="space-y-3.5">
         {jobCard.stages
           .slice()
           .sort((a, b) => a.processStage.sequenceOrder - b.processStage.sequenceOrder)
@@ -166,23 +171,23 @@ function StageCard({
   }
 
   return (
-    <div className="card p-5">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-3">
-          <h3 className="font-semibold">{stage.processStage.name}</h3>
+    <div className="console-panel p-3.5">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div className="flex items-center gap-2.5">
+          <h3 className="text-[13px] font-semibold text-ink">{stage.processStage.name}</h3>
           <JobStageStatusPill status={stage.status} />
         </div>
         {stage.status !== "APPROVED" && (
-          <button className="btn btn-outline" disabled={busy} onClick={approveStage}>
+          <button className="console-btn" disabled={busy} onClick={approveStage}>
             Approve Stage
           </button>
         )}
       </div>
 
-      {error && <p className="text-sm text-danger mb-2">{error}</p>}
+      {error && <p className="text-sm text-err-tx mb-2">{error}</p>}
 
       <div className="flex items-center gap-2 mb-3 flex-wrap">
-        <select className="input w-auto" value={karigarId} onChange={(e) => setKarigarId(e.target.value)}>
+        <select className="console-field w-auto" value={karigarId} onChange={(e) => setKarigarId(e.target.value)}>
           <option value="">Unassigned</option>
           {karigars.map((k) => (
             <option key={k.id} value={k.id}>
@@ -190,15 +195,15 @@ function StageCard({
             </option>
           ))}
         </select>
-        <button className="btn btn-outline" disabled={busy || !karigarId} onClick={assignKarigar}>
+        <button className="console-btn" disabled={busy || !karigarId} onClick={assignKarigar}>
           Assign
         </button>
-        <button type="button" className="text-xs text-gold hover:underline" onClick={() => setShowAddKarigar((v) => !v)}>
+        <button type="button" className="text-xs text-accent hover:underline" onClick={() => setShowAddKarigar((v) => !v)}>
           {showAddKarigar ? "Cancel" : "+ New Karigar"}
         </button>
       </div>
       {showAddKarigar && (
-        <div className="bg-bg p-3 rounded-lg mb-3">
+        <div className="bg-neu-bg p-3 rounded-md mb-3">
           <AddKarigarForm
             onCreated={(k) => {
               setKarigarId(k.id);
@@ -211,11 +216,11 @@ function StageCard({
       )}
 
       {stage.materialIssues.length === 0 ? (
-        <button className="btn btn-outline mb-3" onClick={() => setShowIssueForm((s) => !s)} disabled={!stage.karigarId}>
+        <button className="console-btn mb-3" onClick={() => setShowIssueForm((s) => !s)} disabled={!stage.karigarId}>
           Issue Material
         </button>
       ) : (
-        <div className="text-sm text-text-muted mb-3">
+        <div className="text-sm text-ink2 mb-3">
           Issued: {stage.materialIssues.map((mi) => formatWeight(mi.fineWeightG)).join(", ")} fine gold
         </div>
       )}
@@ -231,7 +236,7 @@ function StageCard({
       )}
 
       {stage.materialIssues.length > 0 && !stage.wastageRecord && (
-        <button className="btn btn-outline btn-lg mb-3 w-full sm:w-auto" onClick={() => setShowReceiptForm((s) => !s)}>
+        <button className="btn btn-primary btn-lg mb-3 w-full sm:w-auto" onClick={() => setShowReceiptForm((s) => !s)}>
           Receive &amp; Reconcile <span className="opacity-70 ml-1">· {hi.receipt.title}</span>
         </button>
       )}
@@ -288,10 +293,10 @@ function IssueForm({ stageId, karigarId, onDone }: { stageId: string; karigarId:
   }
 
   return (
-    <form onSubmit={submit} className="flex items-end gap-2 mb-3 bg-bg p-3 rounded-lg">
+    <form onSubmit={submit} className="flex items-end gap-2 mb-3 bg-neu-bg p-3 rounded-md">
       <div>
-        <label className="label">Purity</label>
-        <select required className="input" value={purityId} onChange={(e) => setPurityId(e.target.value)}>
+        <label className="console-field-label">Purity</label>
+        <select required className="console-field" value={purityId} onChange={(e) => setPurityId(e.target.value)}>
           <option value="">Select…</option>
           {karats?.map((k) => (
             <option key={k.id} value={k.id}>
@@ -301,20 +306,20 @@ function IssueForm({ stageId, karigarId, onDone }: { stageId: string; karigarId:
         </select>
       </div>
       <div>
-        <label className="label">Gross Weight (g)</label>
+        <label className="console-field-label">Gross Weight (g)</label>
         <input
           required
           type="number"
           step="0.001"
-          className="input"
+          className="console-field"
           value={grossWeightG}
           onChange={(e) => setGrossWeightG(e.target.value)}
         />
       </div>
-      <button className="btn btn-primary" disabled={submitting}>
+      <button className="console-btn primary" disabled={submitting}>
         {submitting ? "Issuing…" : "Issue"}
       </button>
-      {error && <p className="text-sm text-danger">{error}</p>}
+      {error && <p className="text-sm text-err-tx">{error}</p>}
     </form>
   );
 }
@@ -325,6 +330,9 @@ interface DustLot {
   status: string;
 }
 
+// Deliberately keeps the large-tap-target primitives (input-lg/btn-lg/label-lg)
+// rather than the dense console-* set — this form is filled on the workshop
+// floor by karigars/staff with dusty or gloved hands (see design.md Screen 11).
 function ReceiptForm({
   stageId,
   karigarId,
@@ -345,15 +353,22 @@ function ReceiptForm({
   const { data: dustLots } = useApi<DustLot[]>("/api/materials/dust-lots");
   const openDustLots = dustLots?.filter((l) => l.status === "OPEN") ?? [];
   const [finishedPieceWeightG, setFinishedPieceWeightG] = useState("");
+  const [fillerWeightG, setFillerWeightG] = useState("0");
+  const [fillerNote, setFillerNote] = useState("");
+  const [pieceWeightIsFine, setPieceWeightIsFine] = useState(true);
   const [dustWeightG, setDustWeightG] = useState("0");
   const [unusedReturnedWeightG, setUnusedReturnedWeightG] = useState("0");
   const [dustLotId, setDustLotId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Netted-out non-gold filler (wax/solder/support wire) never had gold value
+  // to begin with — mirrors receiptFineWeights() on the server so this
+  // preview matches what actually gets saved.
+  const netPieceG = Math.max((Number(finishedPieceWeightG) || 0) - (Number(fillerWeightG) || 0), 0);
   const preview = computeWastage({
     fineIssuedG,
-    finePieceG: fineWeight(Number(finishedPieceWeightG) || 0, purityFactor),
+    finePieceG: pieceWeightIsFine ? netPieceG : fineWeight(netPieceG, purityFactor),
     fineDustG: fineWeight(Number(dustWeightG) || 0, purityFactor),
     fineReturnedG: fineWeight(Number(unusedReturnedWeightG) || 0, purityFactor),
   });
@@ -372,6 +387,9 @@ function ReceiptForm({
           jobStageId: stageId,
           karigarId,
           finishedPieceWeightG: Number(finishedPieceWeightG) || 0,
+          fillerWeightG: Number(fillerWeightG) || 0,
+          fillerNote: fillerNote || undefined,
+          pieceWeightIsFine,
           dustWeightG: Number(dustWeightG) || 0,
           unusedReturnedWeightG: Number(unusedReturnedWeightG) || 0,
           dustLotId: Number(dustWeightG) > 0 && dustLotId ? dustLotId : undefined,
@@ -386,18 +404,18 @@ function ReceiptForm({
   }
 
   return (
-    <form onSubmit={submit} className="bg-bg p-4 rounded-lg mb-3 grid sm:grid-cols-2 gap-4">
+    <form onSubmit={submit} className="bg-neu-bg p-4 rounded-md mb-3 grid sm:grid-cols-2 gap-4">
       <div className="space-y-4">
-        <div className="rounded-lg border border-border p-3 space-y-1">
-          <div className="text-sm text-text-muted">
+        <div className="rounded-md border border-line p-3 space-y-1 bg-panel">
+          <div className="text-sm text-ink2">
             Gross Weight Issued <span className="text-xs">(karigar ko diya gaya kul vazan — weigh returns against this)</span>:{" "}
-            <span className="font-medium text-text tabular">{formatWeight(grossIssuedG)}</span>
+            <span className="font-medium text-ink mono">{formatWeight(grossIssuedG)}</span>
           </div>
-          <div className="text-xs text-text-muted">
+          <div className="text-xs text-ink2">
             Fine Gold Issued <span className="text-xs">({hi.receipt.fineGoldIssued})</span>:{" "}
-            <span className="tabular">{formatWeight(fineIssuedG)}</span>
+            <span className="mono">{formatWeight(fineIssuedG)}</span>
           </div>
-          <p className="text-xs text-text-muted pt-1">
+          <p className="text-xs text-mute pt-1">
             Enter weights exactly as weighed on the scale (raw, not fine). Their total should come close to the
             Gross Weight Issued above, not the Fine Gold Issued figure.
           </p>
@@ -419,6 +437,32 @@ function ReceiptForm({
         </div>
         <div>
           <label className="label-lg">
+            Filler Weight (g) — wax/solder/support wire, if any
+            <span className="label-hi">Non-gold material mixed in — zero gold value</span>
+          </label>
+          <input
+            type="number"
+            inputMode="decimal"
+            step="0.001"
+            className="input-lg tabular"
+            value={fillerWeightG}
+            onChange={(e) => setFillerWeightG(e.target.value)}
+          />
+          {Number(fillerWeightG) > 0 && (
+            <input
+              className="input mt-2"
+              placeholder="What was the filler? (optional note)"
+              value={fillerNote}
+              onChange={(e) => setFillerNote(e.target.value)}
+            />
+          )}
+          <label className="flex items-center gap-2 mt-2 text-sm">
+            <input type="checkbox" checked={pieceWeightIsFine} onChange={(e) => setPieceWeightIsFine(e.target.checked)} />
+            Weight above (net of filler) is already fine gold — don&apos;t reduce it further by the piece&apos;s karat
+          </label>
+        </div>
+        <div>
+          <label className="label-lg">
             Gold Dust Recovered (g)
             <span className="label-hi">{hi.receipt.dustRecovered} (ग्राम)</span>
           </label>
@@ -431,7 +475,7 @@ function ReceiptForm({
             onChange={(e) => setDustWeightG(e.target.value)}
           />
           {Number(dustWeightG) > 0 && (
-            <select className="input mt-2" value={dustLotId} onChange={(e) => setDustLotId(e.target.value)}>
+            <select className="console-field mt-2" value={dustLotId} onChange={(e) => setDustLotId(e.target.value)}>
               <option value="">Don&apos;t add to a dust lot</option>
               {openDustLots.map((lot) => (
                 <option key={lot.id} value={lot.id}>
@@ -455,20 +499,20 @@ function ReceiptForm({
             onChange={(e) => setUnusedReturnedWeightG(e.target.value)}
           />
         </div>
-        <div className="text-xs text-text-muted tabular">
+        <div className="text-xs text-mute tabular">
           Returned so far: {formatWeight(totalReturnedRawG)} of {formatWeight(grossIssuedG)} gross issued
         </div>
       </div>
-      <div className={`rounded-lg p-4 flex flex-col justify-center items-center ${withinTolerance ? "bg-success-tint" : "bg-danger-tint"}`}>
-        <div className="text-sm text-text-muted mb-1 text-center">
+      <div className={`rounded-md p-4 flex flex-col justify-center items-center ${withinTolerance ? "bg-ok-bg" : "bg-err-bg"}`}>
+        <div className="text-sm text-ink2 mb-1 text-center">
           Net Wastage <span className="block">{hi.receipt.netWastage}</span>
         </div>
-        <div className={`text-4xl font-bold tabular ${withinTolerance ? "text-success" : "text-danger"}`}>
+        <div className={`text-4xl font-bold tabular ${withinTolerance ? "text-ok-tx" : "text-err-tx"}`}>
           {formatPct(preview.wastagePct)}
         </div>
-        <div className="text-sm text-text-muted mt-1">{formatWeight(preview.netWastageG)} · Tolerance {formatPct(tolerancePct)}</div>
+        <div className="text-sm text-ink2 mt-1">{formatWeight(preview.netWastageG)} · Tolerance {formatPct(tolerancePct)}</div>
         {!withinTolerance && (
-          <p className="text-sm text-danger mt-2 text-center font-medium">
+          <p className="text-sm text-err-tx mt-2 text-center font-medium">
             Exceeds tolerance — Manager approval required.
             <span className="block font-normal">{hi.receipt.exceedsTolerance}</span>
           </p>
@@ -476,7 +520,7 @@ function ReceiptForm({
         <button className="btn btn-primary btn-lg mt-3 w-full" disabled={submitting}>
           {submitting ? "Saving…" : `Submit Receipt · ${hi.receipt.submit}`}
         </button>
-        {error && <p className="text-sm text-danger mt-2">{error}</p>}
+        {error && <p className="text-sm text-err-tx mt-2">{error}</p>}
       </div>
     </form>
   );
@@ -507,15 +551,15 @@ function WastageDisplay({ wastage, stageId, onChange }: { wastage: WastageRecord
   }
 
   return (
-    <div className={`rounded-lg p-3 mb-3 ${wastage.withinTolerance ? "bg-success-tint" : "bg-danger-tint"}`}>
+    <div className={`rounded-md p-3 mb-3 ${wastage.withinTolerance ? "bg-ok-bg" : "bg-err-bg"}`}>
       <div className="flex items-center justify-between">
-        <span className="text-sm font-medium">
+        <span className="text-sm font-medium text-ink">
           Wastage {formatPct(wastage.wastagePct)} ({wastage.withinTolerance ? "within tolerance" : "exceeds tolerance"})
         </span>
         <div className="flex items-center gap-2">
-          <span className="pill pill-neutral">{wastage.exceptionStatus}</span>
+          <span className="console-pill neu">{wastage.exceptionStatus}</span>
           {canRevise && isDecided && !revising && (
-            <button className="text-xs text-gold hover:underline" onClick={() => setRevising(true)}>
+            <button className="text-xs text-accent hover:underline" onClick={() => setRevising(true)}>
               Edit Decision
             </button>
           )}
@@ -524,7 +568,7 @@ function WastageDisplay({ wastage, stageId, onChange }: { wastage: WastageRecord
       {showForm && (
         <div className="mt-3 space-y-2">
           {revising && wastage.exceptionReason && (
-            <p className="text-xs text-text-muted">Current reason on file: {wastage.exceptionReason}</p>
+            <p className="text-xs text-mute">Current reason on file: {wastage.exceptionReason}</p>
           )}
           <textarea
             className="input-lg"
@@ -589,26 +633,26 @@ function LabourSection({ stage, onChange }: { stage: Stage; onChange: () => void
   }
 
   return (
-    <div className="border-t border-border pt-3 mt-3">
-      <h4 className="text-sm font-medium mb-2">Labour</h4>
+    <div className="border-t border-line pt-3 mt-3">
+      <h4 className="text-[11px] font-bold uppercase text-ink2 tracking-wide mb-2">Labour</h4>
       {stage.labourEntries.map((l) => (
         <div key={l.id} className="flex items-center justify-between text-sm py-1">
-          <span>
+          <span className="text-ink2">
             {l.rateBasis.replace(/_/g, " ")} · {l.quantity} × {formatINR(Number(l.rate))} ={" "}
-            <span className="tabular font-medium">{formatINR(Number(l.amount))}</span>
+            <span className="mono font-medium text-ink">{formatINR(Number(l.amount))}</span>
           </span>
           {l.status === "PENDING" ? (
-            <button className="btn btn-ghost text-xs" onClick={() => approve(l.id)}>
+            <button className="text-accent text-xs hover:underline" onClick={() => approve(l.id)}>
               Approve
             </button>
           ) : (
-            <span className="pill pill-success text-xs">Approved</span>
+            <span className="console-pill ok text-xs">Approved</span>
           )}
         </div>
       ))}
       {stage.karigarId && (
         <form onSubmit={addEntry} className="flex items-end gap-2 mt-2">
-          <select className="input w-auto" value={rateBasis} onChange={(e) => setRateBasis(e.target.value)}>
+          <select className="console-field w-auto" value={rateBasis} onChange={(e) => setRateBasis(e.target.value)}>
             <option value="PER_GRAM">Per Gram</option>
             <option value="PER_PIECE">Per Piece</option>
             <option value="PER_CARAT">Per Carat</option>
@@ -619,7 +663,7 @@ function LabourSection({ stage, onChange }: { stage: Stage; onChange: () => void
             type="number"
             step="0.001"
             placeholder="Qty"
-            className="input w-24"
+            className="console-field w-24"
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
           />
@@ -627,16 +671,16 @@ function LabourSection({ stage, onChange }: { stage: Stage; onChange: () => void
             type="number"
             step="0.01"
             placeholder="Rate (optional)"
-            className="input w-32"
+            className="console-field w-32"
             value={rate}
             onChange={(e) => setRate(e.target.value)}
           />
-          <button className="btn btn-outline" disabled={submitting}>
+          <button className="console-btn" disabled={submitting}>
             Add
           </button>
         </form>
       )}
-      {error && <p className="text-sm text-danger mt-1">{error}</p>}
+      {error && <p className="text-sm text-err-tx mt-1">{error}</p>}
     </div>
   );
 }

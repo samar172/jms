@@ -3,7 +3,8 @@ import { Estimate, EstimateLine, Product, Karat, StoneType, Customer } from "@pr
 import { formatINR } from "@jms/shared";
 
 type EstimateWithRelations = Estimate & {
-  product: Product & { customer?: Customer | null };
+  product: Product;
+  customer?: Customer | null;
   lines: (EstimateLine & { purity?: Karat | null; stoneType?: StoneType | null })[];
 };
 
@@ -37,7 +38,7 @@ export async function generateEstimateExcel(estimate: EstimateWithRelations): Pr
   sheet.spliceRows(1, 0, 
     ["YOUR JEWELLERY BRAND", "", "", "", isFinal ? "INVOICE / FINAL COSTING" : "QUOTATION"],
     [],
-    [`Bill To: ${estimate.product.customer ? estimate.product.customer.name : "Walk-in Customer"}`, "", "", "", `Date: ${estimate.estimateDate.toLocaleDateString()}`],
+    [`Bill To: ${estimate.customer ? estimate.customer.name : "Walk-in Customer"}`, "", "", "", `Date: ${estimate.estimateDate.toLocaleDateString()}`],
     [`Design: ${estimate.product.designName}`, "", "", "", `Estimate No: EST-${estimate.product.serialNo}-${estimate.version}`],
     []
   );

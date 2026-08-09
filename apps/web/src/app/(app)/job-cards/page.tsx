@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Plus, Clock, TriangleAlert } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useApi, useProcessStages } from "@/lib/hooks";
 
 interface JobStage {
@@ -38,53 +38,52 @@ export default function JobCardsPage() {
   }));
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Job Cards</h1>
-        <Link href="/job-cards/new" className="btn btn-primary">
-          <Plus size={16} /> New Job Card
+    <div>
+      <div className="mb-2">
+        <div className="text-[11px] text-mute mb-1">Manufacturing</div>
+        <h1 className="text-[19px] font-semibold flex items-center gap-2.5 text-ink">
+          Production Control Center
+          <span className="text-xs text-mute font-medium">{jobCards ? `${jobCards.length} active jobs` : ""}</span>
+        </h1>
+      </div>
+
+      <div className="flex items-center gap-2 py-2.5 border-t border-b border-line -mx-3.5 px-3.5 sm:-mx-[18px] sm:px-[18px] mb-3.5">
+        <Link href="/job-cards/new" className="console-btn primary">
+          <Plus size={14} /> New Job Card
         </Link>
       </div>
 
-      <div className="flex gap-4 overflow-x-auto pb-4">
+      <div className="console-kanban">
         {columns.map(({ stage, cards }) => (
-          <div key={stage.id} className="w-72 shrink-0">
-            <div className="flex items-center justify-between px-1 mb-2">
-              <h2 className="text-sm font-semibold">{stage.name}</h2>
-              <span className="pill pill-neutral">{cards.length}</span>
+          <div key={stage.id} className="console-kcol">
+            <div className="kh">
+              <span>{stage.name}</span>
+              <span>{cards.length}</span>
             </div>
-            <div className="space-y-3">
+            <div className="kb">
               {cards.map((jc) => {
                 const stageInfo = activeStageOf(jc)!;
                 const overdue =
                   jc.targetDeliveryDate && new Date(jc.targetDeliveryDate).getTime() < Date.now();
                 const hasException = stageInfo.wastageRecord?.exceptionStatus === "PENDING";
                 return (
-                  <Link
-                    key={jc.id}
-                    href={`/job-cards/${jc.id}`}
-                    className={`card p-3 block border-l-4 hover:shadow-md transition-shadow ${
-                      overdue ? "border-l-danger" : hasException ? "border-l-warning" : "border-l-success"
-                    }`}
-                  >
-                    <div className="font-mono text-gold font-semibold text-sm">{jc.product.serialNo}</div>
-                    <div className="text-xs text-text truncate">{jc.product.designName}</div>
-                    <div className="text-xs text-text-muted mt-2">{stageInfo.karigar?.name ?? "Unassigned"}</div>
-                    <div className="flex items-center justify-between mt-2 text-xs">
-                      <span className="flex items-center gap-1 text-text-muted">
-                        <Clock size={12} /> {daysOpen(jc.createdAt)}d open
-                      </span>
-                      {hasException && (
-                        <span className="flex items-center gap-1 text-warning font-medium">
-                          <TriangleAlert size={12} /> Wastage
-                        </span>
-                      )}
+                  <Link key={jc.id} href={`/job-cards/${jc.id}`} className="console-kcard">
+                    <div className="kid">{jc.product.serialNo}</div>
+                    <div className="kname">{jc.product.designName}</div>
+                    <div className="kmeta">{stageInfo.karigar?.name ?? "Unassigned"}</div>
+                    <div className="kfoot">
+                      <span className="kmeta">{daysOpen(jc.createdAt)}d open</span>
+                      {overdue ? (
+                        <span className="console-pill err">Overdue</span>
+                      ) : hasException ? (
+                        <span className="console-pill warn">Wastage</span>
+                      ) : null}
                     </div>
                   </Link>
                 );
               })}
               {cards.length === 0 && (
-                <div className="text-xs text-text-muted text-center py-6 border border-dashed border-border rounded-lg">
+                <div className="text-xs text-mute text-center py-6 border border-dashed border-line rounded-md">
                   No jobs
                 </div>
               )}

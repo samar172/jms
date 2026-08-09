@@ -1,11 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { ClipboardList, Gem, TriangleAlert, FileText } from "lucide-react";
 import { useApi } from "@/lib/hooks";
-import { StatCard } from "@/components/StatCard";
 import { JobStageStatusPill } from "@/components/StatusPill";
-import { formatWeight, formatPct } from "@/lib/format";
+import { formatWeight, formatPct, formatDate } from "@/lib/format";
 
 interface DashboardKpis {
   jobsInProgress: number;
@@ -41,101 +39,140 @@ function daysOpen(createdAt: string) {
   return Math.floor((Date.now() - new Date(createdAt).getTime()) / (1000 * 60 * 60 * 24));
 }
 
+function activeStageOf(jc: JobCardRow) {
+  return jc.stages.find((s) => s.status !== "APPROVED") ?? jc.stages[jc.stages.length - 1];
+}
+
 export default function DashboardPage() {
   const { data: kpis } = useApi<DashboardKpis>("/api/dashboard");
   const { data: jobCards } = useApi<JobCardRow[]>("/api/job-cards");
   const { data: alerts } = useApi<WastageAlert[]>("/api/dashboard/wastage-alerts");
 
-  const wastageTone =
-    kpis && kpis.wastageThisMonthPct > kpis.wastageToleranceThisMonthPct ? "warning" : "default";
+  const wastageAlert = kpis && kpis.wastageThisMonthPct > kpis.wastageToleranceThisMonthPct;
+
+  const pipeline = new Map<string, number>();
+  jobCards?.forEach((jc) => {
+    const stage = activeStageOf(jc);
+    const name = stage?.processStage.name ?? "Unassigned";
+    pipeline.set(name, (pipeline.get(name) ?? 0) + 1);
+  });
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard icon={ClipboardList} label="Jobs in Progress" value={String(kpis?.jobsInProgress ?? "—")} />
-        <StatCard icon={Gem} label="Gold with Karigars" value={formatWeight(kpis?.goldWithKarigarsG)} />
-        <StatCard
-          icon={TriangleAlert}
+    <div>
+      <div className="mb-3.5">
+        <div className="text-[11px] text-mute mb-1">Home</div>
+        <h1 className="text-[19px] font-semibold flex items-center gap-2.5 text-ink">
+          Owner Dashboard <span className="text-xs text-mute font-medium">{formatDate(new Date().toISOString())}</span>
+        </h1>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-3.5">
+        <Kpi label="Jobs in Progress" value={String(kpis?.jobsInProgress ?? "—")} />
+        <Kpi label="Gold with Karigars" value={formatWeight(kpis?.goldWithKarigarsG)} />
+        <Kpi
           label="Wastage This Month"
           value={formatPct(kpis?.wastageThisMonthPct)}
           sub={kpis ? `tolerance ${formatPct(kpis.wastageToleranceThisMonthPct)}` : undefined}
-          tone={wastageTone}
+          alert={wastageAlert}
         />
-        <StatCard
-          icon={FileText}
+        <Kpi
           label="Pending Estimates"
           value={kpis?.pendingEstimates === null ? "—" : String(kpis?.pendingEstimates ?? "—")}
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 card p-5">
-          <h2 className="font-semibold mb-4">Work in Progress</h2>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-text-muted border-b border-border">
-                  <th className="py-2 pr-4 font-medium">Serial No.</th>
-                  <th className="py-2 pr-4 font-medium">Stage</th>
-                  <th className="py-2 pr-4 font-medium">Karigar</th>
-                  <th className="py-2 pr-4 font-medium">Days Open</th>
-                  <th className="py-2 font-medium">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {jobCards?.slice(0, 8).map((jc) => {
-                  const activeStage =
-                    jc.stages.find((s) => s.status !== "APPROVED") ?? jc.stages[jc.stages.length - 1];
-                  return (
-                    <tr key={jc.id} className="border-b border-border last:border-0">
-                      <td className="py-2.5 pr-4">
-                        <Link href={`/products/${jc.product.serialNo}`} className="font-mono text-gold font-semibold">
-                          {jc.product.serialNo}
-                        </Link>
-                        <div className="text-text-muted text-xs">{jc.product.designName}</div>
-                      </td>
-                      <td className="py-2.5 pr-4">{activeStage?.processStage.name ?? "—"}</td>
-                      <td className="py-2.5 pr-4">{activeStage?.karigar?.name ?? "Unassigned"}</td>
-                      <td className="py-2.5 pr-4 tabular">{daysOpen(jc.createdAt)}</td>
-                      <td className="py-2.5">
-                        {activeStage && <JobStageStatusPill status={activeStage.status} />}
-                      </td>
-                    </tr>
-                  );
-                })}
-                {jobCards?.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="py-6 text-center text-text-muted">
-                      No open jobs.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+      <div className="grid lg:grid-cols-[1.3fr_1fr] gap-3.5 mb-3.5">
+        <div className="console-panel">
+          <div className="ph">Exceptions requiring action</div>
+          <div>
+            {alerts?.map((a) => (
+              <div key={a.wastageRecordId} className="flex items-center gap-2.5 px-3 py-2 border-b border-line last:border-0 text-xs">
+                <span className="w-[7px] h-[7px] rounded-full bg-[#DC2626] shrink-0" />
+                <span className="flex-1 text-ink">
+                  Wastage exception on <span className="mono">{a.serialNo}</span> — {a.karigarName} at{" "}
+                  <span className="font-semibold text-err-tx">{formatPct(a.wastagePct)}</span>
+                </span>
+                <Link href="/job-cards" className="text-accent font-semibold text-[11.5px] shrink-0">
+                  Review →
+                </Link>
+              </div>
+            ))}
+            {alerts?.length === 0 && <div className="px-3 py-4 text-xs text-mute">No open wastage exceptions.</div>}
           </div>
         </div>
 
-        <div className="card p-5">
-          <h2 className="font-semibold mb-4">Wastage Alerts</h2>
-          <div className="space-y-3">
-            {alerts?.map((a) => (
-              <div key={a.wastageRecordId} className="flex items-center justify-between border-b border-border pb-3 last:border-0">
-                <div>
-                  <div className="text-sm font-medium">{a.karigarName}</div>
-                  <div className="text-xs font-mono text-text-muted">{a.serialNo}</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-danger font-semibold tabular text-sm">{formatPct(a.wastagePct)}</div>
-                  <Link href="/job-cards" className="text-xs text-gold">
-                    Review
-                  </Link>
-                </div>
-              </div>
-            ))}
-            {alerts?.length === 0 && <p className="text-sm text-text-muted">No open wastage exceptions.</p>}
-          </div>
+        <div className="console-panel">
+          <div className="ph">Production pipeline</div>
+          <table className="w-full text-xs">
+            <tbody>
+              {[...pipeline.entries()].map(([name, count]) => (
+                <tr key={name} className="border-b border-line last:border-0">
+                  <td className="px-3 py-1.5 text-ink2">{name}</td>
+                  <td className="px-3 py-1.5 text-right mono font-semibold text-ink">{count}</td>
+                </tr>
+              ))}
+              {pipeline.size === 0 && (
+                <tr>
+                  <td className="px-3 py-4 text-mute text-center">No open jobs.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
+
+      <div className="console-panel">
+        <div className="ph">Work in progress</div>
+        <div className="overflow-x-auto">
+          <table className="console-table">
+            <thead>
+              <tr>
+                <th>Serial No.</th>
+                <th>Stage</th>
+                <th>Karigar</th>
+                <th className="num">Days Open</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {jobCards?.slice(0, 8).map((jc) => {
+                const stage = activeStageOf(jc);
+                return (
+                  <tr key={jc.id}>
+                    <td>
+                      <Link href={`/products/${jc.product.serialNo}`} className="rid">
+                        {jc.product.serialNo}
+                      </Link>
+                      <div className="text-mute text-[11px]">{jc.product.designName}</div>
+                    </td>
+                    <td className="text-ink2">{stage?.processStage.name ?? "—"}</td>
+                    <td className="text-ink2">{stage?.karigar?.name ?? "Unassigned"}</td>
+                    <td className="num mono">{daysOpen(jc.createdAt)}</td>
+                    <td>{stage && <JobStageStatusPill status={stage.status} />}</td>
+                  </tr>
+                );
+              })}
+              {jobCards?.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="py-6 text-center text-mute">
+                    No open jobs.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Kpi({ label, value, sub, alert }: { label: string; value: string; sub?: string; alert?: boolean }) {
+  return (
+    <div className="console-panel px-3 py-2.5">
+      <div className="text-[10.5px] uppercase tracking-wide text-mute mb-1.5">{label}</div>
+      <div className={`text-xl font-bold mono ${alert ? "text-err-tx" : "text-ink"}`}>{value}</div>
+      {sub && <div className="text-[11px] text-ink2 mt-0.5">{sub}</div>}
     </div>
   );
 }

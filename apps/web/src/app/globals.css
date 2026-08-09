@@ -15,6 +15,31 @@
   --color-warning-tint: #fbf1e2;
   --color-danger: #c0392b;
   --color-danger-tint: #fbeae8;
+
+  /* Dense enterprise console theme (Chowker ERP shell/estimates redesign) */
+  --color-canvas: #f8fafc;
+  --color-panel: #ffffff;
+  --color-line: #e2e8f0;
+  --color-ink: #0f172a;
+  --color-ink2: #475569;
+  --color-mute: #94a3b8;
+  --color-accent: #1e40af;
+  --color-accent-bg: #eff4ff;
+  --color-ok-bg: #ecfdf5;
+  --color-ok-tx: #065f46;
+  --color-ok-bd: #a7f3d0;
+  --color-warn-bg: #fffbeb;
+  --color-warn-tx: #92400e;
+  --color-warn-bd: #fde68a;
+  --color-err-bg: #fff1f2;
+  --color-err-tx: #9f1239;
+  --color-err-bd: #fecdd3;
+  --color-info-bg: #eff6ff;
+  --color-info-tx: #1e40af;
+  --color-info-bd: #bfdbfe;
+  --color-neu-bg: #f1f5f9;
+  --color-neu-tx: #334155;
+  --color-neu-bd: #e2e8f0;
 }
 
 @theme inline {
@@ -33,6 +58,30 @@
   --color-danger: var(--color-danger);
   --color-danger-tint: var(--color-danger-tint);
   --font-sans: var(--font-inter);
+
+  --color-canvas: var(--color-canvas);
+  --color-panel: var(--color-panel);
+  --color-line: var(--color-line);
+  --color-ink: var(--color-ink);
+  --color-ink2: var(--color-ink2);
+  --color-mute: var(--color-mute);
+  --color-accent: var(--color-accent);
+  --color-accent-bg: var(--color-accent-bg);
+  --color-ok-bg: var(--color-ok-bg);
+  --color-ok-tx: var(--color-ok-tx);
+  --color-ok-bd: var(--color-ok-bd);
+  --color-warn-bg: var(--color-warn-bg);
+  --color-warn-tx: var(--color-warn-tx);
+  --color-warn-bd: var(--color-warn-bd);
+  --color-err-bg: var(--color-err-bg);
+  --color-err-tx: var(--color-err-tx);
+  --color-err-bd: var(--color-err-bd);
+  --color-info-bg: var(--color-info-bg);
+  --color-info-tx: var(--color-info-tx);
+  --color-info-bd: var(--color-info-bd);
+  --color-neu-bg: var(--color-neu-bg);
+  --color-neu-tx: var(--color-neu-tx);
+  --color-neu-bd: var(--color-neu-bd);
 }
 
 body {
@@ -158,27 +207,111 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  border-radius: 999px;
-  padding: 0.125rem 0.625rem;
-  font-size: 0.75rem;
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 11px;
   font-weight: 600;
+  border: 1px solid transparent;
+  white-space: nowrap;
 }
 .pill-success {
-  background: var(--color-success-tint);
-  color: var(--color-success);
+  background: var(--color-ok-bg);
+  color: var(--color-ok-tx);
+  border-color: var(--color-ok-bd);
 }
 .pill-warning {
-  background: var(--color-warning-tint);
-  color: var(--color-warning);
+  background: var(--color-warn-bg);
+  color: var(--color-warn-tx);
+  border-color: var(--color-warn-bd);
 }
 .pill-danger {
-  background: var(--color-danger-tint);
-  color: var(--color-danger);
+  background: var(--color-err-bg);
+  color: var(--color-err-tx);
+  border-color: var(--color-err-bd);
 }
 .pill-neutral {
-  background: #eef0f2;
-  color: var(--color-text-muted);
+  background: var(--color-neu-bg);
+  color: var(--color-neu-tx);
+  border-color: var(--color-neu-bd);
 }
+
+/* ---------- Dense console primitives (shell + estimates redesign) ---------- */
+.console { font-size: 13px; color: var(--color-ink); }
+.console .mono { font-variant-numeric: tabular-nums; font-family: "SF Mono", Menlo, Consolas, monospace; }
+
+.console-panel { border: 1px solid var(--color-line); border-radius: 6px; background: var(--color-panel); }
+.console-panel .ph { padding: 9px 12px; border-bottom: 1px solid var(--color-line); font-size: 12.5px; font-weight: 600; display: flex; align-items: center; justify-content: space-between; }
+
+.console-table { width: 100%; border-collapse: collapse; }
+.console-table thead th { position: sticky; top: 0; background: var(--color-neu-bg); text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-mute); padding: 8px 10px; border-bottom: 1px solid var(--color-line); font-weight: 600; white-space: nowrap; }
+.console-table tbody td { padding: 7px 10px; border-bottom: 1px solid var(--color-line); font-size: 12.5px; color: var(--color-ink); white-space: nowrap; }
+.console-table tbody tr:hover { background: var(--color-neu-bg); cursor: pointer; }
+.console-table .num { text-align: right; }
+.console-table .rid { color: var(--color-accent); font-weight: 600; font-family: "SF Mono", Menlo, monospace; font-size: 12px; }
+
+.console-pill { display: inline-flex; align-items: center; gap: 4px; border-radius: 4px; padding: 2px 7px; font-size: 11px; font-weight: 600; border: 1px solid; white-space: nowrap; }
+.console-pill.ok { background: var(--color-ok-bg); color: var(--color-ok-tx); border-color: var(--color-ok-bd); }
+.console-pill.warn { background: var(--color-warn-bg); color: var(--color-warn-tx); border-color: var(--color-warn-bd); }
+.console-pill.err { background: var(--color-err-bg); color: var(--color-err-tx); border-color: var(--color-err-bd); }
+.console-pill.neu { background: var(--color-neu-bg); color: var(--color-neu-tx); border-color: var(--color-neu-bd); }
+.console-pill.info { background: var(--color-info-bg); color: var(--color-info-tx); border-color: var(--color-info-bd); }
+
+.console-btn { border: 1px solid var(--color-line); background: var(--color-panel); color: var(--color-ink2); padding: 6px 11px; border-radius: 5px; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.console-btn:hover { background: var(--color-neu-bg); }
+.console-btn.primary { background: var(--color-accent); color: #fff; border-color: var(--color-accent); font-weight: 600; }
+.console-btn.primary:hover { background: #1a3494; }
+.console-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.console-chip { display: inline-flex; align-items: center; gap: 5px; background: var(--color-accent-bg); color: var(--color-accent); border: 1px solid #c7d9fb; border-radius: 12px; padding: 3px 9px; font-size: 11px; }
+
+.console-search { display: flex; align-items: center; gap: 6px; border: 1px solid var(--color-line); border-radius: 5px; padding: 5px 9px; background: var(--color-neu-bg); color: var(--color-mute); font-size: 12px; }
+.console-search input { border: none; background: transparent; outline: none; font-size: 12px; color: var(--color-ink); width: 100%; }
+
+.console-etable { width: 100%; border-collapse: collapse; font-size: 12px; }
+.console-etable th { background: var(--color-neu-bg); text-align: right; padding: 5px 7px; font-size: 10px; text-transform: uppercase; color: var(--color-mute); border: 1px solid var(--color-line); }
+.console-etable th:first-child { text-align: left; }
+.console-etable td { border: 1px solid var(--color-line); padding: 4px 6px; text-align: right; }
+.console-etable td:first-child { text-align: left; font-weight: 600; }
+
+.console-ov-cell { box-shadow: inset 3px 0 0 #d97706; background: #fffbeb; position: relative; }
+.console-ov-tag { display: inline-block; font-size: 8.5px; color: #92400e; background: #fef3c7; border: 1px solid #fde68a; border-radius: 3px; padding: 0 4px; margin-left: 5px; vertical-align: middle; font-weight: 700; letter-spacing: 0.02em; cursor: help; }
+
+.console-sumrow { display: flex; justify-content: space-between; font-size: 12.5px; padding: 6px 0; border-bottom: 1px dashed var(--color-line); }
+.console-sumrow.total { border-bottom: none; border-top: 2px solid var(--color-ink); margin-top: 6px; padding-top: 10px; font-size: 15px; font-weight: 700; }
+.console-sumrow .l { color: var(--color-ink2); }
+.console-sumrow .v { font-weight: 600; font-family: "SF Mono", Menlo, monospace; }
+
+.console-table tr.row-major { background: #fff9f9; }
+.console-table tr.row-major:hover { background: #fef0f1; }
+.console-table tr.row-major td:first-child { box-shadow: inset 3px 0 0 #dc2626; }
+
+.pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+.tagchip { display: inline-block; background: var(--color-neu-bg); color: var(--color-ink2); font-size: 10px; padding: 2px 6px; border-radius: 8px; }
+
+.console-kanban { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; }
+.console-kcol { flex: 0 0 240px; background: var(--color-neu-bg); border-radius: 6px; border: 1px solid var(--color-line); display: flex; flex-direction: column; max-height: calc(100vh - 210px); }
+.console-kcol .kh { padding: 8px 10px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--color-ink2); border-bottom: 1px solid var(--color-line); display: flex; justify-content: space-between; }
+.console-kcol .kb { padding: 8px; overflow-y: auto; display: flex; flex-direction: column; gap: 7px; }
+.console-kcard { background: var(--color-panel); border: 1px solid var(--color-line); border-radius: 5px; padding: 8px 9px; font-size: 11.5px; cursor: pointer; display: block; }
+.console-kcard:hover { border-color: var(--color-accent); }
+.console-kcard .kid { color: var(--color-accent); font-weight: 700; font-family: "SF Mono", Menlo, monospace; font-size: 11px; margin-bottom: 3px; }
+.console-kcard .kname { font-weight: 600; margin-bottom: 2px; color: var(--color-ink); }
+.console-kcard .kmeta { color: var(--color-mute); font-size: 10.5px; }
+.console-kcard .kfoot { display: flex; justify-content: space-between; margin-top: 6px; align-items: center; }
+
+.console-field-label { display: block; font-size: 10.5px; color: var(--color-mute); text-transform: uppercase; margin: 10px 0 4px; font-weight: 600; }
+.console-field-label:first-child { margin-top: 0; }
+.console-field { width: 100%; border: 1px solid var(--color-line); border-radius: 5px; padding: 6px 8px; font-size: 12px; color: var(--color-ink); background: var(--color-panel); }
+.console-field:disabled { color: var(--color-ink2); background: var(--color-neu-bg); }
+.console-field-static { font-size: 12.5px; color: var(--color-ink); font-weight: 600; padding: 6px 0; }
+
+.console-flowbar { display: flex; align-items: stretch; gap: 0; }
+.console-fseg { flex: 1; border: 1px solid var(--color-line); background: var(--color-panel); padding: 10px 12px; }
+.console-fseg:not(:last-child) { border-right: none; }
+.console-fseg .fl { font-size: 10px; text-transform: uppercase; color: var(--color-mute); letter-spacing: 0.03em; margin-bottom: 5px; }
+.console-fseg .fv { font-size: 18px; font-weight: 700; font-family: "SF Mono", Menlo, monospace; }
+.console-fseg.hi { background: var(--color-accent-bg); }
+.console-fseg.diff .fv { color: #9f1239; }
 
 @media print {
   .no-print {

@@ -9,6 +9,7 @@ interface ProductOption {
   id: string;
   serialNo: string;
   designName: string;
+  customerId: string | null;
 }
 
 function NewJobCardForm() {
@@ -23,6 +24,7 @@ function NewJobCardForm() {
 
   const [productId, setProductId] = useState(searchParams.get("productId") ?? "");
   const [customerId, setCustomerId] = useState("");
+  const [customerTouched, setCustomerTouched] = useState(false);
   const [targetDate, setTargetDate] = useState("");
   const [selectedStages, setSelectedStages] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -30,6 +32,16 @@ function NewJobCardForm() {
 
   function toggleStage(id: string) {
     setSelectedStages((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
+  }
+
+  // Default the customer to whoever's already assigned to the product —
+  // still overridable, just saves re-picking someone we already know.
+  function selectProduct(id: string) {
+    setProductId(id);
+    if (!customerTouched) {
+      const product = productResults?.items.find((p) => p.id === id);
+      setCustomerId(product?.customerId ?? "");
+    }
   }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -63,18 +75,21 @@ function NewJobCardForm() {
   }
 
   return (
-    <div className="max-w-2xl space-y-5">
-      <h1 className="text-xl font-semibold">New Job Card</h1>
-      <form onSubmit={onSubmit} className="card p-6 space-y-4">
+    <div className="max-w-2xl">
+      <div className="mb-3.5">
+        <div className="text-[11px] text-mute mb-1">Manufacturing</div>
+        <h1 className="text-[19px] font-semibold text-ink">New Job Card</h1>
+      </div>
+      <form onSubmit={onSubmit} className="console-panel p-4 space-y-3.5">
         <div>
-          <label className="label">Product</label>
+          <label className="console-field-label">Product</label>
           <input
-            className="input mb-2"
+            className="console-field mb-2"
             placeholder="Search by serial number or design name…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <select required className="input" value={productId} onChange={(e) => setProductId(e.target.value)}>
+          <select required className="console-field" value={productId} onChange={(e) => selectProduct(e.target.value)}>
             <option value="">Select a product…</option>
             {productResults?.items.map((p) => (
               <option key={p.id} value={p.id}>
@@ -85,8 +100,15 @@ function NewJobCardForm() {
         </div>
 
         <div>
-          <label className="label">Customer (optional)</label>
-          <select className="input" value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
+          <label className="console-field-label">Customer (optional)</label>
+          <select
+            className="console-field"
+            value={customerId}
+            onChange={(e) => {
+              setCustomerId(e.target.value);
+              setCustomerTouched(true);
+            }}
+          >
             <option value="">— None —</option>
             {customers?.map((c) => (
               <option key={c.id} value={c.id}>
@@ -97,37 +119,37 @@ function NewJobCardForm() {
         </div>
 
         <div>
-          <label className="label">Target Delivery Date</label>
-          <input type="date" className="input" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} />
+          <label className="console-field-label">Target Delivery Date</label>
+          <input type="date" className="console-field" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} />
         </div>
 
         <div>
-          <label className="label">Process Stages</label>
-          <div className="space-y-2">
+          <label className="console-field-label">Process Stages</label>
+          <div className="space-y-1.5">
             {stages
               ?.slice()
               .sort((a, b) => a.sequenceOrder - b.sequenceOrder)
               .map((s) => (
-                <label key={s.id} className="flex items-center gap-2 text-sm">
+                <label key={s.id} className="flex items-center gap-2 text-[12.5px] text-ink">
                   <input
                     type="checkbox"
                     checked={selectedStages.includes(s.id)}
                     onChange={() => toggleStage(s.id)}
                   />
                   {s.name}
-                  <span className="text-text-muted text-xs">(tolerance {s.wastageTolerancePct}%)</span>
+                  <span className="text-mute text-[11px]">(tolerance {s.wastageTolerancePct}%)</span>
                 </label>
               ))}
           </div>
         </div>
 
-        {error && <p className="text-sm text-danger">{error}</p>}
+        {error && <p className="text-sm text-err-tx">{error}</p>}
 
-        <div className="flex justify-end gap-2 pt-2 border-t border-border">
-          <button type="button" className="btn btn-ghost" onClick={() => router.back()}>
+        <div className="flex justify-end gap-2 pt-2 border-t border-line">
+          <button type="button" className="console-btn" onClick={() => router.back()}>
             Cancel
           </button>
-          <button type="submit" disabled={submitting} className="btn btn-primary">
+          <button type="submit" disabled={submitting} className="console-btn primary">
             {submitting ? "Creating…" : "Create Job Card"}
           </button>
         </div>

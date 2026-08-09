@@ -18,18 +18,18 @@ export function ProductCard({ product }: { product: ProductCardData }) {
   return (
     <Link
       href={`/products/${product.serialNo}`}
-      className="card overflow-hidden group block"
+      className="border border-line rounded-md overflow-hidden bg-panel block hover:border-accent transition-colors"
     >
-      <div className="aspect-square bg-gold-tint relative overflow-hidden">
+      <div className="aspect-square bg-neu-bg relative overflow-hidden">
         {image ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={resolveMediaUrl(image.thumbnailUrl ?? image.url)}
             alt={product.designName}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+            className="w-full h-full object-cover"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-gold/40 text-xs">
+          <div className="w-full h-full flex items-center justify-center text-mute text-xs">
             No image
           </div>
         )}
@@ -37,12 +37,13 @@ export function ProductCard({ product }: { product: ProductCardData }) {
           <ProductStatusPill status={product.status} />
         </div>
       </div>
-      <div className="p-3">
-        <div className="font-mono font-semibold text-gold text-sm">{product.serialNo}</div>
-        <div className="text-sm text-text truncate">{product.designName}</div>
-        <div className="text-xs text-text-muted mt-1">
-          {product.purity?.code ?? "—"} · {formatWeight(product.grossWeightG)}
-          {product.stoneWeightCt ? ` · ${formatCarat(product.stoneWeightCt)}` : ""}
+      <div className="p-2.5">
+        <div className="mono font-bold text-accent text-[11px]">{product.serialNo}</div>
+        <div className="text-[12.5px] font-semibold text-ink truncate mt-0.5">{product.designName}</div>
+        <div className="flex flex-wrap gap-1 mt-1.5">
+          {product.purity?.code && <span className="tagchip">{product.purity.code}</span>}
+          <span className="tagchip">{formatWeight(product.grossWeightG)}</span>
+          {product.stoneWeightCt && <span className="tagchip">{formatCarat(product.stoneWeightCt)}</span>}
         </div>
       </div>
     </Link>

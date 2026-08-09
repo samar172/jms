@@ -61,8 +61,15 @@ router.get(
               orderBy: { createdAt: "desc" },
               include: { stages: { include: { processStage: true, karigar: true }, orderBy: { sequenceOrder: "asc" } } },
             },
-            estimates: { orderBy: [{ type: "asc" }, { version: "desc" }] },
           },
+        },
+        // Estimates are matched to this customer directly (Estimate.customerId),
+        // not via the product they're for — the same design can be re-estimated
+        // for different prospective customers, so product.estimates would miss
+        // (or wrongly include) rows here.
+        estimates: {
+          orderBy: [{ createdAt: "desc" }],
+          include: { product: { select: { serialNo: true, designName: true } } },
         },
         ledgerEntries: { orderBy: { createdAt: "desc" } },
       },

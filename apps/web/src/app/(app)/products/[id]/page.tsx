@@ -97,41 +97,42 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
   }
 
   return (
-    <div className="space-y-6">
-      <div className="text-sm text-text-muted">
-        <Link href="/products" className="hover:text-gold">
-          Products
-        </Link>{" "}
-        / {product.category.name} {product.subcategory ? `/ ${product.subcategory.name}` : ""} /{" "}
-        <span className="font-mono">{product.serialNo}</span>
-      </div>
-
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-mono font-bold text-gold">{product.serialNo}</h1>
-            <ProductStatusPill status={product.status} />
+    <div>
+      <div className="mb-2">
+        <div className="text-[11px] text-mute mb-1">
+          <Link href="/products" className="hover:text-accent">
+            Product
+          </Link>{" "}
+          / {product.category.name} {product.subcategory ? `/ ${product.subcategory.name}` : ""} /{" "}
+          <span className="mono">{product.serialNo}</span>
+        </div>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-[19px] font-semibold flex items-center gap-2.5 text-ink">
+              <span className="mono text-accent">{product.serialNo}</span>
+              <ProductStatusPill status={product.status} />
+            </h1>
+            <p className="text-ink2 text-xs mt-0.5">{product.designName}</p>
           </div>
-          <p className="text-text-muted">{product.designName}</p>
-        </div>
-        <div className="flex gap-2">
-          {canEdit && (
-            <button className="btn btn-outline no-print" onClick={() => setEditing((v) => !v)}>
-              {editing ? "Cancel Edit" : "Edit Product"}
+          <div className="flex gap-2">
+            {canEdit && (
+              <button className="console-btn no-print" onClick={() => setEditing((v) => !v)}>
+                {editing ? "Cancel Edit" : "Edit Product"}
+              </button>
+            )}
+            <button className="console-btn" onClick={clone} disabled={cloning}>
+              <Copy size={14} /> {cloning ? "Cloning…" : "Clone Design"}
             </button>
-          )}
-          <button className="btn btn-outline" onClick={clone} disabled={cloning}>
-            <Copy size={16} /> {cloning ? "Cloning…" : "Clone Design"}
-          </button>
-          <button className="btn btn-outline no-print" onClick={() => window.print()}>
-            Print Job Card
-          </button>
+            <button className="console-btn no-print" onClick={() => window.print()}>
+              Print Job Card
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-5 gap-6">
-        <div className="lg:col-span-3 space-y-4">
-          <div className="card aspect-square flex items-center justify-center overflow-hidden bg-gold-tint">
+      <div className="grid lg:grid-cols-5 gap-3.5 mt-3.5">
+        <div className="lg:col-span-3 space-y-3">
+          <div className="console-panel aspect-square flex items-center justify-center overflow-hidden bg-neu-bg">
             {primaryImage ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -140,7 +141,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
                 className="w-full h-full object-cover"
               />
             ) : (
-              <span className="text-gold/40 text-sm">No image yet</span>
+              <span className="text-mute text-sm">No image yet</span>
             )}
           </div>
           {product.images.length > 0 && (
@@ -149,8 +150,8 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
                 <button
                   key={img.id}
                   onClick={() => setActiveImage(img)}
-                  className={`shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 ${
-                    primaryImage?.id === img.id ? "border-gold" : "border-transparent"
+                  className={`shrink-0 w-16 h-16 rounded-md overflow-hidden border-2 ${
+                    primaryImage?.id === img.id ? "border-accent" : "border-transparent"
                   }`}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -159,7 +160,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
               ))}
             </div>
           )}
-          <label className="btn btn-outline w-full cursor-pointer no-print">
+          <label className="console-btn w-full justify-center cursor-pointer no-print">
             {uploading ? "Uploading…" : "Upload Sketch / Photo"}
             <input
               type="file"
@@ -186,7 +187,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
           </label>
         </div>
 
-        <div className="lg:col-span-2 space-y-4">
+        <div className="lg:col-span-2 space-y-3">
           {editing ? (
             <EditProductForm
               product={product}
@@ -197,31 +198,31 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
               onCancel={() => setEditing(false)}
             />
           ) : (
-            <div className="card p-5">
-              <h2 className="font-semibold mb-3">Specifications</h2>
-              <dl className="grid grid-cols-2 gap-y-2 text-sm">
-                <dt className="text-text-muted">Category</dt>
-                <dd>{product.category.name}</dd>
-                <dt className="text-text-muted">Subcategory</dt>
-                <dd>{product.subcategory?.name ?? "—"}</dd>
-                <dt className="text-text-muted">Purity</dt>
-                <dd>{product.purity.code}</dd>
-                <dt className="text-text-muted">Gross Weight</dt>
-                <dd className="tabular">{formatWeight(product.grossWeightG)}</dd>
-                <dt className="text-text-muted">Net Weight</dt>
-                <dd className="tabular">{formatWeight(product.netWeightG)}</dd>
-                <dt className="text-text-muted">Stone Weight</dt>
-                <dd className="tabular">{formatCarat(product.stoneWeightCt)}</dd>
-                <dt className="text-text-muted">Size</dt>
-                <dd>{product.size ?? "—"}</dd>
-                <dt className="text-text-muted">Customer</dt>
-                <dd>{product.customer?.name ?? "—"}</dd>
-                <dt className="text-text-muted">Created</dt>
-                <dd>{formatDate(product.createdAt)}</dd>
+            <div className="console-panel p-3.5">
+              <div className="text-[11px] font-bold uppercase text-ink2 tracking-wide mb-2">Specifications</div>
+              <dl className="grid grid-cols-2 gap-y-1.5 text-[12.5px]">
+                <dt className="text-mute">Category</dt>
+                <dd className="text-ink">{product.category.name}</dd>
+                <dt className="text-mute">Subcategory</dt>
+                <dd className="text-ink">{product.subcategory?.name ?? "—"}</dd>
+                <dt className="text-mute">Purity</dt>
+                <dd className="text-ink">{product.purity.code}</dd>
+                <dt className="text-mute">Gross Weight</dt>
+                <dd className="mono text-ink">{formatWeight(product.grossWeightG)}</dd>
+                <dt className="text-mute">Net Weight</dt>
+                <dd className="mono text-ink">{formatWeight(product.netWeightG)}</dd>
+                <dt className="text-mute">Stone Weight</dt>
+                <dd className="mono text-ink">{formatCarat(product.stoneWeightCt)}</dd>
+                <dt className="text-mute">Size</dt>
+                <dd className="text-ink">{product.size ?? "—"}</dd>
+                <dt className="text-mute">Customer</dt>
+                <dd className="text-ink">{product.customer?.name ?? "—"}</dd>
+                <dt className="text-mute">Created</dt>
+                <dd className="text-ink">{formatDate(product.createdAt)}</dd>
                 {product.description && (
                   <>
-                    <dt className="text-text-muted">Description</dt>
-                    <dd>{product.description}</dd>
+                    <dt className="text-mute">Description</dt>
+                    <dd className="text-ink">{product.description}</dd>
                   </>
                 )}
               </dl>
@@ -229,43 +230,41 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
           )}
 
           {showCost && (
-            <div className="card p-5">
-              <h2 className="font-semibold mb-3">Costing Summary</h2>
+            <div className="console-panel p-3.5">
+              <div className="text-[11px] font-bold uppercase text-ink2 tracking-wide mb-2">Costing Summary</div>
               {latestEstimate ? (
-                <div className="text-sm space-y-1.5">
+                <div className="text-[12.5px]">
                   <Row label="Material Cost" value={formatINR(Number(latestEstimate.materialCost))} />
                   <Row label="Making Charges" value={formatINR(Number(latestEstimate.makingCharges))} />
                   <Row label="Wastage Cost" value={formatINR(Number(latestEstimate.wastageCost))} />
-                  <div className="border-t border-border my-2" />
                   <Row label="Cost" value={formatINR(Number(latestEstimate.cost))} bold />
                   <Row
                     label={`Profit (${Number(latestEstimate.profitPct)}%)`}
                     value={formatINR(Number(latestEstimate.profit))}
                   />
-                  <div className="border-t-2 border-gold my-2" />
-                  <div className="flex justify-between items-baseline bg-gold-tint -mx-5 px-5 py-2 rounded">
-                    <span className="font-semibold">Net Amount</span>
-                    <span className="text-lg font-bold text-gold tabular">
+                  <div style={{ marginTop: 8, padding: "10px 14px", background: "#FFF3DA", border: "1px solid #F3DFAE", borderRadius: 6, display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                    <span className="font-semibold" style={{ color: "#78350F" }}>Net Amount</span>
+                    <span className="mono font-bold" style={{ fontSize: 16, color: "#78350F" }}>
                       {formatINR(Number(latestEstimate.netAmount))}
                     </span>
                   </div>
-                  <Link href={`/costing/${latestEstimate.id}`} className="text-gold text-xs inline-block mt-2">
+                  <Link href={`/costing/${latestEstimate.id}`} className="text-accent text-xs inline-block mt-2 font-semibold">
                     View Full Estimate →
                   </Link>
                 </div>
               ) : (
-                <p className="text-sm text-text-muted">No estimate created yet.</p>
+                <p className="text-sm text-mute">No estimate created yet.</p>
               )}
             </div>
           )}
 
           {allStages.length > 0 && (
-            <div className="card p-5">
-              <h2 className="font-semibold mb-3">Current Status</h2>
-              <ol className="space-y-2">
+            <div className="console-panel p-3.5">
+              <div className="text-[11px] font-bold uppercase text-ink2 tracking-wide mb-2">Current Status</div>
+              <ol className="space-y-1.5">
                 {allStages.map((s) => (
-                  <li key={s.id} className="flex items-center justify-between text-sm">
-                    <span>{s.processStage.name}</span>
+                  <li key={s.id} className="flex items-center justify-between text-[12.5px]">
+                    <span className="text-ink2">{s.processStage.name}</span>
                     <JobStageStatusPill status={s.status} />
                   </li>
                 ))}
@@ -275,18 +274,18 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
         </div>
       </div>
 
-      <div className="card p-5">
-        <h2 className="font-semibold mb-4">Product History</h2>
-        <ol className="relative border-l border-border ml-2 space-y-4">
+      <div className="console-panel p-3.5 mt-3.5">
+        <div className="text-[11px] font-bold uppercase text-ink2 tracking-wide mb-3">Product History</div>
+        <ol className="relative border-l border-line ml-2 space-y-3">
           {timeline?.map((e, i) => (
             <li key={i} className="ml-4">
-              <div className="absolute w-2 h-2 rounded-full bg-gold -ml-[21px] mt-1.5" />
-              <time className="text-xs text-text-muted">{formatDate(e.timestamp)}</time>
-              <p className="text-sm">{e.description}</p>
+              <div className="absolute w-2 h-2 rounded-full bg-accent -ml-[21px] mt-1.5" />
+              <time className="text-xs text-mute">{formatDate(e.timestamp)}</time>
+              <p className="text-[12.5px] text-ink">{e.description}</p>
             </li>
           ))}
           {(!timeline || timeline.length === 0) && (
-            <p className="text-sm text-text-muted ml-2">No history yet.</p>
+            <p className="text-sm text-mute ml-2">No history yet.</p>
           )}
         </ol>
       </div>
@@ -336,24 +335,24 @@ function EditProductForm({
   }
 
   return (
-    <form onSubmit={submit} className="card p-5 space-y-3">
-      <h2 className="font-semibold mb-1">Edit Product</h2>
+    <form onSubmit={submit} className="console-panel p-3.5 space-y-2.5">
+      <div className="text-[11px] font-bold uppercase text-ink2 tracking-wide mb-1">Edit Product</div>
       <div>
-        <label className="label">Design Name</label>
-        <input required className="input" value={designName} onChange={(e) => setDesignName(e.target.value)} />
+        <label className="console-field-label">Design Name</label>
+        <input required className="console-field" value={designName} onChange={(e) => setDesignName(e.target.value)} />
       </div>
       <div>
-        <label className="label">Description</label>
-        <textarea className="input" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
+        <label className="console-field-label">Description</label>
+        <textarea className="console-field" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="label">Size</label>
-          <input className="input" value={size} onChange={(e) => setSize(e.target.value)} />
+          <label className="console-field-label">Size</label>
+          <input className="console-field" value={size} onChange={(e) => setSize(e.target.value)} />
         </div>
         <div>
-          <label className="label">Status</label>
-          <select className="input" value={status} onChange={(e) => setStatus(e.target.value)}>
+          <label className="console-field-label">Status</label>
+          <select className="console-field" value={status} onChange={(e) => setStatus(e.target.value)}>
             {PRODUCT_STATUSES.map((s) => (
               <option key={s} value={s}>
                 {s}
@@ -363,8 +362,8 @@ function EditProductForm({
         </div>
       </div>
       <div>
-        <label className="label">Customer</label>
-        <select className="input" value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
+        <label className="console-field-label">Customer</label>
+        <select className="console-field" value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
           <option value="">No customer</option>
           {customers?.map((c) => (
             <option key={c.id} value={c.id}>
@@ -373,12 +372,12 @@ function EditProductForm({
           ))}
         </select>
       </div>
-      {error && <p className="text-sm text-danger">{error}</p>}
-      <div className="flex justify-end gap-2 pt-2 border-t border-border">
-        <button type="button" className="btn btn-ghost" onClick={onCancel}>
+      {error && <p className="text-sm text-err-tx">{error}</p>}
+      <div className="flex justify-end gap-2 pt-2 border-t border-line">
+        <button type="button" className="console-btn" onClick={onCancel}>
           Cancel
         </button>
-        <button className="btn btn-primary" disabled={submitting}>
+        <button className="console-btn primary" disabled={submitting}>
           {submitting ? "Saving…" : "Save Changes"}
         </button>
       </div>
@@ -388,9 +387,9 @@ function EditProductForm({
 
 function Row({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
   return (
-    <div className={`flex justify-between ${bold ? "font-semibold" : ""}`}>
-      <span className="text-text-muted">{label}</span>
-      <span className="tabular">{value}</span>
+    <div className={bold ? "console-sumrow total" : "console-sumrow"}>
+      <span className="l">{label}</span>
+      <span className="v">{value}</span>
     </div>
   );
 }

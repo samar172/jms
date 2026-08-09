@@ -67,160 +67,165 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-3xl">
-      <h1 className="text-xl font-semibold">Settings — Masters</h1>
+    <div className="max-w-3xl">
+      <div className="mb-3.5">
+        <div className="text-[11px] text-mute mb-1">Admin</div>
+        <h1 className="text-[19px] font-semibold text-ink">Settings — Masters</h1>
+      </div>
 
-      <section className="card p-5">
-        <h2 className="font-semibold mb-3">Gold Rate (24K, ₹/gram)</h2>
-        <form onSubmit={addRate} className="flex items-end gap-2 mb-4">
-          <div>
-            <label className="label">New rate, effective now</label>
-            <input required type="number" step="0.01" className="input w-40" value={rate} onChange={(e) => setRate(e.target.value)} />
+      <div className="space-y-3.5">
+        <section className="console-panel p-3.5">
+          <div className="text-[11px] font-bold uppercase text-ink2 tracking-wide mb-2.5">Gold Rate (24K, ₹/gram)</div>
+          <form onSubmit={addRate} className="flex items-end gap-2 mb-3">
+            <div>
+              <label className="console-field-label">New rate, effective now</label>
+              <input required type="number" step="0.01" className="console-field w-40" value={rate} onChange={(e) => setRate(e.target.value)} />
+            </div>
+            <button className="console-btn primary">Set Rate</button>
+            {error && <p className="text-sm text-err-tx">{error}</p>}
+          </form>
+          <div className="overflow-x-auto">
+            <table className="console-table">
+              <thead>
+                <tr>
+                  <th>Rate</th>
+                  <th>Effective From</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rates?.slice(0, 8).map((r) => (
+                  <tr key={r.id}>
+                    <td className="mono">{formatINR(Number(r.ratePerGram24k))}</td>
+                    <td className="text-ink2">{formatDate(r.effectiveFrom)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          <button className="btn btn-primary">Set Rate</button>
-          {error && <p className="text-sm text-danger">{error}</p>}
-        </form>
-        <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-text-muted border-b border-border">
-              <th className="py-1.5 font-medium">Rate</th>
-              <th className="py-1.5 font-medium">Effective From</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rates?.slice(0, 8).map((r) => (
-              <tr key={r.id} className="border-b border-border last:border-0">
-                <td className="py-1.5 tabular">{formatINR(Number(r.ratePerGram24k))}</td>
-                <td className="py-1.5 text-text-muted">{formatDate(r.effectiveFrom)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        </div>
-      </section>
+        </section>
 
-      <section className="card p-5">
-        <h2 className="font-semibold mb-3">Karat / Purity Factors</h2>
-        {canManage && <AddKaratForm onAdded={mutateKarats} />}
-        <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-text-muted border-b border-border">
-              <th className="py-1.5 font-medium">Code</th>
-              <th className="py-1.5 font-medium text-right">Purity Factor</th>
-              {canManage && <th className="py-1.5"></th>}
-            </tr>
-          </thead>
-          <tbody>
-            {karats?.map((k) =>
-              canManage ? (
-                <EditableKaratRow key={k.id} karat={k} onChanged={mutateKarats} />
-              ) : (
-                <tr key={k.id} className="border-b border-border last:border-0">
-                  <td className="py-1.5">{k.code}</td>
-                  <td className="py-1.5 text-right tabular text-text-muted">{Number(k.purityFactor).toFixed(4)}</td>
+        <section className="console-panel p-3.5">
+          <div className="text-[11px] font-bold uppercase text-ink2 tracking-wide mb-2.5">Karat / Purity Factors</div>
+          {canManage && <AddKaratForm onAdded={mutateKarats} />}
+          <div className="overflow-x-auto">
+            <table className="console-table">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th className="num">Purity Factor</th>
+                  {canManage && <th></th>}
                 </tr>
-              )
-            )}
-          </tbody>
-        </table>
-        </div>
-      </section>
+              </thead>
+              <tbody>
+                {karats?.map((k) =>
+                  canManage ? (
+                    <EditableKaratRow key={k.id} karat={k} onChanged={mutateKarats} />
+                  ) : (
+                    <tr key={k.id}>
+                      <td>{k.code}</td>
+                      <td className="num mono text-ink2">{Number(k.purityFactor).toFixed(4)}</td>
+                    </tr>
+                  )
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
 
-      <section className="card p-5">
-        <h2 className="font-semibold mb-3">Process Stages &amp; Wastage Tolerances</h2>
-        {canManage && <AddProcessStageForm onAdded={mutateStages} />}
-        <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-text-muted border-b border-border">
-              <th className="py-1.5 font-medium">Name</th>
-              <th className="py-1.5 font-medium text-right">Sequence</th>
-              <th className="py-1.5 font-medium text-right">Wastage Tolerance %</th>
-              {canManage && <th className="py-1.5"></th>}
-            </tr>
-          </thead>
-          <tbody>
-            {stages?.map((s) =>
-              canManage ? (
-                <EditableProcessStageRow key={s.id} stage={s} onChanged={mutateStages} />
-              ) : (
-                <tr key={s.id} className="border-b border-border last:border-0">
-                  <td className="py-1.5">{s.name}</td>
-                  <td className="py-1.5 text-right tabular text-text-muted">{s.sequenceOrder}</td>
-                  <td className="py-1.5 text-right tabular text-text-muted">{Number(s.wastageTolerancePct).toFixed(2)}%</td>
+        <section className="console-panel p-3.5">
+          <div className="text-[11px] font-bold uppercase text-ink2 tracking-wide mb-2.5">Process Stages &amp; Wastage Tolerances</div>
+          {canManage && <AddProcessStageForm onAdded={mutateStages} />}
+          <div className="overflow-x-auto">
+            <table className="console-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th className="num">Sequence</th>
+                  <th className="num">Wastage Tolerance %</th>
+                  {canManage && <th></th>}
                 </tr>
-              )
-            )}
-          </tbody>
-        </table>
-        </div>
-      </section>
+              </thead>
+              <tbody>
+                {stages?.map((s) =>
+                  canManage ? (
+                    <EditableProcessStageRow key={s.id} stage={s} onChanged={mutateStages} />
+                  ) : (
+                    <tr key={s.id}>
+                      <td>{s.name}</td>
+                      <td className="num mono text-ink2">{s.sequenceOrder}</td>
+                      <td className="num mono text-ink2">{Number(s.wastageTolerancePct).toFixed(2)}%</td>
+                    </tr>
+                  )
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
 
-      <section className="card p-5">
-        <h2 className="font-semibold mb-3">Stone Types</h2>
-        {canManage && <AddStoneTypeForm onAdded={mutateStoneTypes} />}
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-text-muted border-b border-border">
-                <th className="py-1.5 font-medium">Name</th>
-                <th className="py-1.5 font-medium">Category</th>
-                <th className="py-1.5 font-medium text-right">Default Rate/ct</th>
-                {canManage && <th className="py-1.5"></th>}
-              </tr>
-            </thead>
-            <tbody>
-              {stoneTypes?.map((s) => (
-                <tr key={s.id} className="border-b border-border last:border-0">
-                  <td className="py-1.5">{s.name}</td>
-                  <td className="py-1.5 text-text-muted">{s.category.replace(/_/g, " ")}</td>
-                  <td className="py-1.5 text-right tabular text-text-muted">
-                    {s.defaultRatePerCarat ? formatINR(Number(s.defaultRatePerCarat)) : "—"}
-                  </td>
-                  {canManage && (
-                    <td className="py-1.5 text-right">
-                      <button className="text-text-muted hover:text-danger text-xs" onClick={() => deactivateStoneType(s.id)}>
-                        Remove
-                      </button>
+        <section className="console-panel p-3.5">
+          <div className="text-[11px] font-bold uppercase text-ink2 tracking-wide mb-2.5">Stone Types</div>
+          {canManage && <AddStoneTypeForm onAdded={mutateStoneTypes} />}
+          <div className="overflow-x-auto">
+            <table className="console-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Category</th>
+                  <th className="num">Default Rate/ct</th>
+                  {canManage && <th></th>}
+                </tr>
+              </thead>
+              <tbody>
+                {stoneTypes?.map((s) => (
+                  <tr key={s.id}>
+                    <td>{s.name}</td>
+                    <td className="text-ink2">{s.category.replace(/_/g, " ")}</td>
+                    <td className="num mono text-ink2">
+                      {s.defaultRatePerCarat ? formatINR(Number(s.defaultRatePerCarat)) : "—"}
                     </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+                    {canManage && (
+                      <td className="text-right">
+                        <button className="text-mute hover:text-err-tx text-xs" onClick={() => deactivateStoneType(s.id)}>
+                          Remove
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
 
-      <section className="card p-5">
-        <h2 className="font-semibold mb-1">Store Gold/Stone Stock Ledger</h2>
-        <p className="text-sm text-text-muted mb-4">
-          Tracks raw material sitting in the store itself (purchases, issues to karigars, returns),
-          separate from what each karigar is holding. Off by default — turn it on only if you want
-          to track store-level stock in the system.
-        </p>
-        <label className="flex items-center gap-3 cursor-pointer w-fit">
-          <span className="text-sm font-medium">{stockEnabled?.enabled ? "Enabled" : "Disabled"}</span>
-          <span
-            onClick={toggleStockLedger}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-              stockEnabled?.enabled ? "bg-gold" : "bg-border"
-            } ${togglingStock ? "opacity-50" : ""}`}
-          >
+        <section className="console-panel p-3.5">
+          <div className="text-[11px] font-bold uppercase text-ink2 tracking-wide mb-1">Store Gold/Stone Stock Ledger</div>
+          <p className="text-xs text-ink2 mb-3">
+            Tracks raw material sitting in the store itself (purchases, issues to karigars, returns),
+            separate from what each karigar is holding. Off by default — turn it on only if you want
+            to track store-level stock in the system.
+          </p>
+          <label className="flex items-center gap-3 cursor-pointer w-fit">
+            <span className="text-[12.5px] font-medium text-ink">{stockEnabled?.enabled ? "Enabled" : "Disabled"}</span>
             <span
-              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                stockEnabled?.enabled ? "translate-x-6" : "translate-x-1"
-              }`}
-            />
-          </span>
-        </label>
-      </section>
+              onClick={toggleStockLedger}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                stockEnabled?.enabled ? "bg-accent" : "bg-line"
+              } ${togglingStock ? "opacity-50" : ""}`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  stockEnabled?.enabled ? "translate-x-6" : "translate-x-1"
+                }`}
+              />
+            </span>
+          </label>
+        </section>
 
-      <p className="text-xs text-text-muted">
-        Categories, charge types and user management are managed via their respective API
-        endpoints; a full admin UI for those is a near-term follow-up.
-      </p>
+        <p className="text-xs text-mute">
+          Categories, charge types and user management are managed via their respective API
+          endpoints; a full admin UI for those is a near-term follow-up.
+        </p>
+      </div>
     </div>
   );
 }
@@ -252,27 +257,27 @@ function AddStoneTypeForm({ onAdded }: { onAdded: () => void }) {
   }
 
   return (
-    <form onSubmit={submit} className="flex flex-wrap items-end gap-2 mb-4">
+    <form onSubmit={submit} className="flex flex-wrap items-end gap-2 mb-3">
       <div>
-        <label className="label">Name</label>
-        <input required className="input w-40" value={name} onChange={(e) => setName(e.target.value)} />
+        <label className="console-field-label">Name</label>
+        <input required className="console-field w-40" value={name} onChange={(e) => setName(e.target.value)} />
       </div>
       <div>
-        <label className="label">Category</label>
-        <select className="input" value={category} onChange={(e) => setCategory(e.target.value as StoneType["category"])}>
+        <label className="console-field-label">Category</label>
+        <select className="console-field" value={category} onChange={(e) => setCategory(e.target.value as StoneType["category"])}>
           <option value="COLOURED_STONE">Coloured Stone</option>
           <option value="POLKI">Polki</option>
           <option value="DIAMOND">Diamond</option>
         </select>
       </div>
       <div>
-        <label className="label">Default Rate/ct (optional)</label>
-        <input type="number" step="0.01" className="input w-32" value={rate} onChange={(e) => setRate(e.target.value)} />
+        <label className="console-field-label">Default Rate/ct (optional)</label>
+        <input type="number" step="0.01" className="console-field w-32" value={rate} onChange={(e) => setRate(e.target.value)} />
       </div>
-      <button className="btn btn-primary" disabled={submitting}>
+      <button className="console-btn primary" disabled={submitting}>
         {submitting ? "Adding…" : "+ Add Stone Type"}
       </button>
-      {error && <p className="text-sm text-danger w-full">{error}</p>}
+      {error && <p className="text-sm text-err-tx w-full">{error}</p>}
     </form>
   );
 }
@@ -303,28 +308,28 @@ function AddKaratForm({ onAdded }: { onAdded: () => void }) {
   }
 
   return (
-    <form onSubmit={submit} className="flex flex-wrap items-end gap-2 mb-4">
+    <form onSubmit={submit} className="flex flex-wrap items-end gap-2 mb-3">
       <div>
-        <label className="label">Code (e.g. 20K)</label>
-        <input required className="input w-24" value={code} onChange={(e) => setCode(e.target.value)} />
+        <label className="console-field-label">Code (e.g. 20K)</label>
+        <input required className="console-field w-24" value={code} onChange={(e) => setCode(e.target.value)} />
       </div>
       <div>
-        <label className="label">Purity Factor (0–1)</label>
+        <label className="console-field-label">Purity Factor (0–1)</label>
         <input
           required
           type="number"
           step="0.0001"
           min="0"
           max="1"
-          className="input w-32"
+          className="console-field w-32"
           value={purityFactor}
           onChange={(e) => setPurityFactor(e.target.value)}
         />
       </div>
-      <button className="btn btn-primary" disabled={submitting}>
+      <button className="console-btn primary" disabled={submitting}>
         {submitting ? "Adding…" : "+ Add Karat"}
       </button>
-      {error && <p className="text-sm text-danger w-full">{error}</p>}
+      {error && <p className="text-sm text-err-tx w-full">{error}</p>}
     </form>
   );
 }
@@ -353,26 +358,26 @@ function EditableKaratRow({ karat, onChanged }: { karat: Karat; onChanged: () =>
   }
 
   return (
-    <tr className="border-b border-border last:border-0">
-      <td className="py-1.5">{karat.code}</td>
-      <td className="py-1.5 text-right">
+    <tr>
+      <td>{karat.code}</td>
+      <td className="text-right">
         <input
           type="number"
           step="0.0001"
           min="0"
           max="1"
-          className="input w-28 py-1 text-right tabular ml-auto"
+          className="console-field w-28 py-1 text-right mono ml-auto"
           value={purityFactor}
           onChange={(e) => setPurityFactor(e.target.value)}
         />
       </td>
-      <td className="py-1.5 text-right whitespace-nowrap">
+      <td className="text-right whitespace-nowrap">
         {dirty && (
-          <button className="text-gold hover:underline text-xs mr-2" disabled={saving} onClick={save}>
+          <button className="text-accent hover:underline text-xs mr-2" disabled={saving} onClick={save}>
             {saving ? "Saving…" : "Save"}
           </button>
         )}
-        <button className="text-text-muted hover:text-danger text-xs" onClick={deactivate}>
+        <button className="text-mute hover:text-err-tx text-xs" onClick={deactivate}>
           Remove
         </button>
       </td>
@@ -412,40 +417,40 @@ function AddProcessStageForm({ onAdded }: { onAdded: () => void }) {
   }
 
   return (
-    <form onSubmit={submit} className="flex flex-wrap items-end gap-2 mb-4">
+    <form onSubmit={submit} className="flex flex-wrap items-end gap-2 mb-3">
       <div>
-        <label className="label">Name</label>
-        <input required className="input w-40" value={name} onChange={(e) => setName(e.target.value)} />
+        <label className="console-field-label">Name</label>
+        <input required className="console-field w-40" value={name} onChange={(e) => setName(e.target.value)} />
       </div>
       <div>
-        <label className="label">Sequence Order</label>
+        <label className="console-field-label">Sequence Order</label>
         <input
           required
           type="number"
           step="1"
           min="0"
-          className="input w-24"
+          className="console-field w-24"
           value={sequenceOrder}
           onChange={(e) => setSequenceOrder(e.target.value)}
         />
       </div>
       <div>
-        <label className="label">Wastage Tolerance %</label>
+        <label className="console-field-label">Wastage Tolerance %</label>
         <input
           required
           type="number"
           step="0.01"
           min="0"
           max="100"
-          className="input w-32"
+          className="console-field w-32"
           value={wastageTolerancePct}
           onChange={(e) => setWastageTolerancePct(e.target.value)}
         />
       </div>
-      <button className="btn btn-primary" disabled={submitting}>
+      <button className="console-btn primary" disabled={submitting}>
         {submitting ? "Adding…" : "+ Add Stage"}
       </button>
-      {error && <p className="text-sm text-danger w-full">{error}</p>}
+      {error && <p className="text-sm text-err-tx w-full">{error}</p>}
     </form>
   );
 }
@@ -475,36 +480,36 @@ function EditableProcessStageRow({ stage, onChanged }: { stage: ProcessStage; on
   }
 
   return (
-    <tr className="border-b border-border last:border-0">
-      <td className="py-1.5">{stage.name}</td>
-      <td className="py-1.5 text-right">
+    <tr>
+      <td>{stage.name}</td>
+      <td className="text-right">
         <input
           type="number"
           step="1"
           min="0"
-          className="input w-16 py-1 text-right tabular ml-auto"
+          className="console-field w-16 py-1 text-right mono ml-auto"
           value={sequenceOrder}
           onChange={(e) => setSequenceOrder(e.target.value)}
         />
       </td>
-      <td className="py-1.5 text-right">
+      <td className="text-right">
         <input
           type="number"
           step="0.01"
           min="0"
           max="100"
-          className="input w-24 py-1 text-right tabular ml-auto"
+          className="console-field w-24 py-1 text-right mono ml-auto"
           value={wastageTolerancePct}
           onChange={(e) => setWastageTolerancePct(e.target.value)}
         />
       </td>
-      <td className="py-1.5 text-right whitespace-nowrap">
+      <td className="text-right whitespace-nowrap">
         {dirty && (
-          <button className="text-gold hover:underline text-xs mr-2" disabled={saving} onClick={save}>
+          <button className="text-accent hover:underline text-xs mr-2" disabled={saving} onClick={save}>
             {saving ? "Saving…" : "Save"}
           </button>
         )}
-        <button className="text-text-muted hover:text-danger text-xs" onClick={deactivate}>
+        <button className="text-mute hover:text-err-tx text-xs" onClick={deactivate}>
           Remove
         </button>
       </td>

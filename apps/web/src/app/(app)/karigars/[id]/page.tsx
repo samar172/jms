@@ -1,8 +1,7 @@
 "use client";
 
 import { use, useState } from "react";
-import { useApi } from "@/lib/hooks";
-import { StatCard } from "@/components/StatCard";
+import { useApi, useProcessStages, type ProcessStage } from "@/lib/hooks";
 import { Gem, Wallet, HandCoins, Scale } from "lucide-react";
 import { formatWeight, formatINR, formatDateTime } from "@/lib/format";
 import { apiFetch, ApiError } from "@/lib/api";
@@ -23,24 +22,34 @@ interface LedgerEntry {
   note: string | null;
   createdAt: string;
 }
+interface StageRate {
+  id: string;
+  processStageId: string;
+  processStage: { id: string; name: string };
+  rateBasis: "PER_GRAM" | "PER_PIECE" | "PER_CARAT" | "DAILY_WAGE";
+  rate: string;
+}
 interface Karigar {
   id: string;
   code: string;
   name: string;
   employmentType: string;
   specialization?: string;
+  stageRates?: StageRate[];
 }
 
 export default function KarigarDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { user } = useAuth();
-  const { data: karigar } = useApi<Karigar>(`/api/masters/karigars/${id}`);
+  const { data: karigar, mutate: mutateKarigar } = useApi<Karigar>(`/api/masters/karigars/${id}`);
   const { data: summary, mutate: mutateSummary } = useApi<Summary>(`/api/labour/karigars/${id}/summary`);
   const { data: ledger, mutate: mutateLedger } = useApi<LedgerEntry[]>(`/api/labour/karigars/${id}/ledger`);
+  const { data: processStages } = useProcessStages();
   const [advanceAmount, setAdvanceAmount] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const showCost = user ? canSeeCost(user.role) : false;
+  const canEditRates = user?.role === "SUPER_ADMIN" || user?.role === "MANAGER";
 
   if (!karigar) return <div className="text-text-muted">Loading…</div>;
 
@@ -59,85 +68,270 @@ export default function KarigarDetailPage({ params }: { params: Promise<{ id: st
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center gap-4">
-        <div className="w-16 h-16 rounded-full bg-gold-tint text-gold flex items-center justify-center text-2xl font-semibold">
-          {karigar.name.charAt(0)}
-        </div>
-        <div>
-          <h1 className="text-xl font-semibold">{karigar.name}</h1>
-          <p className="text-sm text-text-muted">
-            Karigar Code: {karigar.code} · {karigar.employmentType === "IN_HOUSE" ? "In-house" : "External"}
-            {karigar.specialization ? ` · Specialisation: ${karigar.specialization}` : ""}
-          </p>
-        </div>
+    <div>
+      <div className="mb-2">
+        <div className="text-[11px] text-mute mb-1">Manufacturing</div>
+        <h1 className="text-[19px] font-semibold flex items-center gap-2.5 text-ink">
+          {karigar.name}
+          <span className="text-xs text-mute font-medium mono">
+            {karigar.code} · {karigar.employmentType === "IN_HOUSE" ? "In-house" : "External"}
+            {karigar.specialization ? ` · ${karigar.specialization}` : ""}
+          </span>
+        </h1>
       </div>
 
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard icon={Gem} label="Gold Held" value={formatWeight(summary?.goldHeldG)} />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-3.5">
+        <Kpi icon={Gem} label="Gold Held" value={formatWeight(summary?.goldHeldG)} />
         {showCost && (
           <>
-            <StatCard icon={Wallet} label="Labour Earned (This Month)" value={formatINR(summary?.labourEarnedThisMonth ?? 0)} />
-            <StatCard icon={HandCoins} label="Advances Paid" value={formatINR(summary?.advancesPaid ?? 0)} />
-            <StatCard icon={Scale} label="Net Payable" value={formatINR(summary?.netPayable ?? 0)} tone="warning" />
+            <Kpi icon={Wallet} label="Labour Earned (MTD)" value={formatINR(summary?.labourEarnedThisMonth ?? 0)} />
+            <Kpi icon={HandCoins} label="Advances Paid" value={formatINR(summary?.advancesPaid ?? 0)} />
+            <Kpi icon={Scale} label="Net Payable" value={formatINR(summary?.netPayable ?? 0)} alert />
           </>
         )}
       </div>
 
       {showCost && (
-        <div className="card p-4 flex items-end gap-2">
+        <div className="console-panel p-3.5 flex items-end gap-2 mb-3.5">
           <div>
-            <label className="label">Pay Advance (₹)</label>
+            <label className="console-field-label">Pay Advance (₹)</label>
             <input
               type="number"
-              className="input w-40"
+              className="console-field w-40"
               value={advanceAmount}
               onChange={(e) => setAdvanceAmount(e.target.value)}
             />
           </div>
-          <button className="btn btn-primary" onClick={payAdvance} disabled={!advanceAmount}>
+          <button className="console-btn primary" onClick={payAdvance} disabled={!advanceAmount}>
             Record Advance
           </button>
-          {error && <p className="text-sm text-danger">{error}</p>}
+          {error && <p className="text-sm text-err-tx">{error}</p>}
         </div>
       )}
 
-      <div className="card overflow-hidden">
-        <div className="px-5 py-3 border-b border-border font-semibold">Metal &amp; Payable Ledger</div>
+      {showCost && (
+        <StageRatesPanel
+          karigarId={id}
+          stageRates={karigar.stageRates ?? []}
+          processStages={processStages ?? []}
+          editable={canEditRates}
+          onChange={mutateKarigar}
+        />
+      )}
+
+      <div className="console-panel overflow-hidden">
+        <div className="ph">Metal &amp; Payable Ledger</div>
         <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-text-muted border-b border-border bg-bg">
-              <th className="py-2 px-4 font-medium">Date</th>
-              <th className="py-2 px-4 font-medium">Type</th>
-              <th className="py-2 px-4 font-medium text-right">Gold (g)</th>
-              {showCost && <th className="py-2 px-4 font-medium text-right">Amount</th>}
-              <th className="py-2 px-4 font-medium">Note</th>
-            </tr>
-          </thead>
-          <tbody>
-            {ledger?.map((e) => (
-              <tr key={e.id} className="border-b border-border last:border-0">
-                <td className="py-2 px-4 text-text-muted">{formatDateTime(e.createdAt)}</td>
-                <td className="py-2 px-4">{e.type.replace(/_/g, " ")}</td>
-                <td className="py-2 px-4 text-right tabular">{e.fineGoldG ? Number(e.fineGoldG).toFixed(3) : "—"}</td>
-                {showCost && (
-                  <td className="py-2 px-4 text-right tabular">{e.amount ? formatINR(Number(e.amount)) : "—"}</td>
-                )}
-                <td className="py-2 px-4 text-text-muted">{e.note ?? "—"}</td>
-              </tr>
-            ))}
-            {ledger?.length === 0 && (
+          <table className="console-table">
+            <thead>
               <tr>
-                <td colSpan={5} className="py-8 text-center text-text-muted">
-                  No ledger entries yet.
-                </td>
+                <th>Date</th>
+                <th>Type</th>
+                <th className="num">Gold (g)</th>
+                {showCost && <th className="num">Amount</th>}
+                <th>Note</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {ledger?.map((e) => (
+                <tr key={e.id}>
+                  <td className="text-ink2">{formatDateTime(e.createdAt)}</td>
+                  <td>{e.type.replace(/_/g, " ")}</td>
+                  <td className="num mono">{e.fineGoldG ? Number(e.fineGoldG).toFixed(3) : "—"}</td>
+                  {showCost && <td className="num mono">{e.amount ? formatINR(Number(e.amount)) : "—"}</td>}
+                  <td className="text-ink2">{e.note ?? "—"}</td>
+                </tr>
+              ))}
+              {ledger?.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-mute">
+                    No ledger entries yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
+    </div>
+  );
+}
+
+const RATE_BASIS_OPTIONS = [
+  { value: "PER_GRAM", label: "Per Gram" },
+  { value: "PER_PIECE", label: "Per Piece" },
+  { value: "PER_CARAT", label: "Per Carat" },
+  { value: "DAILY_WAGE", label: "Daily Wage" },
+] as const;
+
+// Job-card labour entries auto-fill their rate from here by karigar + stage;
+// without a row here, PRODUCTION-role users can't log labour at all (they're
+// not allowed to type a rate manually — only Manager/Super Admin can).
+function StageRatesPanel({
+  karigarId,
+  stageRates,
+  processStages,
+  editable,
+  onChange,
+}: {
+  karigarId: string;
+  stageRates: StageRate[];
+  processStages: ProcessStage[];
+  editable: boolean;
+  onChange: () => void;
+}) {
+  const [stageId, setStageId] = useState("");
+  const [rateBasis, setRateBasis] = useState<StageRate["rateBasis"]>("PER_GRAM");
+  const [rate, setRate] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function saveRates(next: { processStageId: string; rateBasis: string; rate: number }[]) {
+    setSubmitting(true);
+    setError(null);
+    try {
+      await apiFetch(`/api/masters/karigars/${karigarId}`, {
+        method: "PATCH",
+        body: { stageRates: next },
+      });
+      onChange();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to save rate");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function addRate(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!stageId || !rate) return;
+    const next = [
+      ...stageRates
+        .filter((r) => r.processStageId !== stageId)
+        .map((r) => ({ processStageId: r.processStageId, rateBasis: r.rateBasis, rate: Number(r.rate) })),
+      { processStageId: stageId, rateBasis, rate: Number(rate) },
+    ];
+    await saveRates(next);
+    setStageId("");
+    setRate("");
+  }
+
+  async function removeRate(processStageId: string) {
+    const next = stageRates
+      .filter((r) => r.processStageId !== processStageId)
+      .map((r) => ({ processStageId: r.processStageId, rateBasis: r.rateBasis, rate: Number(r.rate) }));
+    await saveRates(next);
+  }
+
+  return (
+    <div className="console-panel overflow-hidden mb-3.5">
+      <div className="ph">Stage Rates (used to price labour entries at the job card)</div>
+      <div className="p-3.5">
+        {stageRates.length > 0 ? (
+          <table className="console-table mb-3">
+            <thead>
+              <tr>
+                <th>Stage</th>
+                <th>Basis</th>
+                <th className="num">Rate</th>
+                {editable && <th></th>}
+              </tr>
+            </thead>
+            <tbody>
+              {stageRates.map((r) => (
+                <tr key={r.id}>
+                  <td>{r.processStage?.name ?? "—"}</td>
+                  <td>{r.rateBasis.replace(/_/g, " ")}</td>
+                  <td className="num mono">{formatINR(Number(r.rate))}</td>
+                  {editable && (
+                    <td>
+                      <button
+                        className="text-mute hover:text-err-tx text-xs"
+                        disabled={submitting}
+                        onClick={() => removeRate(r.processStageId)}
+                      >
+                        ✕
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p className="text-sm text-mute mb-3">
+            No stage rates set — labour entries for this karigar will need a manually typed rate (Manager/Super
+            Admin only), or will fail for other roles.
+          </p>
+        )}
+        {editable && (
+          <form onSubmit={addRate} className="flex flex-wrap items-end gap-2">
+            <div>
+              <label className="console-field-label">Stage</label>
+              <select required className="console-field" value={stageId} onChange={(e) => setStageId(e.target.value)}>
+                <option value="">Select…</option>
+                {processStages.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="console-field-label">Rate Basis</label>
+              <select
+                className="console-field"
+                value={rateBasis}
+                onChange={(e) => setRateBasis(e.target.value as StageRate["rateBasis"])}
+              >
+                {RATE_BASIS_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="console-field-label">Rate (₹)</label>
+              <input
+                required
+                type="number"
+                step="0.01"
+                min="0"
+                className="console-field w-28"
+                value={rate}
+                onChange={(e) => setRate(e.target.value)}
+              />
+            </div>
+            <button className="console-btn primary" disabled={submitting}>
+              {submitting ? "Saving…" : "Add / Update Rate"}
+            </button>
+          </form>
+        )}
+        {error && <p className="text-sm text-err-tx mt-2">{error}</p>}
+      </div>
+    </div>
+  );
+}
+
+function Kpi({
+  icon: Icon,
+  label,
+  value,
+  alert,
+}: {
+  icon: typeof Gem;
+  label: string;
+  value: string;
+  alert?: boolean;
+}) {
+  return (
+    <div className="console-panel px-3 py-2.5">
+      <div className="flex items-center gap-1.5 text-[10.5px] uppercase tracking-wide text-mute mb-1.5">
+        <Icon size={12} />
+        {label}
+      </div>
+      <div className={`text-xl font-bold mono ${alert ? "text-warn-tx" : "text-ink"}`}>{value}</div>
     </div>
   );
 }

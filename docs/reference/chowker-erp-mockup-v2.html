@@ -1,0 +1,1112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Chowker ERP — Jewellery Manufacturing Console</title>
+<style>
+  :root{
+    --canvas:#F8FAFC; --panel:#FFFFFF; --border:#E2E8F0;
+    --text:#0F172A; --text2:#475569; --muted:#94A3B8;
+    --accent:#1E40AF; --accent-bg:#EFF4FF;
+    --ok-bg:#ECFDF5; --ok-tx:#065F46; --ok-bd:#A7F3D0;
+    --warn-bg:#FFFBEB; --warn-tx:#92400E; --warn-bd:#FDE68A;
+    --err-bg:#FFF1F2; --err-tx:#9F1239; --err-bd:#FECDD3;
+    --info-bg:#EFF6FF; --info-tx:#1E40AF; --info-bd:#BFDBFE;
+    --neu-bg:#F1F5F9; --neu-tx:#334155; --neu-bd:#E2E8F0;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:Inter,'SF Pro Display','Segoe UI',sans-serif;background:var(--canvas);color:var(--text);font-size:13px;}
+  .mono{font-variant-numeric:tabular-nums;font-family:'SF Mono',Menlo,Consolas,monospace;}
+  /* ---------- SHELL ---------- */
+  #app{display:flex;flex-direction:column;height:100vh;}
+  header#gh{height:48px;flex:0 0 48px;display:flex;align-items:center;gap:14px;padding:0 14px;border-bottom:1px solid var(--border);background:var(--panel);}
+  header#gh .brand{font-weight:700;font-size:14px;color:var(--text);display:flex;align-items:center;gap:7px;}
+  header#gh .brand .dot{width:9px;height:9px;border-radius:2px;background:var(--accent);}
+  header#gh .kcmd{margin-left:8px;display:flex;align-items:center;gap:8px;background:var(--neu-bg);border:1px solid var(--border);border-radius:5px;padding:5px 10px;color:var(--muted);font-size:12px;width:340px;}
+  header#gh .kcmd kbd{border:1px solid var(--border);background:var(--panel);padding:0 5px;border-radius:3px;font-size:10px;color:var(--text2);}
+  header#gh .spacer{flex:1;}
+  header#gh .ghitem{display:flex;align-items:center;gap:6px;color:var(--text2);font-size:12px;padding:5px 8px;border-radius:5px;cursor:pointer;}
+  header#gh .ghitem:hover{background:var(--neu-bg);}
+  header#gh .badge-count{background:var(--err-bg);color:var(--err-tx);border:1px solid var(--err-bd);border-radius:8px;font-size:10px;padding:0 5px;}
+  header#gh .user{width:26px;height:26px;border-radius:5px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;}
+
+  #body{flex:1;display:flex;min-height:0;}
+  nav#side{width:212px;flex:0 0 212px;border-right:1px solid var(--border);background:var(--panel);overflow-y:auto;padding:10px 0;}
+  nav#side .grp{padding:10px 14px 4px;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;}
+  nav#side a{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 14px;color:var(--text2);text-decoration:none;font-size:12.5px;border-left:2px solid transparent;cursor:pointer;}
+  nav#side a:hover{background:var(--neu-bg);}
+  nav#side a.active{background:var(--accent-bg);color:var(--accent);border-left-color:var(--accent);font-weight:600;}
+  nav#side a .n{display:flex;align-items:center;gap:8px;}
+  nav#side a .cnt{font-size:10px;color:var(--muted);background:var(--neu-bg);border-radius:8px;padding:0 6px;}
+  nav#side a.active .cnt{background:#fff;color:var(--accent);}
+
+  main#work{flex:1;display:flex;flex-direction:column;min-width:0;}
+  .wh{padding:10px 18px 0;border-bottom:1px solid var(--border);background:var(--panel);}
+  .crumb{font-size:11px;color:var(--muted);margin-bottom:4px;}
+  .wh h1{font-size:19px;margin:0 0 8px;display:flex;align-items:center;gap:10px;}
+  .wh h1 .cnt{font-size:12px;color:var(--muted);font-weight:500;}
+  .tabs{display:flex;gap:2px;}
+  .tabs .t{padding:7px 12px;font-size:12.5px;color:var(--text2);border-bottom:2px solid transparent;cursor:pointer;}
+  .tabs .t.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:600;}
+  .toolbar{display:flex;align-items:center;gap:8px;padding:9px 18px;border-bottom:1px solid var(--border);background:var(--panel);}
+  .btn{border:1px solid var(--border);background:var(--panel);color:var(--text2);padding:6px 11px;border-radius:5px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px;}
+  .btn:hover{background:var(--neu-bg);}
+  .btn.primary{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600;}
+  .btn.primary:hover{background:#1a3494;}
+  .search{display:flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:5px;padding:5px 9px;background:var(--neu-bg);color:var(--muted);font-size:12px;width:230px;}
+  .search input{border:none;background:transparent;outline:none;font-size:12px;color:var(--text);width:100%;}
+  .chip{display:flex;align-items:center;gap:5px;background:var(--accent-bg);color:var(--accent);border:1px solid #C7D9FB;border-radius:12px;padding:3px 9px;font-size:11px;}
+  .chip button{border:none;background:none;color:var(--accent);cursor:pointer;font-size:12px;line-height:1;}
+  .flexgrow{flex:1;}
+  .kbd-hint{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px;}
+  .kbd-hint kbd{border:1px solid var(--border);border-radius:3px;padding:0 5px;background:var(--neu-bg);}
+
+  .content{flex:1;overflow:auto;padding:14px 18px;}
+  .grid-wrap{border:1px solid var(--border);border-radius:6px;background:var(--panel);overflow:hidden;}
+  table{width:100%;border-collapse:collapse;}
+  thead th{position:sticky;top:0;background:var(--neu-bg);text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--border);font-weight:600;white-space:nowrap;}
+  tbody td{padding:7px 10px;border-bottom:1px solid var(--border);font-size:12.5px;color:var(--text);white-space:nowrap;}
+  tbody tr:hover{background:var(--neu-bg);cursor:pointer;}
+  tbody tr.sel{background:var(--accent-bg);box-shadow:inset 2px 0 0 var(--accent);}
+  .num{text-align:right;}
+  .rid{color:var(--accent);font-weight:600;font-family:'SF Mono',Menlo,monospace;font-size:12px;}
+  .pill{display:inline-flex;align-items:center;gap:4px;border-radius:4px;padding:2px 7px;font-size:11px;font-weight:600;border:1px solid;white-space:nowrap;}
+  .pill.ok{background:var(--ok-bg);color:var(--ok-tx);border-color:var(--ok-bd);}
+  .pill.warn{background:var(--warn-bg);color:var(--warn-tx);border-color:var(--warn-bd);}
+  .pill.err{background:var(--err-bg);color:var(--err-tx);border-color:var(--err-bd);}
+  .pill.neu{background:var(--neu-bg);color:var(--neu-tx);border-color:var(--neu-bd);}
+  .pill.info{background:var(--info-bg);color:var(--info-tx);border-color:var(--info-bd);}
+  .footer{flex:0 0 32px;display:flex;align-items:center;gap:14px;padding:0 18px;border-top:1px solid var(--border);background:var(--panel);font-size:11.5px;color:var(--text2);}
+  .footer .spacer{flex:1;}
+
+  /* Dashboard */
+  .dgrid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:14px;}
+  .kpi{border:1px solid var(--border);border-radius:6px;background:var(--panel);padding:10px 12px;}
+  .kpi .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:6px;}
+  .kpi .val{font-size:20px;font-weight:700;color:var(--text);}
+  .kpi .sub{font-size:11px;color:var(--text2);margin-top:3px;}
+  .kpi.alert .val{color:#9F1239;}
+  .panel{border:1px solid var(--border);border-radius:6px;background:var(--panel);margin-bottom:14px;}
+  .panel .ph{padding:9px 12px;border-bottom:1px solid var(--border);font-size:12.5px;font-weight:600;display:flex;align-items:center;justify-content:space-between;}
+  .panel .pb{padding:0;}
+  .exrow{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;}
+  .exrow:last-child{border-bottom:none;}
+  .exrow .dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto;}
+  .exrow .dot.r{background:#DC2626;} .exrow .dot.y{background:#D97706;}
+  .exrow .txt{flex:1;color:var(--text);}
+  .exrow .go{color:var(--accent);font-weight:600;cursor:pointer;font-size:11.5px;}
+  .cols3{display:grid;grid-template-columns:1.3fr 1fr;gap:14px;}
+
+  /* Kanban */
+  .kanban{display:flex;gap:10px;overflow-x:auto;padding-bottom:6px;}
+  .kcol{flex:0 0 220px;background:#F1F5F9;border-radius:6px;border:1px solid var(--border);display:flex;flex-direction:column;max-height:calc(100vh - 210px);}
+  .kcol .kh{padding:8px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--text2);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;}
+  .kcol .kb{padding:8px;overflow-y:auto;display:flex;flex-direction:column;gap:7px;}
+  .kcard{background:#fff;border:1px solid var(--border);border-radius:5px;padding:8px 9px;font-size:11.5px;cursor:pointer;}
+  .kcard:hover{border-color:var(--accent);}
+  .kcard .kid{color:var(--accent);font-weight:700;font-family:'SF Mono',monospace;font-size:11px;margin-bottom:3px;}
+  .kcard .kname{font-weight:600;margin-bottom:2px;}
+  .kcard .kmeta{color:var(--muted);font-size:10.5px;}
+  .kcard .kfoot{display:flex;justify-content:space-between;margin-top:6px;align-items:center;}
+
+  /* Drawer */
+  #overlay{position:fixed;inset:0;background:rgba(15,23,42,.28);display:none;z-index:40;}
+  #drawer{position:fixed;top:0;right:0;height:100%;width:440px;background:#fff;border-left:1px solid var(--border);box-shadow:-6px 0 24px rgba(15,23,42,.12);z-index:41;display:flex;flex-direction:column;transform:translateX(100%);transition:transform .18s ease;}
+  #drawer.open{transform:translateX(0);}
+  #overlay.open{display:block;}
+  .dhead{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;}
+  .dhead .did{font-family:'SF Mono',monospace;color:var(--accent);font-weight:700;font-size:13px;}
+  .dhead .dname{font-size:15px;font-weight:700;margin-top:2px;}
+  .dhead .x{cursor:pointer;color:var(--muted);font-size:16px;border:none;background:none;}
+  .dbody{flex:1;overflow-y:auto;padding:14px 16px;}
+  .dsec{margin-bottom:16px;}
+  .dsec .dt{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;margin-bottom:7px;}
+  .kv{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;}
+  .kv div{font-size:12px;}
+  .kv .k{color:var(--muted);font-size:11px;margin-bottom:1px;}
+  .kv .v{color:var(--text);font-weight:600;}
+  .dfoot{padding:10px 16px;border-top:1px solid var(--border);display:flex;gap:8px;}
+  .mini-table{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:4px;}
+  .mini-table th{text-align:left;color:var(--muted);font-weight:600;padding:4px 6px;border-bottom:1px solid var(--border);font-size:10px;text-transform:uppercase;}
+  .mini-table td{padding:5px 6px;border-bottom:1px solid #F1F5F9;}
+  .timeline{display:flex;flex-direction:column;gap:0;}
+  .tlrow{display:flex;gap:8px;padding:6px 0;border-left:2px solid var(--border);margin-left:4px;padding-left:12px;position:relative;}
+  .tlrow::before{content:'';position:absolute;left:-5px;top:9px;width:8px;height:8px;border-radius:50%;background:var(--accent);}
+  .tlrow .tt{font-size:11.5px;font-weight:600;}
+  .tlrow .td2{font-size:10.5px;color:var(--muted);}
+
+  /* Estimate builder */
+  .est-layout{display:grid;grid-template-columns:260px 1fr 340px;gap:0;border:1px solid var(--border);border-radius:6px;background:#fff;overflow:hidden;align-items:start;}
+  .est-left{border-right:1px solid var(--border);padding:14px;}
+  .est-left label{display:block;font-size:10.5px;color:var(--muted);text-transform:uppercase;margin:10px 0 4px;font-weight:600;}
+  .est-left label:first-child{margin-top:0;}
+  .est-left input,.est-left select{width:100%;border:1px solid var(--border);border-radius:5px;padding:6px 8px;font-size:12px;color:var(--text);background:#fff;}
+  .est-center{padding:14px;overflow-x:auto;}
+  .sechead{font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text2);margin:14px 0 6px;letter-spacing:.03em;}
+  .sechead:first-child{margin-top:0;}
+  .etable{width:100%;border-collapse:collapse;font-size:12px;}
+  .etable th{background:var(--neu-bg);text-align:right;padding:5px 7px;font-size:10px;text-transform:uppercase;color:var(--muted);border:1px solid var(--border);}
+  .etable th:first-child{text-align:left;}
+  .etable td{border:1px solid var(--border);padding:4px 6px;text-align:right;}
+  .etable td:first-child{text-align:left;font-weight:600;}
+  .est-right{padding:16px;background:#FFFCF5;border-left:1px solid var(--border);position:sticky;top:0;}
+  .ov-cell{box-shadow:inset 3px 0 0 #D97706;background:#FFFBEB;position:relative;}
+  .ov-tag{display:inline-block;font-size:8.5px;color:#92400E;background:#FEF3C7;border:1px solid #FDE68A;border-radius:3px;padding:0 4px;margin-left:5px;vertical-align:middle;font-weight:700;letter-spacing:.02em;cursor:help;}
+  .sumrow{display:flex;justify-content:space-between;font-size:12.5px;padding:6px 0;border-bottom:1px dashed var(--border);}
+  .sumrow.total{border-bottom:none;border-top:2px solid var(--text);margin-top:6px;padding-top:10px;font-size:15px;font-weight:700;}
+  .sumrow .l{color:var(--text2);}
+  .sumrow .v{font-weight:600;font-family:'SF Mono',monospace;}
+
+  /* gold traceability */
+  .flowbar{display:flex;align-items:stretch;gap:0;margin-bottom:14px;}
+  .fseg{flex:1;border:1px solid var(--border);background:#fff;padding:10px 12px;position:relative;}
+  .fseg:not(:last-child){border-right:none;}
+  .fseg .fl{font-size:10px;text-transform:uppercase;color:var(--muted);letter-spacing:.03em;margin-bottom:5px;}
+  .fseg .fv{font-size:18px;font-weight:700;font-family:'SF Mono',monospace;}
+  .fseg.hi{background:var(--accent-bg);}
+  .fseg.diff .fv{color:#9F1239;}
+
+  /* portfolio */
+  .pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;}
+  .pcard{border:1px solid var(--border);border-radius:6px;overflow:hidden;background:#fff;cursor:pointer;}
+  .pcard:hover{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);}
+  .pcard .pimg{height:150px;background:linear-gradient(135deg,#F3E8D8,#E8CDA0);display:flex;align-items:center;justify-content:center;color:#8a6d3b;font-size:28px;}
+  .pcard .pbody{padding:9px 10px;}
+  .pcard .pid{font-family:'SF Mono',monospace;color:var(--accent);font-size:11px;font-weight:700;}
+  .pcard .pname{font-size:12.5px;font-weight:700;margin:2px 0 5px;}
+  .pcard .ptags{display:flex;flex-wrap:wrap;gap:4px;}
+  .tagchip{background:var(--neu-bg);color:var(--text2);font-size:10px;padding:2px 6px;border-radius:8px;}
+
+  .subdelta{display:block;font-size:9.5px;color:var(--muted);font-weight:400;margin-top:1px;}
+  tr.row-major{background:#FFF9F9;}
+  tr.row-major:hover{background:#FEF0F1;}
+  tr.row-major td:first-child{box-shadow:inset 3px 0 0 #DC2626;}
+
+  .hidden{display:none !important;}
+  ::-webkit-scrollbar{width:9px;height:9px;}
+  ::-webkit-scrollbar-thumb{background:#CBD5E1;border-radius:5px;}
+
+  #toastwrap{position:fixed;bottom:16px;right:16px;z-index:60;display:flex;flex-direction:column;gap:8px;}
+  .toast{background:#0F172A;color:#fff;font-size:12.5px;padding:9px 14px;border-radius:6px;box-shadow:0 6px 18px rgba(15,23,42,.25);opacity:0;transform:translateY(6px);transition:all .18s ease;max-width:320px;}
+  .toast.show{opacity:1;transform:translateY(0);}
+  .toast .tt{font-weight:700;margin-bottom:1px;}
+  .toast .ts{color:#CBD5E1;font-size:11px;}
+
+  /* ---------- KARIGAR MOBILE PREVIEW ---------- */
+  .phone-stage{display:flex;justify-content:center;align-items:flex-start;padding:24px;gap:28px;flex-wrap:wrap;}
+  .phone-shell{width:360px;height:720px;background:#0F172A;border-radius:38px;padding:12px;box-shadow:0 20px 50px rgba(15,23,42,.28);flex:0 0 auto;}
+  .phone-screen{width:100%;height:100%;background:#FFF9F0;border-radius:28px;overflow:hidden;display:flex;flex-direction:column;font-family:Inter,sans-serif;}
+  .phone-status{height:26px;flex:0 0 26px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;font-size:11px;color:#334155;font-weight:600;}
+  .phone-topbar{background:#B45309;color:#fff;padding:14px 16px;display:flex;align-items:center;gap:10px;flex:0 0 auto;}
+  .phone-topbar .av{width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;}
+  .phone-topbar .tt{font-size:15px;font-weight:700;}
+  .phone-topbar .st{font-size:11px;opacity:.85;}
+  .phone-body{flex:1;overflow-y:auto;padding:14px;}
+  .mjob{background:#fff;border:1px solid #F0DFC0;border-radius:16px;padding:14px;margin-bottom:12px;box-shadow:0 2px 6px rgba(180,83,9,.06);}
+  .mjob .mid{font-size:11px;color:#B45309;font-weight:700;font-family:'SF Mono',monospace;margin-bottom:3px;}
+  .mjob .mname{font-size:17px;font-weight:800;color:#1F2937;margin-bottom:6px;}
+  .mjob .mrow{display:flex;justify-content:space-between;font-size:12.5px;color:#64748B;padding:3px 0;}
+  .mjob .mrow b{color:#1F2937;font-weight:700;}
+  .mjob .mdue{display:inline-block;margin-top:8px;font-size:11.5px;font-weight:700;padding:4px 10px;border-radius:20px;}
+  .mjob .mdue.ok{background:#DCFCE7;color:#166534;}
+  .mjob .mdue.late{background:#FEE2E2;color:#991B1B;}
+  .mbtn{display:block;width:100%;text-align:center;background:#B45309;color:#fff;font-size:15px;font-weight:700;padding:14px;border-radius:14px;border:none;margin-top:10px;cursor:pointer;}
+  .mbtn.sec{background:#fff;color:#B45309;border:2px solid #F0DFC0;}
+  .mbig{font-size:34px;font-weight:800;color:#1F2937;font-family:'SF Mono',monospace;text-align:center;margin:6px 0;}
+  .mlabel{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#B45309;font-weight:700;text-align:center;}
+  .mcard-hero{background:#fff;border:1px solid #F0DFC0;border-radius:18px;padding:18px;text-align:center;margin-bottom:14px;}
+  .mchip-row{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin:10px 0;}
+  .mchip{background:#FEF3E2;border:2px solid #F0DFC0;color:#92400E;font-weight:700;font-size:13px;padding:9px 16px;border-radius:14px;}
+  .mchip.active{background:#B45309;border-color:#B45309;color:#fff;}
+  .mback{display:flex;align-items:center;gap:6px;color:#fff;font-size:13px;font-weight:600;cursor:pointer;}
+  .mnuminput{width:100%;font-size:30px;font-weight:800;text-align:center;padding:14px;border:2px solid #F0DFC0;border-radius:14px;color:#1F2937;font-family:'SF Mono',monospace;background:#fff;}
+  .mfield-label{font-size:12px;color:#64748B;font-weight:600;margin:14px 0 6px;}
+  .mvoice{display:flex;align-items:center;gap:10px;background:#fff;border:2px dashed #F0DFC0;border-radius:14px;padding:12px 14px;color:#B45309;font-size:12.5px;}
+  .mconfirm{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;text-align:center;padding:20px;}
+  .mcheck{width:74px;height:74px;border-radius:50%;background:#DCFCE7;display:flex;align-items:center;justify-content:center;font-size:36px;margin-bottom:16px;}
+  .phone-note{width:360px;font-size:12px;color:var(--text2);line-height:1.6;}
+  .phone-note h4{font-size:13px;color:var(--text);margin:0 0 6px;}
+  .phone-note ul{margin:0;padding-left:18px;}
+  .phone-note li{margin-bottom:5px;}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header id="gh">
+    <div class="brand"><div class="dot"></div>CHOWKER ERP</div>
+    <div class="kcmd" onclick="void(0)">🔍 Search customer, estimate, job, design… <span class="flexgrow"></span><kbd>⌘K</kbd></div>
+    <div class="spacer"></div>
+    <div class="ghitem">📥 Inbox <span class="badge-count">7</span></div>
+    <div class="ghitem">🔔 Alerts <span class="badge-count">4</span></div>
+    <div class="user">RS</div>
+  </header>
+
+  <div id="body">
+    <nav id="side">
+      <div class="grp">Overview</div>
+      <a data-view="dashboard" class="active"><span class="n">📊 Dashboard</span></a>
+      <a data-view="customers"><span class="n">👤 Customers</span><span class="cnt">312</span></a>
+
+      <div class="grp">Sales</div>
+      <a data-view="estimates"><span class="n">🧾 Estimates</span><span class="cnt">18</span></a>
+      <a data-view="orders"><span class="n">📦 Orders</span><span class="cnt">42</span></a>
+
+      <div class="grp">Manufacturing</div>
+      <a data-view="production" onclick="loadKanban()"><span class="n">🏭 Production</span><span class="cnt">27</span></a>
+      <a data-view="karigars"><span class="n">🧑‍🎨 Karigars</span><span class="cnt">14</span></a>
+      <a data-view="assembly"><span class="n">🔧 Assembly</span><span class="cnt">5</span></a>
+      <a data-view="qc"><span class="n">✅ Quality Control</span><span class="cnt">3</span></a>
+
+      <div class="grp">Material</div>
+      <a data-view="issue"><span class="n">📤 Material Issue</span></a>
+      <a data-view="recon"><span class="n">⚖️ Reconciliation</span><span class="cnt">6</span></a>
+      <a data-view="metalledger"><span class="n">🥇 Metal Ledger</span></a>
+      <a data-view="stoneledger"><span class="n">💎 Stone Ledger</span></a>
+
+      <div class="grp">Product</div>
+      <a data-view="finished"><span class="n">🏅 Finished Products</span></a>
+      <a data-view="portfolio"><span class="n">🖼️ Design Portfolio</span><span class="cnt">86</span></a>
+
+      <div class="grp">Finance</div>
+      <a data-view="ledger"><span class="n">💰 Customer Ledger</span></a>
+      <a data-view="reports"><span class="n">📈 Reports</span></a>
+
+      <div class="grp">Karigar App</div>
+      <a data-view="karigarmobile"><span class="n">📱 Mobile Preview</span></a>
+    </nav>
+
+    <main id="work">
+
+      <!-- ============ DASHBOARD ============ -->
+      <section id="v-dashboard" class="viewpane">
+        <div class="wh">
+          <div class="crumb">Home</div>
+          <h1>Owner Dashboard <span class="cnt">Fri 08 Aug 2026, 11:42 IST</span></h1>
+          <div style="height:8px"></div>
+        </div>
+        <div class="content">
+          <div class="panel" style="margin-bottom:14px;">
+            <div class="ph">🥇 Where is my gold? <span style="font-weight:400;color:var(--text2);font-size:11px;cursor:pointer;" onclick="go('metalledger')">Open full view →</span></div>
+            <div class="pb" style="padding:12px;">
+              <div class="flowbar">
+                <div class="fseg"><div class="fl">In Store</div><div class="fv">12,480.2g</div></div>
+                <div class="fseg hi"><div class="fl">With Karigars</div><div class="fv">3,842.6g</div></div>
+                <div class="fseg"><div class="fl">In Assembly</div><div class="fv">210.4g</div></div>
+                <div class="fseg"><div class="fl">Finished Stock</div><div class="fv">4,960.8g</div></div>
+                <div class="fseg diff"><div class="fl">Unreconciled</div><div class="fv">+1.6g</div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="dgrid">
+            <div class="kpi"><div class="lbl">Estimates Today</div><div class="val">6</div><div class="sub">3 approved · 1 revised</div></div>
+            <div class="kpi"><div class="lbl">Orders in Production</div><div class="val">27</div><div class="sub">across 14 karigars</div></div>
+            <div class="kpi alert"><div class="lbl">Gold w/ Karigars</div><div class="val">3,842.60g</div><div class="sub">22K equivalent</div></div>
+            <div class="kpi alert"><div class="lbl">Recon Discrepancy</div><div class="val">6 jobs</div><div class="sub">2 major · 4 minor</div></div>
+            <div class="kpi"><div class="lbl">Ready for Delivery</div><div class="val">9</div><div class="sub">₹18,42,600 value</div></div>
+            <div class="kpi alert"><div class="lbl">Outstanding Payments</div><div class="val">₹9,86,240</div><div class="sub">across 23 customers</div></div>
+          </div>
+
+          <div class="cols3">
+            <div>
+              <div class="panel">
+                <div class="ph">🔴 Exceptions requiring action</div>
+                <div class="pb">
+                  <div class="exrow"><span class="dot r"></span><span class="txt">Job JG-2026-00119 — Gold discrepancy +0.820g exceeds 0.3g tolerance (Karigar: Mohan Goldsmith)</span><span class="go" onclick="go('recon')">Review →</span></div>
+                  <div class="exrow"><span class="dot r"></span><span class="txt">QC failed on SKU batch FP-2026-0231 — prong defect, rework required</span><span class="go" onclick="go('qc')">Open →</span></div>
+                  <div class="exrow"><span class="dot y"></span><span class="txt">Job JG-2026-00142 overdue by 2 days — Imran Polki Works</span><span class="go" onclick="loadKanban()">View →</span></div>
+                  <div class="exrow"><span class="dot y"></span><span class="txt">Estimate CH-579 pending customer approval for 4 days</span><span class="go" onclick="go('estimates')">Follow up →</span></div>
+                  <div class="exrow"><span class="dot r"></span><span class="txt">Neha Jain — payment overdue ₹1,42,000, order NK-1052 delivered 12 days ago</span><span class="go" onclick="go('ledger')">Collect →</span></div>
+                  <div class="exrow"><span class="dot y"></span><span class="txt">42 pcs Polki issued to Ramesh Jeweller (MIV-2026-00582) — return not logged, due today</span><span class="go" onclick="go('issue')">Track →</span></div>
+                </div>
+              </div>
+            </div>
+            <div>
+              <div class="panel">
+                <div class="ph">Production pipeline</div>
+                <div class="pb" style="padding:10px 12px;font-size:12px;">
+                  <table style="width:100%;">
+                    <tr><td>Material Planning</td><td class="num mono">4</td></tr>
+                    <tr><td>With Karigar</td><td class="num mono">11</td></tr>
+                    <tr><td>Return Pending</td><td class="num mono">5</td></tr>
+                    <tr><td>Reconciliation</td><td class="num mono">6</td></tr>
+                    <tr><td>Assembly</td><td class="num mono">5</td></tr>
+                    <tr><td>QC</td><td class="num mono">3</td></tr>
+                    <tr><td>Ready for Delivery</td><td class="num mono">9</td></tr>
+                  </table>
+                </div>
+              </div>
+              <div class="panel">
+                <div class="ph">Financial snapshot — MTD</div>
+                <div class="pb" style="padding:10px 12px;font-size:12px;">
+                  <div class="sumrow"><span class="l">Estimate value raised</span><span class="v">₹64,82,400</span></div>
+                  <div class="sumrow"><span class="l">Confirmed order value</span><span class="v">₹41,20,900</span></div>
+                  <div class="sumrow"><span class="l">Making charges billed</span><span class="v">₹6,84,200</span></div>
+                  <div class="sumrow"><span class="l">Est. margin</span><span class="v">₹8,92,150</span></div>
+                  <div class="sumrow"><span class="l">Outstanding customer dues</span><span class="v" style="color:#9F1239">₹9,86,240</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ ESTIMATES ============ -->
+      <section id="v-estimates" class="viewpane hidden">
+        <div class="wh">
+          <div class="crumb">Sales</div>
+          <h1>Estimates <span class="cnt">18 records</span></h1>
+          <div class="tabs">
+            <div class="t active" onclick="switchEstTab(event,'list')">List</div>
+            <div class="t" onclick="switchEstTab(event,'builder')">Estimate Builder — CH-562</div>
+          </div>
+        </div>
+
+        <div id="est-list-pane">
+          <div class="toolbar">
+            <button class="btn primary" onclick="switchEstTab(null,'builder')">+ New Estimate</button>
+            <div class="search">🔍<input placeholder="Search estimate, customer, design…"></div>
+            <div class="chip">Status: Sent, Approved <button onclick="removeChip(event)">×</button></div>
+            <div class="flexgrow"></div>
+            <button class="btn">Export</button>
+          </div>
+          <div class="content">
+            <div class="grid-wrap">
+              <table>
+                <thead><tr><th>Estimate #</th><th>Customer</th><th>Design</th><th>Date</th><th>Salesperson</th><th class="num">Amount</th><th>Status</th><th>Revision</th></tr></thead>
+                <tbody>
+                  <tr onclick="openDrawer('estimate','CH-562')"><td class="rid">CH-562</td><td>Rajesh Kumar</td><td>Polki Choker — Bridal</td><td>04 Aug 2026</td><td>Sunita</td><td class="num mono">₹2,57,500</td><td><span class="pill ok">Approved</span></td><td class="mono">V3</td></tr>
+                  <tr onclick="openDrawer('estimate','CH-579')"><td class="rid">CH-579</td><td>Neha Jain</td><td>Bridal Necklace Set</td><td>04 Aug 2026</td><td>Amit</td><td class="num mono">₹4,12,900</td><td><span class="pill warn">Sent</span></td><td class="mono">V1</td></tr>
+                  <tr onclick="openDrawer('estimate','CH-580')"><td class="rid">CH-580</td><td>Priya Sharma</td><td>Diamond Drop Earrings</td><td>05 Aug 2026</td><td>Sunita</td><td class="num mono">₹1,28,400</td><td><span class="pill info">Viewed</span></td><td class="mono">V1</td></tr>
+                  <tr onclick="openDrawer('estimate','CH-581')"><td class="rid">CH-581</td><td>Vikram Oswal</td><td>Men's Gold Kada</td><td>05 Aug 2026</td><td>Amit</td><td class="num mono">₹86,200</td><td><span class="pill neu">Draft</span></td><td class="mono">V1</td></tr>
+                  <tr onclick="openDrawer('estimate','CH-582')"><td class="rid">CH-582</td><td>Sunita Devi Rathore</td><td>Temple Necklace</td><td>06 Aug 2026</td><td>Sunita</td><td class="num mono">₹3,14,750</td><td><span class="pill err">Rejected</span></td><td class="mono">V2</td></tr>
+                  <tr onclick="openDrawer('estimate','CH-583')"><td class="rid">CH-583</td><td>Meena Kanwar</td><td>Emerald Polki Set</td><td>07 Aug 2026</td><td>Amit</td><td class="num mono">₹5,48,000</td><td><span class="pill warn">Revision Requested</span></td><td class="mono">V2</td></tr>
+                  <tr onclick="openDrawer('estimate','CH-584')"><td class="rid">CH-584</td><td>Farhan Qureshi</td><td>Kids Nazariya Bracelet</td><td>07 Aug 2026</td><td>Sunita</td><td class="num mono">₹22,600</td><td><span class="pill info">Converted to Order</span></td><td class="mono">V1</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="footer"><span>7 of 18 records</span><span class="spacer"></span><span>Page 1 of 3</span></div>
+        </div>
+
+        <div id="est-builder-pane" class="hidden">
+          <div class="toolbar">
+            <div class="kv" style="display:flex;gap:16px;align-items:center;">
+              <span class="pill ok">Approved · V3</span>
+              <span style="color:var(--text2)">Prior: V1 ₹2,45,000 → V2 ₹2,61,000 → V3 ₹2,57,500</span>
+            </div>
+            <div class="flexgrow"></div>
+            <button class="btn">Print PDF</button>
+            <button class="btn" onclick="toast('Revision V4 created','Estimate CH-562 is now editable as a new draft revision.')">New Revision</button>
+            <button class="btn primary" onclick="convertToOrder()">Convert to Order</button>
+          </div>
+          <div class="content">
+            <div class="est-layout">
+              <div class="est-left">
+                <label>Estimate #</label><input value="CH-562" disabled>
+                <label>Customer</label><input value="Rajesh Kumar">
+                <label>Design</label><input value="Polki Choker — Bridal">
+                <label>Category</label><select><option>Necklace — Choker</option></select>
+                <label>Quantity</label><input value="1">
+                <label>Salesperson</label><input value="Sunita">
+                <label>Expected Delivery</label><input value="20-Aug-2026">
+                <label>Status</label><select><option selected>Approved</option></select>
+              </div>
+              <div class="est-center">
+                <div class="sechead">Gold / Metal</div>
+                <table class="etable">
+                  <tr><th>Metal</th><th>Purity</th><th>Gross Wt (g)</th><th>Fine Wt (g)</th><th>Rate/g</th><th>Wastage %</th><th>Wastage Wt</th><th>Amount</th></tr>
+                  <tr><td>Gold</td><td>22K</td><td>48.100</td><td>44.092</td><td>₹6,842</td><td class="ov-cell">11.5%<span class="ov-tag" title="Standard slab is 9%. Overridden by Aadil Bhati, 04-Aug-2026 18:22 IST.">OVR</span></td><td>5.530</td><td class="mono">₹3,39,178</td></tr>
+                </table>
+                <div class="sechead">Polki / Diamond</div>
+                <table class="etable">
+                  <tr><th>Type</th><th>Shape</th><th>Pieces</th><th>Weight (ct)</th><th>Rate</th><th>Amount</th></tr>
+                  <tr><td>Polki</td><td>Kundan cut</td><td>68</td><td>18.400</td><td>₹1,150/ct</td><td class="mono">₹21,160</td></tr>
+                  <tr><td>Rosecut</td><td>Mixed</td><td>24</td><td>4.200</td><td>₹980/ct</td><td class="mono">₹4,116</td></tr>
+                </table>
+                <div class="sechead">Colour Stones / Pearl</div>
+                <table class="etable">
+                  <tr><th>Stone</th><th>Pieces</th><th>Weight</th><th>Rate</th><th>Amount</th></tr>
+                  <tr><td>Emerald</td><td>6</td><td>3.100 ct</td><td>₹2,400/ct</td><td class="mono">₹7,440</td></tr>
+                  <tr><td>Moti (Basra)</td><td>32</td><td>14.000g</td><td>₹340/g</td><td class="mono">₹4,760</td></tr>
+                </table>
+                <div class="sechead">Making Charges</div>
+                <table class="etable">
+                  <tr><th>Method</th><th>Basis</th><th>Rate</th><th>Amount</th></tr>
+                  <tr><td>Per gram (fine wt)</td><td>44.092g</td><td>₹520/g</td><td class="mono">₹22,928</td></tr>
+                </table>
+              </div>
+              <div class="est-right">
+                <div style="font-size:11px;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:10px;">Live Summary</div>
+                <div class="sumrow"><span class="l">Gold amount</span><span class="v">₹3,39,178</span></div>
+                <div class="sumrow"><span class="l">Polki + Diamond</span><span class="v">₹25,276</span></div>
+                <div class="sumrow"><span class="l">Colour stone + Pearl</span><span class="v">₹12,200</span></div>
+                <div class="sumrow"><span class="l">Making charges</span><span class="v">₹22,928</span></div>
+                <div class="sumrow"><span class="l">Subtotal</span><span class="v">₹3,99,582</span></div>
+                <div class="sumrow"><span class="l">GST (3%)</span><span class="v">₹11,987</span></div>
+                <div class="sumrow ov-cell" style="padding-left:8px;"><span class="l">Discount<span class="ov-tag" title="Discretionary discount. Overridden by Aadil Bhati, 04-Aug-2026 18:22 IST.">OVR</span></span><span class="v">−₹1,54,069</span></div>
+
+                <div style="margin-top:12px;padding:16px;background:#FFF3DA;border:1px solid #F3DFAE;border-radius:6px;">
+                  <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:#92400E;font-weight:700;margin-bottom:4px;">Final Estimate — for customer</div>
+                  <div style="font-size:28px;font-weight:800;color:#78350F;font-family:'SF Mono',monospace;">₹2,57,500</div>
+                  <div style="font-size:11px;color:#92400E;margin-top:2px;">All taxes included · Valid till 11-Aug-2026</div>
+                </div>
+
+                <button class="btn primary" style="width:100%;justify-content:center;margin-top:12px;padding:9px;font-size:13px;" onclick="toast('Approval link sent','WhatsApp message sent to Rajesh Kumar with a one-tap approve link.')">Send for Customer Approval</button>
+
+                <div style="margin-top:12px;padding:10px;background:#fff;border:1px solid var(--border);border-radius:5px;font-size:11px;color:var(--text2);">
+                  2 fields on this estimate were overridden from standard rates (marked <span class="ov-tag" style="margin-left:0;">OVR</span> above) — approved by Aadil Bhati on 04-Aug-2026 18:22 IST. All overrides are logged in Audit Log.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ PRODUCTION (Kanban) ============ -->
+      <section id="v-production" class="viewpane hidden">
+        <div class="wh">
+          <div class="crumb">Manufacturing</div>
+          <h1>Production Control Center <span class="cnt">27 active jobs</span></h1>
+          <div style="height:8px"></div>
+        </div>
+        <div class="toolbar">
+          <div class="search">🔍<input placeholder="Search job, karigar, order…"></div>
+          <div class="chip">Karigar: All <button onclick="removeChip(event)">×</button></div>
+          <div class="flexgrow"></div>
+          <div class="kbd-hint"><kbd>⌘K</kbd> palette <kbd>/</kbd> filter <kbd>Esc</kbd> close</div>
+        </div>
+        <div class="content">
+          <div id="kanban" class="kanban"></div>
+        </div>
+      </section>
+
+      <!-- ============ KARIGARS ============ -->
+      <section id="v-karigars" class="viewpane hidden">
+        <div class="wh">
+          <div class="crumb">Manufacturing</div>
+          <h1>Karigars / Job Workers <span class="cnt">14 active</span></h1>
+        </div>
+        <div class="toolbar">
+          <button class="btn primary">+ Add Karigar</button>
+          <div class="search">🔍<input placeholder="Search karigar…"></div>
+          <div class="flexgrow"></div>
+        </div>
+        <div class="content">
+          <div class="grid-wrap">
+            <table>
+              <thead><tr><th>Karigar</th><th>Specialization</th><th>Active Jobs</th><th class="num">Gold w/ Karigar</th><th class="num">Polki w/ Karigar</th><th class="num">Labour Payable</th><th>Overdue</th></tr></thead>
+              <tbody>
+                <tr onclick="openDrawer('karigar','Ramesh Jeweller')"><td class="rid">Ramesh Jeweller</td><td>Polki & Stone Setting</td><td class="mono">8</td><td class="num mono">82.450g</td><td class="num mono">184 pcs</td><td class="num mono">₹42,500</td><td><span class="pill neu">0</span></td></tr>
+                <tr class="row-major" onclick="openDrawer('karigar','Mohan Goldsmith')"><td class="rid">Mohan Goldsmith</td><td>Casting & Finish</td><td class="mono">6</td><td class="num mono">146.900g</td><td class="num mono">—</td><td class="num mono">₹38,200</td><td><span class="pill err">1</span></td></tr>
+                <tr onclick="openDrawer('karigar','Imran Polki Works')"><td class="rid">Imran Polki Works</td><td>Polki Specialist</td><td class="mono">5</td><td class="num mono">54.120g</td><td class="num mono">212 pcs</td><td class="num mono">₹29,800</td><td><span class="pill warn">2</span></td></tr>
+                <tr onclick="openDrawer('karigar','Suresh Meenakari')"><td class="rid">Suresh Meenakari</td><td>Meenakari</td><td class="mono">3</td><td class="num mono">21.300g</td><td class="num mono">—</td><td class="num mono">₹14,100</td><td><span class="pill neu">0</span></td></tr>
+                <tr onclick="openDrawer('karigar','Deepak Polish House')"><td class="rid">Deepak Polish House</td><td>Polish & Buffing</td><td class="mono">4</td><td class="num mono">9.850g</td><td class="num mono">—</td><td class="num mono">₹6,400</td><td><span class="pill neu">0</span></td></tr>
+                <tr onclick="openDrawer('karigar','Kailash Diamond Setter')"><td class="rid">Kailash Diamond Setter</td><td>Diamond Setting</td><td class="mono">1</td><td class="num mono">—</td><td class="num mono">—</td><td class="num mono">₹8,900</td><td><span class="pill neu">0</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="footer"><span>6 of 14 records</span></div>
+      </section>
+
+      <!-- ============ MATERIAL ISSUE ============ -->
+      <section id="v-issue" class="viewpane hidden">
+        <div class="wh">
+          <div class="crumb">Material</div>
+          <h1>Material Issue / Return Vouchers</h1>
+          <div class="tabs">
+            <div class="t active" onclick="switchIssueTab(event,'iss')">Issue Vouchers</div>
+            <div class="t" onclick="switchIssueTab(event,'ret')">Return Vouchers</div>
+          </div>
+        </div>
+
+        <div id="issue-iss-pane">
+          <div class="toolbar">
+            <button class="btn primary" onclick="toast('New Issue Voucher','Form opened — select Job, Karigar, and material lines to issue.')">+ New Issue Voucher</button>
+            <div class="search">🔍<input placeholder="Search voucher, job, karigar…"></div>
+            <div class="flexgrow"></div>
+            <button class="btn">Export</button>
+          </div>
+          <div class="content">
+            <div class="grid-wrap">
+              <table>
+                <thead><tr><th>Voucher #</th><th>Job</th><th>Karigar</th><th>Material</th><th class="num">Gross Wt</th><th class="num">Fine Wt</th><th>Date</th><th>Status</th></tr></thead>
+                <tbody>
+                  <tr onclick="openDrawer('miv','MIV-2026-00582')"><td class="rid">MIV-2026-00582</td><td class="rid">JG-2026-00152</td><td>Ramesh Jeweller</td><td>Gold 22K + Polki 24pcs</td><td class="num mono">52.430g</td><td class="num mono">48.061g</td><td>04-Aug-2026</td><td><span class="pill warn">Return Pending</span></td></tr>
+                  <tr onclick="openDrawer('miv','MIV-2026-00579')"><td class="rid">MIV-2026-00579</td><td class="rid">JG-2026-00119</td><td>Mohan Goldsmith</td><td>Gold 22K</td><td class="num mono">96.200g</td><td class="num mono">88.183g</td><td>29-Jul-2026</td><td><span class="pill err">Discrepancy Flagged</span></td></tr>
+                  <tr onclick="openDrawer('miv','MIV-2026-00575')"><td class="rid">MIV-2026-00575</td><td class="rid">JG-2026-00108</td><td>Imran Polki Works</td><td>Polki 68pcs, Rosecut 24pcs</td><td class="num mono">—</td><td class="num mono">—</td><td>27-Jul-2026</td><td><span class="pill ok">Fully Returned</span></td></tr>
+                  <tr onclick="openDrawer('miv','MIV-2026-00571')"><td class="rid">MIV-2026-00571</td><td class="rid">JG-2026-00097</td><td>Kailash Diamond Setter</td><td>Diamond 0.50ct (6pcs)</td><td class="num mono">—</td><td class="num mono">—</td><td>25-Jul-2026</td><td><span class="pill ok">Fully Returned</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="footer"><span>4 of 22 records</span></div>
+        </div>
+
+        <div id="issue-ret-pane" class="hidden">
+          <div class="toolbar">
+            <button class="btn primary" onclick="toast('New Return Voucher','Form opened — select Job and log returned material/finished pieces.')">+ New Return Voucher</button>
+            <div class="search">🔍<input placeholder="Search voucher, job, karigar…"></div>
+            <div class="flexgrow"></div>
+            <button class="btn">Export</button>
+          </div>
+          <div class="content">
+            <div class="grid-wrap">
+              <table>
+                <thead><tr><th>Voucher #</th><th>Job</th><th>Karigar</th><th>Material</th><th class="num">Returned Wt</th><th>Return Type</th><th>Date</th><th>Status</th></tr></thead>
+                <tbody>
+                  <tr onclick="openDrawer('mrv','MRV-2026-00614')"><td class="rid">MRV-2026-00614</td><td class="rid">JG-2026-00152</td><td>Ramesh Jeweller</td><td>Gold 22K</td><td class="num mono">47.820g</td><td>Partial — finished piece</td><td>07-Aug-2026</td><td><span class="pill warn">Under Recon</span></td></tr>
+                  <tr onclick="openDrawer('mrv','MRV-2026-00601')"><td class="rid">MRV-2026-00601</td><td class="rid">JG-2026-00119</td><td>Mohan Goldsmith</td><td>Gold 22K</td><td class="num mono">87.180g</td><td>Final — casting + scrap</td><td>06-Aug-2026</td><td><span class="pill err">Discrepancy</span></td></tr>
+                  <tr onclick="openDrawer('mrv','MRV-2026-00598')"><td class="rid">MRV-2026-00598</td><td class="rid">JG-2026-00104</td><td>Suresh Meenakari</td><td>Gold 18K</td><td class="num mono">26.450g</td><td>Final</td><td>24-Jul-2026</td><td><span class="pill ok">Reconciled</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="footer"><span>3 of 19 records</span></div>
+        </div>
+      </section>
+
+      <!-- ============ RECONCILIATION ============ -->
+      <section id="v-recon" class="viewpane hidden">
+        <div class="wh">
+          <div class="crumb">Material</div>
+          <h1>Material Reconciliation <span class="cnt">6 open</span></h1>
+        </div>
+        <div class="toolbar">
+          <div class="chip">Status: 🟡 Minor, 🔴 Major <button onclick="removeChip(event)">×</button></div>
+          <div class="flexgrow"></div>
+          <button class="btn">Export</button>
+        </div>
+        <div class="content">
+          <div class="grid-wrap">
+            <table>
+              <thead><tr><th>Job</th><th>Karigar</th><th>Material</th><th class="num">Issued</th><th class="num">Returned</th><th class="num">Consumed</th><th class="num">Expected</th><th class="num">Difference</th><th>Status</th></tr></thead>
+              <tbody>
+                <tr class="row-major" onclick="openDrawer('job','JG-2026-00119')"><td class="rid">JG-2026-00119</td><td>Mohan Goldsmith</td><td>Gold 22K</td><td class="num mono">96.200g</td><td class="num mono">87.180g</td><td class="num mono">9.020g</td><td class="num mono">8.200g</td><td class="num mono" style="color:#9F1239">+0.820g<span class="subdelta">exceeds 0.3g tolerance by 0.52g</span></td><td><span class="pill err">🔴 Major</span></td></tr>
+                <tr onclick="openDrawer('job','JG-2026-00152')"><td class="rid">JG-2026-00152</td><td>Ramesh Jeweller</td><td>Gold 22K</td><td class="num mono">52.430g</td><td class="num mono">47.820g</td><td class="num mono">4.610g</td><td class="num mono">4.210g</td><td class="num mono" style="color:#9F1239">+0.400g<span class="subdelta">within 0.3–0.5g minor band</span></td><td><span class="pill warn">🟡 Minor</span></td></tr>
+                <tr onclick="openDrawer('job','JG-2026-00131')"><td class="rid">JG-2026-00131</td><td>Imran Polki Works</td><td>Polki</td><td class="num mono">30 pcs</td><td class="num mono">28 pcs</td><td class="num mono">2 pcs</td><td class="num mono">2 pcs</td><td class="num mono" style="color:#065F46">0<span class="subdelta">within tolerance</span></td><td><span class="pill ok">🟢 Reconciled</span></td></tr>
+                <tr onclick="openDrawer('job','JG-2026-00104')"><td class="rid">JG-2026-00104</td><td>Suresh Meenakari</td><td>Gold 18K</td><td class="num mono">28.600g</td><td class="num mono">26.450g</td><td class="num mono">2.150g</td><td class="num mono">1.900g</td><td class="num mono" style="color:#9F1239">+0.250g<span class="subdelta">within 0.3g tolerance</span></td><td><span class="pill warn">🟡 Minor</span></td></tr>
+                <tr onclick="openDrawer('job','JG-2026-00098')"><td class="rid">JG-2026-00098</td><td>Kailash Diamond Setter</td><td>Diamond</td><td class="num mono">0.50ct</td><td class="num mono">0.47ct</td><td class="num mono">0.03ct</td><td class="num mono">0.03ct</td><td class="num mono" style="color:#065F46">0.00ct<span class="subdelta">within tolerance</span></td><td><span class="pill ok">🟢 Reconciled</span></td></tr>
+                <tr class="row-major" onclick="openDrawer('job','JG-2026-00087')"><td class="rid">JG-2026-00087</td><td>Ramesh Jeweller</td><td>Gold 22K</td><td class="num mono">64.100g</td><td class="num mono">58.310g</td><td class="num mono">5.790g</td><td class="num mono">4.850g</td><td class="num mono" style="color:#9F1239">+0.940g<span class="subdelta">exceeds 0.3g tolerance by 0.64g</span></td><td><span class="pill err">🔴 Major</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="footer"><span>6 of 6 open reconciliations</span><span class="spacer"></span><span>2 major · 4 minor</span></div>
+      </section>
+
+      <!-- ============ METAL LEDGER ============ -->
+      <section id="v-metalledger" class="viewpane hidden">
+        <div class="wh">
+          <div class="crumb">Material</div>
+          <h1>Metal Ledger — "Where is my gold?"</h1>
+        </div>
+        <div class="content">
+          <div class="flowbar" style="margin-bottom:16px;">
+            <div class="fseg"><div class="fl">In Store</div><div class="fv">12,480.200g</div></div>
+            <div class="fseg hi"><div class="fl">With Karigars</div><div class="fv">3,842.600g</div></div>
+            <div class="fseg"><div class="fl">In Production</div><div class="fv">210.400g</div></div>
+            <div class="fseg"><div class="fl">Finished Products</div><div class="fv">4,960.800g</div></div>
+            <div class="fseg"><div class="fl">Scrap / Dust</div><div class="fv">62.150g</div></div>
+            <div class="fseg"><div class="fl">Under Reconciliation</div><div class="fv">18.910g</div></div>
+          </div>
+          <div class="cols3" style="grid-template-columns:1fr 1fr;margin-bottom:16px;">
+            <div class="panel"><div class="ph">Expected vs Actual (22K equivalent)</div><div class="pb" style="padding:12px;">
+              <div class="sumrow"><span class="l">Expected total</span><span class="v">21,573.500g</span></div>
+              <div class="sumrow"><span class="l">Actual (system computed)</span><span class="v">21,575.060g</span></div>
+              <div class="sumrow total" style="border-top:2px solid #9F1239"><span class="l" style="color:#9F1239">Difference</span><span class="v" style="color:#9F1239">+1.560g</span></div>
+            </div></div>
+            <div class="panel"><div class="ph">Filter ledger</div><div class="pb" style="padding:12px;display:flex;flex-direction:column;gap:8px;">
+              <select style="border:1px solid var(--border);border-radius:5px;padding:6px 8px;"><option>All metals</option><option>Gold 22K</option><option>Gold 18K</option><option>Silver 925</option></select>
+              <select style="border:1px solid var(--border);border-radius:5px;padding:6px 8px;"><option>Last 30 days</option></select>
+            </div></div>
+          </div>
+          <div class="grid-wrap">
+            <table>
+              <thead><tr><th>Date</th><th>Metal</th><th>Type</th><th>Reference</th><th>Party</th><th class="num">In</th><th class="num">Out</th><th class="num">Balance</th></tr></thead>
+              <tbody>
+                <tr><td>07-Aug-2026 16:10</td><td>Gold 22K</td><td><span class="pill neu">Return</span></td><td class="rid">MRV-2026-00614</td><td>Ramesh Jeweller</td><td class="num mono">47.820g</td><td class="num mono">—</td><td class="num mono">12,480.200g</td></tr>
+                <tr><td>04-Aug-2026 11:05</td><td>Gold 22K</td><td><span class="pill neu">Issue</span></td><td class="rid">MIV-2026-00582</td><td>Ramesh Jeweller</td><td class="num mono">—</td><td class="num mono">52.430g</td><td class="num mono">12,432.380g</td></tr>
+                <tr><td>29-Jul-2026 09:40</td><td>Gold 22K</td><td><span class="pill neu">Issue</span></td><td class="rid">MIV-2026-00579</td><td>Mohan Goldsmith</td><td class="num mono">—</td><td class="num mono">96.200g</td><td class="num mono">12,484.810g</td></tr>
+                <tr><td>26-Jul-2026 15:22</td><td>Gold 22K</td><td><span class="pill neu">Purchase</span></td><td class="rid">GRN-2026-00212</td><td>Vardhman Bullion</td><td class="num mono">2,000.000g</td><td class="num mono">—</td><td class="num mono">12,581.010g</td></tr>
+                <tr><td>24-Jul-2026 12:10</td><td>Gold 18K</td><td><span class="pill neu">Return</span></td><td class="rid">MRV-2026-00598</td><td>Suresh Meenakari</td><td class="num mono">26.450g</td><td class="num mono">—</td><td class="num mono">10,581.010g</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="footer"><span>5 of 1,842 ledger entries</span></div>
+      </section>
+
+      <!-- ============ DESIGN PORTFOLIO ============ -->
+      <section id="v-portfolio" class="viewpane hidden">
+        <div class="wh">
+          <div class="crumb">Product</div>
+          <h1>Design Portfolio <span class="cnt">86 designs</span></h1>
+        </div>
+        <div class="toolbar">
+          <div class="search">🔍<input placeholder="Search design, tag, category…"></div>
+          <div class="chip">Style: Bridal <button onclick="removeChip(event)">×</button></div>
+          <div class="chip">Material: Gold + Polki <button onclick="removeChip(event)">×</button></div>
+          <div class="flexgrow"></div>
+          <button class="btn">Trend Analytics</button>
+        </div>
+        <div class="content">
+          <div class="pgrid">
+            <div class="pcard" onclick="openDrawer('design','CH-562')"><div class="pimg">💍</div><div class="pbody"><div class="pid">CH-562</div><div class="pname">Polki Choker — Bridal</div><div class="ptags"><span class="tagchip">#Polki</span><span class="tagchip">#Bridal</span><span class="tagchip">#Heavy</span></div></div></div>
+            <div class="pcard" onclick="openDrawer('design','NK-204')"><div class="pimg">📿</div><div class="pbody"><div class="pid">NK-204</div><div class="pname">Bridal Necklace Set</div><div class="ptags"><span class="tagchip">#Gold</span><span class="tagchip">#Bridal</span><span class="tagchip">#Temple</span></div></div></div>
+            <div class="pcard" onclick="openDrawer('design','ER-118')"><div class="pimg">👂</div><div class="pbody"><div class="pid">ER-118</div><div class="pname">Diamond Drop Earrings</div><div class="ptags"><span class="tagchip">#Diamond</span><span class="tagchip">#Minimal</span></div></div></div>
+            <div class="pcard" onclick="openDrawer('design','RG-330')"><div class="pimg">💎</div><div class="pbody"><div class="pid">RG-330</div><div class="pname">Emerald Polki Ring</div><div class="ptags"><span class="tagchip">#Polki</span><span class="tagchip">#Emerald</span></div></div></div>
+            <div class="pcard" onclick="openDrawer('design','BG-410')"><div class="pimg">🟡</div><div class="pbody"><div class="pid">BG-410</div><div class="pname">Men's Gold Kada</div><div class="ptags"><span class="tagchip">#Gold</span><span class="tagchip">#Mens</span></div></div></div>
+            <div class="pcard" onclick="openDrawer('design','PN-275')"><div class="pimg">🔶</div><div class="pbody"><div class="pid">PN-275</div><div class="pname">Temple Pendant</div><div class="ptags"><span class="tagchip">#Temple</span><span class="tagchip">#Traditional</span></div></div></div>
+            <div class="pcard" onclick="openDrawer('design','MT-092')"><div class="pimg">👑</div><div class="pbody"><div class="pid">MT-092</div><div class="pname">Maang Tikka — Royal</div><div class="ptags"><span class="tagchip">#Royal</span><span class="tagchip">#Bridal</span></div></div></div>
+            <div class="pcard" onclick="openDrawer('design','BR-158')"><div class="pimg">⚪</div><div class="pbody"><div class="pid">BR-158</div><div class="pname">Moti Bracelet</div><div class="ptags"><span class="tagchip">#Pearl</span><span class="tagchip">#DailyWear</span></div></div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ OTHER STUB VIEWS ============ -->
+      <section id="v-customers" class="viewpane hidden"><div class="wh"><div class="crumb">Overview</div><h1>Customers <span class="cnt">312</span></h1></div><div class="content"><div class="grid-wrap"><table><thead><tr><th>Customer</th><th>Mobile</th><th class="num">Lifetime Value</th><th class="num">Outstanding</th><th>Last Order</th></tr></thead><tbody>
+        <tr onclick="openDrawer('customer','Rajesh Kumar')"><td class="rid">Rajesh Kumar</td><td>+91 98290 xxxxx</td><td class="num mono">₹18,42,600</td><td class="num mono">₹0</td><td>04-Aug-2026</td></tr>
+        <tr onclick="openDrawer('customer','Neha Jain')"><td class="rid">Neha Jain</td><td>+91 94140 xxxxx</td><td class="num mono">₹6,20,900</td><td class="num mono" style="color:#9F1239">₹1,42,000</td><td>27-Jul-2026</td></tr>
+        <tr onclick="openDrawer('customer','Priya Sharma')"><td class="rid">Priya Sharma</td><td>+91 99290 xxxxx</td><td class="num mono">₹3,84,200</td><td class="num mono">₹0</td><td>05-Aug-2026</td></tr>
+      </tbody></table></div></div></section>
+
+      <section id="v-orders" class="viewpane hidden"><div class="wh"><div class="crumb">Sales</div><h1>Orders <span class="cnt">42</span></h1></div><div class="content"><div class="grid-wrap"><table><thead><tr><th>Order</th><th>Customer</th><th>Design</th><th class="num">Approved Amt</th><th class="num">Balance</th><th>Status</th></tr></thead><tbody>
+        <tr onclick="openDrawer('order','ORD-1052')"><td class="rid">ORD-1052</td><td>Rajesh Kumar</td><td>CH-562 Polki Choker</td><td class="num mono">₹2,57,500</td><td class="num mono">₹0</td><td><span class="pill info">Assembly</span></td></tr>
+        <tr onclick="openDrawer('order','ORD-1053')"><td class="rid">ORD-1053</td><td>Meena Kanwar</td><td>CH-583 Emerald Polki Set</td><td class="num mono">₹5,48,000</td><td class="num mono">₹2,00,000</td><td><span class="pill warn">Material Issued</span></td></tr>
+      </tbody></table></div></div></section>
+
+      <section id="v-assembly" class="viewpane hidden"><div class="wh"><div class="crumb">Manufacturing</div><h1>Assembly Queue <span class="cnt">5</span></h1></div>
+        <div class="toolbar"><button class="btn primary">+ New Assembly</button><div class="search">🔍<input placeholder="Search order, design…"></div><div class="flexgrow"></div><button class="btn">Export</button></div>
+        <div class="content"><div class="grid-wrap"><table><thead><tr><th>Order</th><th>Design</th><th>Components</th><th>Assembler</th><th>Status</th></tr></thead><tbody>
+        <tr onclick="openDrawer('assembly','ORD-1052')"><td class="rid">ORD-1052</td><td>Polki Choker</td><td>Pendant ✓ Chain ✓ Earrings ✓</td><td>Deepak</td><td><span class="pill info">In Assembly</span></td></tr>
+        <tr onclick="openDrawer('assembly','ORD-1041')"><td class="rid">ORD-1041</td><td>Diamond Bridal Set</td><td>Necklace ✓ Ring ✗ Earrings ✓</td><td>—</td><td><span class="pill warn">Pending — missing Ring</span></td></tr>
+      </tbody></table></div></div></section>
+
+      <section id="v-qc" class="viewpane hidden"><div class="wh"><div class="crumb">Manufacturing</div><h1>Quality Control <span class="cnt">3</span></h1></div>
+        <div class="toolbar"><button class="btn primary">+ New Inspection</button><div class="search">🔍<input placeholder="Search batch, design…"></div><div class="flexgrow"></div><button class="btn">Export</button></div>
+        <div class="content"><div class="grid-wrap"><table><thead><tr><th>Batch</th><th>Design</th><th>Weight Check</th><th>Stone Count</th><th>Result</th></tr></thead><tbody>
+        <tr onclick="openDrawer('qc','FP-2026-0231')"><td class="rid">FP-2026-0231</td><td>NK-204 Bridal Set</td><td>Pass</td><td>Fail — 1 prong loose</td><td><span class="pill err">Rework Required</span></td></tr>
+        <tr onclick="openDrawer('qc','FP-2026-0229')"><td class="rid">FP-2026-0229</td><td>ER-118 Earrings</td><td>Pass</td><td>Pass</td><td><span class="pill ok">Approved</span></td></tr>
+      </tbody></table></div></div></section>
+
+      <section id="v-stoneledger" class="viewpane hidden"><div class="wh"><div class="crumb">Material</div><h1>Stone / Diamond / Polki Ledger</h1></div>
+        <div class="toolbar"><div class="search">🔍<input placeholder="Search stone ID, type…"></div><div class="chip">Status: Issued <button onclick="removeChip(event)">×</button></div><div class="flexgrow"></div><button class="btn">Export</button></div>
+        <div class="content"><div class="grid-wrap"><table><thead><tr><th>Stone ID</th><th>Type</th><th>Carat</th><th>Certification</th><th>Current Location</th><th>Status</th></tr></thead><tbody>
+        <tr onclick="openDrawer('stone','DIA-26-000582')"><td class="rid">DIA-26-000582</td><td>Diamond — Round</td><td class="mono">0.35ct</td><td>GIA 6215xxxx</td><td>Kailash Diamond Setter</td><td><span class="pill info">Issued</span></td></tr>
+        <tr onclick="openDrawer('stone','POL-26-001140')"><td class="rid">POL-26-001140</td><td>Polki — Kundan</td><td class="mono">18.400ct</td><td>—</td><td>Ramesh Jeweller</td><td><span class="pill info">Issued</span></td></tr>
+      </tbody></table></div></div></section>
+
+      <section id="v-finished" class="viewpane hidden"><div class="wh"><div class="crumb">Product</div><h1>Finished Products</h1></div>
+        <div class="toolbar"><div class="search">🔍<input placeholder="Search SKU, design…"></div><div class="flexgrow"></div><button class="btn">Export</button></div>
+        <div class="content"><div class="grid-wrap"><table><thead><tr><th>SKU</th><th>Design</th><th>Net Wt</th><th class="num">Cost</th><th class="num">Selling Price</th><th class="num">Margin</th></tr></thead><tbody>
+        <tr onclick="openDrawer('finished','SKU-CH562-001')"><td class="rid">SKU-CH562-001</td><td>Polki Choker</td><td class="mono">44.092g</td><td class="num mono">₹2,04,900</td><td class="num mono">₹2,57,500</td><td class="num mono" style="color:#065F46">₹52,600</td></tr>
+      </tbody></table></div></div></section>
+
+      <section id="v-ledger" class="viewpane hidden"><div class="wh"><div class="crumb">Finance</div><h1>Customer Ledger</h1></div>
+        <div class="toolbar"><button class="btn primary">+ Record Payment</button><div class="search">🔍<input placeholder="Search customer, reference…"></div><div class="flexgrow"></div><button class="btn">Export</button></div>
+        <div class="content"><div class="grid-wrap"><table><thead><tr><th>Date</th><th>Customer</th><th>Type</th><th>Reference</th><th class="num">Debit</th><th class="num">Credit</th><th class="num">Balance</th></tr></thead><tbody>
+        <tr onclick="openDrawer('ledgertxn','ORD-1041')"><td>27-Jul-2026</td><td>Neha Jain</td><td>Order</td><td class="rid">ORD-1041</td><td class="num mono">₹4,12,900</td><td class="num mono">—</td><td class="num mono" style="color:#9F1239">₹1,42,000 Dr</td></tr>
+        <tr onclick="openDrawer('ledgertxn','RCPT-4471')"><td>04-Aug-2026</td><td>Rajesh Kumar</td><td>Payment — UPI</td><td class="rid">RCPT-4471</td><td class="num mono">—</td><td class="num mono">₹2,57,500</td><td class="num mono">₹0</td></tr>
+      </tbody></table></div></div></section>
+
+      <section id="v-reports" class="viewpane hidden"><div class="wh"><div class="crumb">Finance</div><h1>Reports</h1></div><div class="content">
+        <div class="dgrid" style="grid-template-columns:repeat(4,1fr);">
+          <div class="panel" onclick="toast('Estimate Reports','Opening conversion-rate & revision-history report…')" style="cursor:pointer;"><div class="ph">Estimate Reports</div><div class="pb" style="padding:12px;font-size:12px;color:var(--text2);">Conversion rate, value by status, revision history</div></div>
+          <div class="panel" onclick="toast('Production Reports','Opening karigar/delay/turnaround report…')" style="cursor:pointer;"><div class="ph">Production Reports</div><div class="pb" style="padding:12px;font-size:12px;color:var(--text2);">Jobs by karigar, delays, avg. turnaround, rework rate</div></div>
+          <div class="panel" onclick="toast('Material Reports','Opening issue/return & discrepancy trend report…')" style="cursor:pointer;"><div class="ph">Material Reports</div><div class="pb" style="padding:12px;font-size:12px;color:var(--text2);">Issued/returned, discrepancy trend, stone movement</div></div>
+          <div class="panel" onclick="toast('Design Reports','Opening most-produced / trending report…')" style="cursor:pointer;"><div class="ph">Design Reports</div><div class="pb" style="padding:12px;font-size:12px;color:var(--text2);">Most produced, most profitable, trending this quarter</div></div>
+        </div>
+      </div></section>
+
+      <!-- ============ KARIGAR MOBILE PREVIEW ============ -->
+      <section id="v-karigarmobile" class="viewpane hidden">
+        <div class="wh">
+          <div class="crumb">Karigar App</div>
+          <h1>Karigar Mobile Preview <span class="cnt">Simulated device — Ramesh Jeweller's phone</span></h1>
+        </div>
+        <div class="content">
+          <div class="phone-stage">
+            <div class="phone-shell">
+              <div class="phone-screen">
+                <div class="phone-status"><span>9:41</span><span>🔋 82%</span></div>
+
+                <!-- LIST -->
+                <div id="mscreen-list" class="mscreen">
+                  <div class="phone-topbar">
+                    <div class="av">RJ</div>
+                    <div><div class="tt">Ramesh Jeweller</div><div class="st">8 chalu kaam</div></div>
+                  </div>
+                  <div class="phone-body">
+                    <div class="mjob" onclick="mOpenJob('JG-2026-00152','Polki Choker — Pendant','52.430','24','Gold 22K + Polki','14 Aug','ok')">
+                      <div class="mid">JG-2026-00152</div>
+                      <div class="mname">Polki Choker — Pendant</div>
+                      <div class="mrow"><span>Sona mila</span><b>52.430 g</b></div>
+                      <div class="mrow"><span>Polki mila</span><b>24 pcs</b></div>
+                      <span class="mdue ok">14 Aug tak jama karein</span>
+                    </div>
+                    <div class="mjob" onclick="mOpenJob('JG-2026-00087','Necklace Chain','64.100','—','Gold 22K','Overdue','late')">
+                      <div class="mid">JG-2026-00087</div>
+                      <div class="mname">Necklace Chain</div>
+                      <div class="mrow"><span>Sona mila</span><b>64.100 g</b></div>
+                      <div class="mrow"><span>Status</span><b style="color:#991B1B">Recheck zaroori</b></div>
+                      <span class="mdue late">Office se baat karein</span>
+                    </div>
+                    <div class="mjob" onclick="mOpenJob('JG-2026-00158','Temple Pendant','—','—','Abhi issue nahi hua','11 Aug','ok')">
+                      <div class="mid">JG-2026-00158</div>
+                      <div class="mname">Temple Pendant</div>
+                      <div class="mrow"><span>Status</span><b>Maal jald milega</b></div>
+                      <span class="mdue ok">Ready for pickup — 11 Aug</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- DETAIL -->
+                <div id="mscreen-detail" class="mscreen hidden">
+                  <div class="phone-topbar">
+                    <div class="mback" onclick="mShow('list')">← Wapas</div>
+                  </div>
+                  <div class="phone-body">
+                    <div class="mcard-hero">
+                      <div class="mid" id="m-d-id" style="text-align:center;">JG-2026-00152</div>
+                      <div class="mname" id="m-d-name" style="text-align:center;">Polki Choker — Pendant</div>
+                      <div class="mlabel" style="margin-top:14px;">Aapko Mila — Sona</div>
+                      <div class="mbig" id="m-d-gold">52.430 g</div>
+                      <div class="mlabel">Aapko Mila — Polki</div>
+                      <div class="mbig" id="m-d-polki" style="font-size:24px;">24 pcs</div>
+                      <div style="margin-top:10px;font-size:12.5px;color:#64748B;">Jama karne ki tareekh: <b id="m-d-due" style="color:#1F2937;">14 Aug 2026</b></div>
+                    </div>
+                    <button class="mbtn" onclick="mShow('return')">📦 Maal Wapas Kar Raha Hoon</button>
+                    <button class="mbtn sec" onclick="toast('Office ko call','Dialing Sunita — Kuicko Office…')">📞 Office Ko Call Karein</button>
+                  </div>
+                </div>
+
+                <!-- RETURN FORM -->
+                <div id="mscreen-return" class="mscreen hidden">
+                  <div class="phone-topbar">
+                    <div class="mback" onclick="mShow('detail')">← Wapas</div>
+                  </div>
+                  <div class="phone-body">
+                    <div class="mfield-label">Sona ka wazan wapas kar rahe hain (grams)</div>
+                    <input class="mnuminput" inputmode="decimal" placeholder="47.820" id="m-ret-gold">
+                    <div class="mfield-label">Polki wapas kar rahe hain (pieces)</div>
+                    <input class="mnuminput" inputmode="numeric" placeholder="24" id="m-ret-polki">
+                    <div class="mfield-label">Kaam ki sthiti</div>
+                    <div class="mchip-row">
+                      <div class="mchip active" onclick="mChip(this)">Poora Taiyaar</div>
+                      <div class="mchip" onclick="mChip(this)">Adhoora — Baaki hai</div>
+                    </div>
+                    <div class="mfield-label">Remark (optional)</div>
+                    <div class="mvoice">🎤 Awaaz mein bolein ya likhein…</div>
+                    <button class="mbtn" onclick="mShow('confirm')">✅ Submit Karein</button>
+                  </div>
+                </div>
+
+                <!-- CONFIRM -->
+                <div id="mscreen-confirm" class="mscreen hidden">
+                  <div class="phone-body" style="height:100%;">
+                    <div class="mconfirm">
+                      <div class="mcheck">✅</div>
+                      <div style="font-size:18px;font-weight:800;color:#1F2937;margin-bottom:6px;">Aapka return record ho gaya!</div>
+                      <div style="font-size:13px;color:#64748B;margin-bottom:22px;">Office ko WhatsApp pe turant suchna chali gayi. Reconciliation office check karega.</div>
+                      <button class="mbtn" style="width:auto;padding:12px 28px;" onclick="mShow('list')">Jobs Par Wapas Jayein</button>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <div class="phone-note">
+              <h4>Design decisions on this screen</h4>
+              <ul>
+                <li><b>No typing where avoidable</b> — number pad only for weight, tap-chips for status, voice-note for remarks (workshop hands are often busy or dirty).</li>
+                <li><b>Karigar sees only his own jobs</b> — no cross-karigar data, no math to do. He reports facts; the office system runs reconciliation.</li>
+                <li><b>Hindi-first microcopy</b> — matches real shop-floor language, not translated enterprise English.</li>
+                <li><b>Large tap targets, high contrast</b> — deliberately breaks the desktop enterprise design system (dense, neutral) because this is a different user and context.</li>
+                <li><b>Immediate confirmation</b> — WhatsApp-style reassurance closes the loop so the karigar isn't left wondering if it worked.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <div id="overlay" onclick="closeDrawer()"></div>
+  <div id="drawer">
+    <div class="dhead">
+      <div><div class="did" id="d-id">—</div><div class="dname" id="d-name">—</div></div>
+      <button class="x" onclick="closeDrawer()">✕</button>
+    </div>
+    <div class="dbody" id="d-body"></div>
+    <div class="dfoot"><button class="btn" onclick="toast('Sending to print','Generating PDF…')">Print</button><button class="btn" onclick="toast('Audit History','Who created / edited / approved this record — full trail.')">Audit History</button><button class="btn primary flexgrow" id="d-openfull" onclick="openFullFromDrawer()">Open Full Record</button></div>
+  </div>
+
+  <div id="toastwrap"></div>
+
+</div>
+
+<script>
+// ---------- NAV ----------
+const navLinks = document.querySelectorAll('#side a[data-view]');
+navLinks.forEach(a=>{
+  a.addEventListener('click', ()=> go(a.dataset.view));
+});
+function go(view){
+  document.querySelectorAll('.viewpane').forEach(v=>v.classList.add('hidden'));
+  const target = document.getElementById('v-'+view);
+  if(target) target.classList.remove('hidden');
+  navLinks.forEach(a=>a.classList.toggle('active', a.dataset.view===view));
+  if(view==='production') loadKanban();
+}
+
+// ---------- ESTIMATE TABS ----------
+function switchEstTab(evt, which){
+  document.querySelectorAll('#v-estimates .tabs .t').forEach(t=>t.classList.remove('active'));
+  if(evt) evt.target.classList.add('active');
+  else document.querySelectorAll('#v-estimates .tabs .t')[1].classList.add('active');
+  document.getElementById('est-list-pane').classList.toggle('hidden', which==='builder');
+  document.getElementById('est-builder-pane').classList.toggle('hidden', which==='list');
+}
+
+// ---------- KANBAN ----------
+const kanbanCols = [
+  {key:'plan', label:'Material Planning', jobs:[
+    {id:'JG-00161', name:'Diamond Studs', meta:'ORD-1058 · Kailash', due:'12 Aug'},
+    {id:'JG-00162', name:'Gold Bangle Pair', meta:'ORD-1059 · Unassigned', due:'14 Aug'}
+  ]},
+  {key:'ready', label:'Ready for Issue', jobs:[
+    {id:'JG-00158', name:'Temple Pendant', meta:'ORD-1057 · Ramesh', due:'11 Aug'}
+  ]},
+  {key:'karigar', label:'With Karigar', jobs:[
+    {id:'JG-00152', name:'Polki Choker — Pendant', meta:'ORD-1052 · Ramesh Jeweller', due:'14 Aug', pill:'info'},
+    {id:'JG-00142', name:'Bridal Set — Necklace', meta:'ORD-1050 · Imran Polki Works', due:'06 Aug', pill:'err', tag:'Overdue'},
+    {id:'JG-00131', name:'Emerald Ring', meta:'ORD-1053 · Kailash', due:'13 Aug'}
+  ]},
+  {key:'return', label:'Return Pending', jobs:[
+    {id:'JG-00119', name:'Gold Bangles ×4', meta:'ORD-1044 · Mohan Goldsmith', due:'—', pill:'warn', tag:'Discrepancy'},
+    {id:'JG-00121', name:'Nose Ring — Nath', meta:'ORD-1046 · Suresh', due:'08 Aug'}
+  ]},
+  {key:'recon', label:'Reconciliation', jobs:[
+    {id:'JG-00104', name:'Kada — Men\'s', meta:'ORD-1039 · Suresh Meenakari', due:'—', pill:'warn'},
+    {id:'JG-00098', name:'Diamond Earrings', meta:'ORD-1035 · Kailash', due:'—'}
+  ]},
+  {key:'assembly', label:'Assembly', jobs:[
+    {id:'JG-00152A', name:'Polki Choker — Full Set', meta:'ORD-1052 · Deepak', due:'16 Aug'}
+  ]},
+  {key:'qc', label:'QC', jobs:[
+    {id:'FP-0231', name:'Bridal Necklace Set', meta:'ORD-1041 · QC: Aadil', due:'—', pill:'err', tag:'Failed'},
+    {id:'FP-0229', name:'Diamond Drop Earrings', meta:'ORD-1038 · QC: Aadil', due:'—', pill:'ok', tag:'Passed'}
+  ]},
+  {key:'ready2', label:'Ready for Delivery', jobs:[
+    {id:'FP-0225', name:'Gold Kada', meta:'ORD-1030 · Vikram Oswal', due:'—'},
+    {id:'FP-0221', name:'Moti Bracelet', meta:'ORD-1027 · Priya Sharma', due:'—'}
+  ]}
+];
+function loadKanban(){
+  const el = document.getElementById('kanban');
+  if(el.dataset.loaded) return;
+  el.dataset.loaded = '1';
+  el.innerHTML = kanbanCols.map(col=>`
+    <div class="kcol">
+      <div class="kh"><span>${col.label}</span><span>${col.jobs.length}</span></div>
+      <div class="kb">
+        ${col.jobs.map(j=>`
+          <div class="kcard" onclick="openDrawer('job','${j.id}')">
+            <div class="kid">${j.id}</div>
+            <div class="kname">${j.name}</div>
+            <div class="kmeta">${j.meta}</div>
+            <div class="kfoot">
+              <span class="kmeta">Due ${j.due}</span>
+              ${j.tag ? `<span class="pill ${j.pill||'neu'}">${j.tag}</span>` : ''}
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+// ---------- DRAWER ----------
+const drawerData = {
+  job: {
+    id:'JG-2026-00119', name:'Gold Bangles ×4 — Casting & Finish',
+    kv:[['Order','ORD-1044'],['Customer','Vikram Oswal'],['Karigar','Mohan Goldsmith'],['Assigned','29-Jul-2026'],['Due','05-Aug-2026'],['Status','🔴 Recon — Major']],
+    sec:[{t:'Material Issued vs Returned', rows:['Gold 22K|Issued 96.200g|Returned 87.180g','Expected consumption|8.200g|Actual 9.020g','Difference|+0.820g|Exceeds 0.3g tolerance']},
+         {t:'Timeline', tl:['29-Jul 09:40 — Material issued (MIV-2026-00579)','02-Aug 17:10 — Karigar reported casting complete','06-Aug 14:00 — Return logged (MRV-2026-00601)','07-Aug 10:15 — Reconciliation flagged 🔴 Major']}]
+  },
+  karigar: {
+    id:'Ramesh Jeweller', name:'Polki & Stone Setting Specialist',
+    kv:[['Mobile','+91 98290 11234'],['Active Jobs','8'],['Gold w/ Karigar','82.450g'],['Polki w/ Karigar','184 pcs'],['Labour Payable','₹42,500'],['Overdue Jobs','0']],
+    sec:[{t:'Active Jobs', rows:['JG-2026-00152|Polki Choker — Pendant|Due 14 Aug','JG-2026-00158|Temple Pendant|Due 11 Aug','JG-2026-00087|Necklace Chain|🔴 Major recon']},
+         {t:'Timeline', tl:['04-Aug — Material issued MIV-2026-00582 (52.430g Gold, 24 Polki)','07-Aug — Partial return MRV-2026-00614 (47.820g)','07-Aug — Labour credited ₹4,500 for JG-00087']}]
+  },
+  estimate: {
+    id:'CH-562', name:'Polki Choker — Bridal',
+    kv:[['Customer','Rajesh Kumar'],['Salesperson','Sunita'],['Status','Approved · V3'],['Final Amount','₹2,57,500'],['Expected Delivery','20-Aug-2026'],['Converted','ORD-1052']],
+    sec:[{t:'Revision History', rows:['V1|04-Jul-2026|₹2,45,000','V2|18-Jul-2026|₹2,61,000','V3|04-Aug-2026|₹2,57,500 (Approved)']}]
+  },
+  miv: {
+    id:'MIV-2026-00582', name:'Material Issue Voucher',
+    kv:[['Job','JG-2026-00152'],['Karigar','Ramesh Jeweller'],['Date','04-Aug-2026'],['Employee','Sunita'],['Gross Wt','52.430g'],['Fine Wt','48.061g']],
+    sec:[{t:'Items', rows:['Gold 22K|Batch GB-2607|48.100g','Polki — Kundan cut|24 pcs|4.330g']}]
+  },
+  design: {
+    id:'CH-562', name:'Polki Choker — Bridal',
+    kv:[['Category','Necklace — Choker'],['Material','Gold + Polki'],['Style','Bridal / Heavy'],['Created','Mar 2026'],['Customer','Rajesh Kumar'],['Status','Completed']],
+    sec:[{t:'Commercial', rows:['Estimate value|₹2,57,500','Actual cost|₹2,04,900','Margin|₹52,600']},
+         {t:'Production', rows:['Karigars|Ramesh, Deepak','Jobs|JG-2026-00152, 00152A','Production time|12 days']}]
+  },
+  customer:{id:'Rajesh Kumar', name:'Customer Profile', kv:[['Mobile','+91 98290 xxxxx'],['Orders','6'],['LTV','₹18,42,600'],['Outstanding','₹0'],['Advance','₹0'],['Last Order','04-Aug-2026']],
+    sec:[{t:'Order Timeline', tl:['12-Mar-2026 — CH-411 estimate approved','20-Mar-2026 — ORD-1004 delivered ₹1,84,200','04-Jul-2026 — CH-562 estimate raised','04-Aug-2026 — CH-562 approved ₹2,57,500, converted to ORD-1052']}]},
+  order:{id:'ORD-1052', name:'Order — Polki Choker', kv:[['Customer','Rajesh Kumar'],['Estimate','CH-562'],['Approved Amount','₹2,57,500'],['Advance Received','₹2,57,500'],['Balance','₹0'],['Status','Assembly']],
+    sec:[{t:'Production Chain', rows:['Design|CH-562|Polki Choker — Bridal','Job|JG-2026-00152|With Ramesh Jeweller','Material Issue|MIV-2026-00582|52.430g Gold + 24 Polki']}]},
+  assembly:{id:'ORD-1052', name:'Assembly — Polki Choker', kv:[['Assembler','Deepak'],['Components','Pendant ✓ Chain ✓ Earrings ✓'],['Started','06-Aug-2026'],['Final Weight (target)','44.092g'],['Status','In Assembly']],
+    sec:[{t:'Component Status', rows:['Pendant|Complete|18.500g','Chain|Complete|20.100g','Earrings|Complete|5.492g']}]},
+  qc:{id:'FP-2026-0231', name:'QC — NK-204 Bridal Necklace Set', kv:[['Design','NK-204'],['Inspector','Aadil Bhati'],['Weight Check','Pass'],['Stone Count','Fail — 1 prong loose'],['Result','Rework Required']],
+    sec:[{t:'Checklist', rows:['Weight verified|Pass','Dimensions verified|Pass','Finish & polish|Pass','Stone setting / prongs|Fail — rear prong loose on clasp','Gold purity verified|Pass']}]},
+  stone:{id:'DIA-26-000582', name:'Diamond — Round Brilliant', kv:[['Shape','Round'],['Carat','0.35ct'],['Colour','G'],['Clarity','VS1'],['Certification','GIA 6215xxxx'],['Current Location','Kailash Diamond Setter']],
+    sec:[{t:'Movement History', tl:['12-Jul-2026 — Purchased from Hasmukh Gems, ₹31,500','25-Jul-2026 — Issued on MIV-2026-00571 to Kailash Diamond Setter','Awaiting return / setting completion']}]},
+  finished:{id:'SKU-CH562-001', name:'Polki Choker — Finished', kv:[['Design','CH-562'],['Customer','Rajesh Kumar'],['Net Weight','44.092g'],['Cost','₹2,04,900'],['Selling Price','₹2,57,500'],['Margin','₹52,600']],
+    sec:[{t:'Production History', rows:['Karigars|Ramesh Jeweller, Deepak','QC|Passed 07-Aug-2026','Delivery|Scheduled 20-Aug-2026']}]},
+  ledgertxn:{id:'RCPT-4471', name:'Ledger Transaction', kv:[['Type','Payment — UPI'],['Customer','Rajesh Kumar'],['Amount','₹2,57,500'],['Date','04-Aug-2026'],['Order','ORD-1052']], sec:[]},
+  mrv:{id:'MRV-2026-00614', name:'Material Return Voucher', kv:[['Job','JG-2026-00152'],['Karigar','Ramesh Jeweller'],['Return Date','07-Aug-2026'],['Returned Wt','47.820g'],['Type','Partial — finished piece'],['Status','Under Reconciliation']],
+    sec:[{t:'Return Breakdown', rows:['Finished pendant|1 pc|18.500g','Reusable scrap|—|1.020g','Cut/waste|—|0.300g']}]}
+};
+let lastDrawerType = null;
+const drawerToView = {job:'recon', karigar:'karigars', estimate:'estimates', miv:'issue', mrv:'issue', design:'portfolio', customer:'customers', order:'orders', assembly:'assembly', qc:'qc', stone:'stoneledger', finished:'finished', ledgertxn:'ledger'};
+function openFullFromDrawer(){
+  const view = drawerToView[lastDrawerType] || 'dashboard';
+  closeDrawer();
+  go(view);
+  if(view==='estimates') switchEstTab(null,'builder');
+  toast('Opened full record', 'Navigated to ' + view.charAt(0).toUpperCase()+view.slice(1));
+}
+function convertToOrder(){
+  toast('Estimate converted', 'CH-562 → ORD-1052 created. Redirecting to Orders…');
+  setTimeout(()=>{ go('orders'); }, 500);
+}
+function switchIssueTab(evt, which){
+  document.querySelectorAll('#v-issue .tabs .t').forEach(t=>t.classList.remove('active'));
+  if(evt) evt.target.classList.add('active');
+  document.getElementById('issue-iss-pane').classList.toggle('hidden', which!=='iss');
+  document.getElementById('issue-ret-pane').classList.toggle('hidden', which!=='ret');
+}
+function openDrawer(type,key){
+  const d = drawerData[type] || {id:key,name:type,kv:[],sec:[]};
+  lastDrawerType = type;
+  document.getElementById('d-id').textContent = d.id;
+  document.getElementById('d-name').textContent = d.name;
+  let html = `<div class="dsec"><div class="dt">Overview</div><div class="kv">${d.kv.map(([k,v])=>`<div><div class="k">${k}</div><div class="v">${v}</div></div>`).join('')}</div></div>`;
+  (d.sec||[]).forEach(s=>{
+    html += `<div class="dsec"><div class="dt">${s.t}</div>`;
+    if(s.rows){
+      html += `<table class="mini-table">${s.rows.map(r=>{
+        const parts = r.split('|');
+        return `<tr>${parts.map(p=>`<td>${p}</td>`).join('')}</tr>`;
+      }).join('')}</table>`;
+    }
+    if(s.tl){
+      html += `<div class="timeline">${s.tl.map(t=>`<div class="tlrow"><div class="tt">${t}</div></div>`).join('')}</div>`;
+    }
+    html += `</div>`;
+  });
+  document.getElementById('d-body').innerHTML = html;
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('overlay').classList.add('open');
+}
+function closeDrawer(){
+  document.getElementById('drawer').classList.remove('open');
+  document.getElementById('overlay').classList.remove('open');
+}
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeDrawer(); });
+
+// ---------- TOAST ----------
+function toast(title, sub){
+  const wrap = document.getElementById('toastwrap');
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.innerHTML = `<div class="tt">${title}</div>${sub?`<div class="ts">${sub}</div>`:''}`;
+  wrap.appendChild(el);
+  requestAnimationFrame(()=> el.classList.add('show'));
+  setTimeout(()=>{ el.classList.remove('show'); setTimeout(()=> el.remove(), 200); }, 2600);
+}
+
+// ---------- CHIP REMOVAL ----------
+function removeChip(evt){
+  evt.stopPropagation();
+  const chip = evt.target.closest('.chip');
+  if(chip){ toast('Filter removed', chip.textContent.replace('×','').trim()); chip.remove(); }
+}
+
+// ---------- GLOBAL BUTTON WIRING ----------
+// Any .btn without an explicit onclick gets a sensible toast so every control feels live.
+document.querySelectorAll('.btn').forEach(btn=>{
+  if(btn.getAttribute('onclick')) return;
+  btn.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    const label = btn.textContent.trim();
+    if(label.startsWith('+')){
+      toast(label.replace('+','').trim() + ' — form opened', 'This would open a create form wired to the API.');
+    } else if(label.toLowerCase().includes('export')){
+      toast('Export queued', 'Preparing file for download…');
+    } else if(label.toLowerCase().includes('print')){
+      toast('Sending to print', 'Generating PDF…');
+    } else {
+      toast(label, 'Action triggered');
+    }
+  });
+});
+
+// ---------- LIVE SEARCH FILTER ----------
+// Each .search input filters the row text of the nearest following .grid-wrap table, or pgrid cards, or kanban cards.
+document.querySelectorAll('.search input').forEach(inp=>{
+  inp.addEventListener('input', ()=>{
+    const q = inp.value.trim().toLowerCase();
+    const view = inp.closest('#issue-iss-pane, #issue-ret-pane, #est-list-pane, #est-builder-pane') || inp.closest('.viewpane') || document;
+    const rows = view.querySelectorAll('.grid-wrap tbody tr');
+    let visible = 0;
+    rows.forEach(r=>{
+      const match = r.textContent.toLowerCase().includes(q);
+      r.style.display = match ? '' : 'none';
+      if(match) visible++;
+    });
+    const cards = view.querySelectorAll('.pcard, .kcard');
+    cards.forEach(c=>{
+      const match = c.textContent.toLowerCase().includes(q);
+      c.style.display = match ? '' : 'none';
+    });
+    const foot = view.querySelector('.footer span');
+    if(foot && rows.length) foot.textContent = `${visible} of ${rows.length} records`;
+  });
+});
+
+// ---------- KARIGAR MOBILE PREVIEW ----------
+function mShow(id){
+  document.querySelectorAll('.mscreen').forEach(s=>s.classList.add('hidden'));
+  const el = document.getElementById('mscreen-'+id);
+  if(el) el.classList.remove('hidden');
+}
+function mOpenJob(id,name,gold,polki,material,due,status){
+  document.getElementById('m-d-id').textContent = id;
+  document.getElementById('m-d-name').textContent = name;
+  document.getElementById('m-d-gold').textContent = (gold==='—' ? '—' : gold+' g');
+  document.getElementById('m-d-polki').textContent = (polki==='—' ? material : polki+' pcs');
+  document.getElementById('m-d-due').textContent = due;
+  mShow('detail');
+}
+function mChip(el){
+  el.parentElement.querySelectorAll('.mchip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+}
+mShow('list');
+
+// init
+switchEstTab(null,'list');
+</script>
+</body>
+</html>

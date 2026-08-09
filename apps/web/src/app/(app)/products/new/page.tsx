@@ -57,28 +57,31 @@ export default function NewProductPage() {
   }
 
   return (
-    <div className="max-w-3xl space-y-5">
-      <h1 className="text-xl font-semibold">New Product</h1>
+    <div className="max-w-3xl">
+      <div className="mb-2">
+        <div className="text-[11px] text-mute mb-1">Product</div>
+        <h1 className="text-[19px] font-semibold text-ink">New Product</h1>
+      </div>
 
-      <div className="card p-4 bg-gold-tint border-gold/30">
-        <div className="label mb-0">Serial Number</div>
-        <div className="font-mono text-gold font-bold text-lg">Auto-generated on save</div>
-        <p className="text-xs text-text-muted mt-1">
+      <div className="console-panel p-3.5 mb-3.5" style={{ background: "#FFF3DA", borderColor: "#F3DFAE" }}>
+        <div className="console-field-label mb-0.5">Serial Number</div>
+        <div className="mono text-accent font-bold text-lg">Auto-generated on save</div>
+        <p className="text-xs text-ink2 mt-1">
           Cannot be edited once assigned — the format is Category-Purity-YYMM-Sequence.
         </p>
       </div>
 
-      <form onSubmit={onSubmit} className="card p-6 space-y-4">
-        <div className="grid sm:grid-cols-2 gap-4">
+      <form onSubmit={onSubmit} className="console-panel p-4 space-y-3.5">
+        <div className="grid sm:grid-cols-2 gap-3.5">
           <div>
-            <label className="label">Design Name</label>
-            <input required className="input" value={designName} onChange={(e) => setDesignName(e.target.value)} />
+            <label className="console-field-label">Design Name</label>
+            <input required className="console-field" value={designName} onChange={(e) => setDesignName(e.target.value)} />
           </div>
           <div>
-            <label className="label">Category</label>
+            <label className="console-field-label">Category</label>
             <select
               required
-              className="input"
+              className="console-field"
               value={categoryId}
               onChange={(e) => {
                 setCategoryId(e.target.value);
@@ -94,9 +97,9 @@ export default function NewProductPage() {
             </select>
           </div>
           <div>
-            <label className="label">Subcategory</label>
+            <label className="console-field-label">Subcategory</label>
             <select
-              className="input"
+              className="console-field"
               value={subcategoryId}
               onChange={(e) => setSubcategoryId(e.target.value)}
               disabled={!activeCategory}
@@ -110,8 +113,8 @@ export default function NewProductPage() {
             </select>
           </div>
           <div>
-            <label className="label">Purity</label>
-            <select required className="input" value={purityId} onChange={(e) => setPurityId(e.target.value)}>
+            <label className="console-field-label">Purity</label>
+            <select required className="console-field" value={purityId} onChange={(e) => setPurityId(e.target.value)}>
               <option value="">Select…</option>
               {karats?.map((k) => (
                 <option key={k.id} value={k.id}>
@@ -121,40 +124,40 @@ export default function NewProductPage() {
             </select>
           </div>
           <div>
-            <label className="label">Gross Weight (g)</label>
+            <label className="console-field-label">Gross Weight (g)</label>
             <input
               required
               type="number"
               step="0.001"
               min="0"
-              className="input"
+              className="console-field"
               value={grossWeightG}
               onChange={(e) => setGrossWeightG(e.target.value)}
             />
           </div>
           <div>
-            <label className="label">Stone Weight (crt)</label>
+            <label className="console-field-label">Stone Weight (crt)</label>
             <input
               type="number"
               step="0.001"
               min="0"
-              className="input"
+              className="console-field"
               value={stoneWeightCt}
               onChange={(e) => setStoneWeightCt(e.target.value)}
             />
           </div>
           <div>
-            <label className="label">Net Weight (auto)</label>
-            <input disabled className="input bg-bg text-text-muted" value={netWeight ? `${netWeight} g` : ""} />
-            <p className="text-xs text-text-muted mt-1">Gross − Stone (0.2 g per carat)</p>
+            <label className="console-field-label">Net Weight (auto)</label>
+            <input disabled className="console-field" value={netWeight ? `${netWeight} g` : ""} />
+            <p className="text-xs text-mute mt-1">Gross − Stone (0.2 g per carat)</p>
           </div>
           <div>
-            <label className="label">Size / Dimensions</label>
-            <input className="input" value={size} onChange={(e) => setSize(e.target.value)} />
+            <label className="console-field-label">Size / Dimensions</label>
+            <input className="console-field" value={size} onChange={(e) => setSize(e.target.value)} />
           </div>
           <div>
-            <label className="label">Customer (optional)</label>
-            <select className="input" value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
+            <label className="console-field-label">Customer (optional)</label>
+            <select className="console-field" value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
               <option value="">— None —</option>
               {customers?.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -166,17 +169,17 @@ export default function NewProductPage() {
         </div>
 
         <div>
-          <label className="label">Description</label>
-          <textarea className="input" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
+          <label className="console-field-label">Description</label>
+          <textarea className="console-field" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
         </div>
 
-        {error && <p className="text-sm text-danger">{error}</p>}
+        {error && <p className="text-sm text-err-tx">{error}</p>}
 
-        <div className="flex justify-end gap-2 pt-2 border-t border-border">
-          <button type="button" className="btn btn-ghost" onClick={() => router.back()}>
+        <div className="flex justify-end gap-2 pt-2 border-t border-line">
+          <button type="button" className="console-btn" onClick={() => router.back()}>
             Cancel
           </button>
-          <button type="submit" disabled={submitting} className="btn btn-primary">
+          <button type="submit" disabled={submitting} className="console-btn primary">
             {submitting ? "Saving…" : "Save Product"}
           </button>
         </div>

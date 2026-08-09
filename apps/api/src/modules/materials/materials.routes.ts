@@ -7,8 +7,9 @@ import { recordAudit } from "../../services/audit";
 import { badRequest, notFound } from "../../utils/httpError";
 import { fineWeight, round3 } from "@jms/shared";
 import { nextVoucherNumber } from "../../services/voucherNumber";
-import { recomputeStageWastage } from "./wastage.service";
+import { recomputeStageWastage, issuedGoldPurityFactor, receiptFineWeights } from "./wastage.service";
 import { isStockLedgerEnabled } from "../../services/settings";
+import { notify } from "../../services/notifications";
 
 const router = Router();
 
@@ -110,32 +111,86 @@ router.post(
   })
 );
 
+// GET /issues — with jobStageId: the small array a job-card stage form needs.
+// Without it: the paginated, cross-job Material Issue Voucher list (Module M).
 router.get(
   "/issues",
   requireAuth,
   asyncHandler(async (req, res) => {
-    const jobStageId = z.string().min(1).parse(req.query.jobStageId);
-    res.json(
-      await prisma.materialIssue.findMany({
-        where: { jobStageId, isReversed: false },
-        orderBy: { issuedAt: "desc" },
+    const jobStageId = z.string().min(1).optional().parse(req.query.jobStageId);
+    if (jobStageId) {
+      res.json(
+        await prisma.materialIssue.findMany({
+          where: { jobStageId, isReversed: false },
+          orderBy: { issuedAt: "desc" },
+        })
+      );
+      return;
+    }
+
+    const q = z
+      .object({
+        page: z.coerce.number().int().min(1).default(1),
+        pageSize: z.coerce.number().int().min(1).max(200).default(50),
+        search: z.string().optional(),
       })
-    );
+      .parse(req.query);
+
+    const where = q.search
+      ? {
+          OR: [
+            { issueNo: { contains: q.search, mode: "insensitive" as const } },
+            { karigar: { name: { contains: q.search, mode: "insensitive" as const } } },
+            { jobStage: { jobCard: { product: { serialNo: { contains: q.search, mode: "insensitive" as const } } } } },
+          ],
+        }
+      : {};
+
+    const [items, total] = await Promise.all([
+      prisma.materialIssue.findMany({
+        where,
+        include: {
+          karigar: { select: { id: true, name: true } },
+          purity: { select: { code: true } },
+          stoneType: { select: { name: true } },
+          jobStage: {
+            include: {
+              jobCard: { include: { product: { select: { serialNo: true, designName: true } } } },
+              processStage: { select: { name: true } },
+            },
+          },
+        },
+        orderBy: { issuedAt: "desc" },
+        skip: (q.page - 1) * q.pageSize,
+        take: q.pageSize,
+      }),
+      prisma.materialIssue.count({ where }),
+    ]);
+
+    res.json({ items, total, page: q.page, pageSize: q.pageSize });
   })
 );
 
 // --- Material Receipt & reconciliation (FR-4.03, Module 5) ------------------
-const receiptSchema = z.object({
-  jobStageId: z.string().min(1),
-  karigarId: z.string().min(1),
-  finishedPieceWeightG: z.number().nonnegative(),
-  dustWeightG: z.number().nonnegative().default(0),
-  unusedReturnedWeightG: z.number().nonnegative().default(0),
-  stonesReturned: z
-    .array(z.object({ stoneTypeId: z.string(), caratWeight: z.number(), pieces: z.number().int() }))
-    .optional(),
-  dustLotId: z.string().optional(),
-});
+const receiptSchema = z
+  .object({
+    jobStageId: z.string().min(1),
+    karigarId: z.string().min(1),
+    finishedPieceWeightG: z.number().nonnegative(),
+    fillerWeightG: z.number().nonnegative().default(0),
+    fillerNote: z.string().optional(),
+    pieceWeightIsFine: z.boolean().default(true),
+    dustWeightG: z.number().nonnegative().default(0),
+    unusedReturnedWeightG: z.number().nonnegative().default(0),
+    stonesReturned: z
+      .array(z.object({ stoneTypeId: z.string(), caratWeight: z.number(), pieces: z.number().int() }))
+      .optional(),
+    dustLotId: z.string().optional(),
+  })
+  .refine((v) => v.fillerWeightG <= v.finishedPieceWeightG, {
+    message: "Filler weight can't exceed the finished piece weight",
+    path: ["fillerWeightG"],
+  });
 
 router.post(
   "/receipts",
@@ -150,6 +205,9 @@ router.post(
         jobStageId: body.jobStageId,
         karigarId: body.karigarId,
         finishedPieceWeightG: body.finishedPieceWeightG,
+        fillerWeightG: body.fillerWeightG,
+        fillerNote: body.fillerNote,
+        pieceWeightIsFine: body.pieceWeightIsFine,
         dustWeightG: body.dustWeightG,
         unusedReturnedWeightG: body.unusedReturnedWeightG,
         stonesReturnedJson: body.stonesReturned,
@@ -169,8 +227,19 @@ router.post(
       include: { jobCard: { include: { product: { include: { purity: true } } } } },
     });
     const purityFactor = Number(purity!.jobCard.product.purity.purityFactor);
+    const issuedPurityFactor = await issuedGoldPurityFactor(body.jobStageId, purityFactor);
     const totalFineReturned = round3(
-      (body.finishedPieceWeightG + body.dustWeightG + body.unusedReturnedWeightG) * purityFactor
+      receiptFineWeights(
+        {
+          finishedPieceWeightG: body.finishedPieceWeightG,
+          fillerWeightG: body.fillerWeightG,
+          pieceWeightIsFine: body.pieceWeightIsFine,
+          dustWeightG: body.dustWeightG,
+          unusedReturnedWeightG: body.unusedReturnedWeightG,
+        },
+        purityFactor,
+        issuedPurityFactor
+      ).totalFineG
     );
     await prisma.karigarLedgerEntry.create({
       data: {
@@ -211,6 +280,17 @@ router.post(
 
     const wastage = await recomputeStageWastage(body.jobStageId);
 
+    if (wastage.exceptionStatus === "PENDING") {
+      await notify({
+        role: "MANAGER",
+        type: "WASTAGE_EXCEPTION",
+        title: `Wastage exception on ${purity!.jobCard.product.serialNo}`,
+        body: `${wastage.wastagePct}% exceeds the ${wastage.tolerancePct}% tolerance — needs a decision.`,
+        entityType: "JobStage",
+        entityId: body.jobStageId,
+      });
+    }
+
     await recordAudit(prisma, {
       userId: req.user!.id,
       action: "CREATE",
@@ -224,15 +304,107 @@ router.post(
   })
 );
 
+// GET /receipts — same pattern as /issues above: scoped array for a single
+// stage, or the paginated cross-job Material Return Voucher list.
 router.get(
   "/receipts",
   requireAuth,
   asyncHandler(async (req, res) => {
-    const jobStageId = z.string().min(1).parse(req.query.jobStageId);
-    res.json(
-      await prisma.materialReceipt.findMany({
-        where: { jobStageId, isReversed: false },
+    const jobStageId = z.string().min(1).optional().parse(req.query.jobStageId);
+    if (jobStageId) {
+      res.json(
+        await prisma.materialReceipt.findMany({
+          where: { jobStageId, isReversed: false },
+          orderBy: { receivedAt: "desc" },
+        })
+      );
+      return;
+    }
+
+    const q = z
+      .object({
+        page: z.coerce.number().int().min(1).default(1),
+        pageSize: z.coerce.number().int().min(1).max(200).default(50),
+        search: z.string().optional(),
+      })
+      .parse(req.query);
+
+    const where = q.search
+      ? {
+          OR: [
+            { receiptNo: { contains: q.search, mode: "insensitive" as const } },
+            { karigar: { name: { contains: q.search, mode: "insensitive" as const } } },
+            { jobStage: { jobCard: { product: { serialNo: { contains: q.search, mode: "insensitive" as const } } } } },
+          ],
+        }
+      : {};
+
+    const [items, total] = await Promise.all([
+      prisma.materialReceipt.findMany({
+        where,
+        include: {
+          karigar: { select: { id: true, name: true } },
+          jobStage: {
+            include: {
+              jobCard: { include: { product: { select: { serialNo: true, designName: true } } } },
+              processStage: { select: { name: true } },
+              wastageRecord: { select: { withinTolerance: true, exceptionStatus: true, wastagePct: true } },
+            },
+          },
+        },
         orderBy: { receivedAt: "desc" },
+        skip: (q.page - 1) * q.pageSize,
+        take: q.pageSize,
+      }),
+      prisma.materialReceipt.count({ where }),
+    ]);
+
+    res.json({ items, total, page: q.page, pageSize: q.pageSize });
+  })
+);
+
+// Cross-job reconciliation board: every stage that has had material issued,
+// with its issued/returned/consumed/expected picture. Stages with a
+// WastageRecord already have the authoritative figures (from
+// recomputeStageWastage); stages still awaiting a receipt only have the
+// issued side, surfaced as "Return Pending" rather than invented numbers.
+router.get(
+  "/reconciliation",
+  requireAuth,
+  asyncHandler(async (_req, res) => {
+    const stages = await prisma.jobStage.findMany({
+      where: { materialIssues: { some: { isReversed: false } } },
+      include: {
+        karigar: { select: { id: true, name: true } },
+        processStage: { select: { name: true } },
+        jobCard: { include: { product: { select: { serialNo: true, designName: true } } } },
+        materialIssues: { where: { isReversed: false }, select: { fineWeightG: true, materialType: true } },
+        wastageRecord: true,
+      },
+      orderBy: { assignedAt: "desc" },
+    });
+
+    res.json(
+      stages.map((s) => {
+        const fineIssuedG = s.materialIssues.reduce((sum, i) => sum + Number(i.fineWeightG), 0);
+        const w = s.wastageRecord;
+        return {
+          jobStageId: s.id,
+          jobCardId: s.jobCard.id,
+          serialNo: s.jobCard.product.serialNo,
+          designName: s.jobCard.product.designName,
+          processStageName: s.processStage.name,
+          karigar: s.karigar,
+          materialType: s.materialIssues[0]?.materialType ?? "GOLD",
+          issuedG: round3(fineIssuedG),
+          returnedG: w ? round3(Number(w.finePieceG) + Number(w.fineDustG) + Number(w.fineReturnedG)) : null,
+          consumedG: w ? Number(w.netWastageG) : null,
+          expectedG: w ? round3(fineIssuedG * (Number(w.tolerancePct) / 100)) : null,
+          differenceG: w ? round3(Number(w.netWastageG) - fineIssuedG * (Number(w.tolerancePct) / 100)) : null,
+          withinTolerance: w?.withinTolerance ?? null,
+          exceptionStatus: w?.exceptionStatus ?? null,
+          status: !w ? "RETURN_PENDING" : w.withinTolerance ? "RECONCILED" : w.exceptionStatus,
+        };
       })
     );
   })

@@ -40,20 +40,51 @@ function ProductsPageInner() {
   const activeCategory = categories?.find((c) => c.id === categoryId);
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold">Product Catalogue</h1>
-          <p className="text-sm text-text-muted">{data ? `${data.total} designs` : "Loading…"}</p>
-        </div>
-        <Link href="/products/new" className="btn btn-primary">
-          <Plus size={16} /> New Product
-        </Link>
+    <div>
+      <div className="mb-2">
+        <div className="text-[11px] text-mute mb-1">Product</div>
+        <h1 className="text-[19px] font-semibold flex items-center gap-2.5 text-ink">
+          Design Portfolio
+          <span className="text-xs text-mute font-medium">{data ? `${data.total} designs` : ""}</span>
+        </h1>
       </div>
 
-      <div className="flex gap-2 overflow-x-auto pb-1">
+      <div className="flex items-center gap-2 flex-wrap py-2.5 border-t border-b border-line -mx-3.5 px-3.5 sm:-mx-[18px] sm:px-[18px] mb-3.5">
+        <Link href="/products/new" className="console-btn primary">
+          <Plus size={14} /> New Product
+        </Link>
+        <div className="console-search w-[230px]">
+          <Search size={13} />
+          <input
+            placeholder="Search design name or serial number…"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+          />
+        </div>
+        <select className="console-field w-auto" value={purityId} onChange={(e) => setPurityId(e.target.value)}>
+          <option value="">All purities</option>
+          {karats?.map((k) => (
+            <option key={k.id} value={k.id}>
+              {k.code}
+            </option>
+          ))}
+        </select>
+        <select className="console-field w-auto" value={status} onChange={(e) => setStatus(e.target.value)}>
+          <option value="">All statuses</option>
+          {STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {s.replace(/_/g, " ")}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex gap-2 overflow-x-auto pb-1 mb-2">
         <button
-          className={`pill ${!categoryId ? "bg-gold text-white" : "pill-neutral"} shrink-0`}
+          className={categoryId ? "console-pill neu" : "console-pill info"}
           onClick={() => {
             setCategoryId(null);
             setSubcategoryId(null);
@@ -65,7 +96,7 @@ function ProductsPageInner() {
         {categories?.map((c) => (
           <button
             key={c.id}
-            className={`pill ${categoryId === c.id ? "bg-gold text-white" : "pill-neutral"} shrink-0`}
+            className={categoryId === c.id ? "console-pill info" : "console-pill neu"}
             onClick={() => {
               setCategoryId(c.id);
               setSubcategoryId(null);
@@ -78,9 +109,9 @@ function ProductsPageInner() {
       </div>
 
       {activeCategory && activeCategory.subcategories.length > 0 && (
-        <div className="flex gap-2 overflow-x-auto">
+        <div className="flex gap-2 overflow-x-auto mb-3.5">
           <button
-            className={`pill text-xs ${!subcategoryId ? "bg-gold-tint text-gold" : "pill-neutral"} shrink-0`}
+            className={!subcategoryId ? "console-pill info" : "console-pill neu"}
             onClick={() => setSubcategoryId(null)}
           >
             All
@@ -88,7 +119,7 @@ function ProductsPageInner() {
           {activeCategory.subcategories.map((s) => (
             <button
               key={s.id}
-              className={`pill text-xs ${subcategoryId === s.id ? "bg-gold-tint text-gold" : "pill-neutral"} shrink-0`}
+              className={subcategoryId === s.id ? "console-pill info" : "console-pill neu"}
               onClick={() => setSubcategoryId(s.id)}
             >
               {s.name}
@@ -97,60 +128,29 @@ function ProductsPageInner() {
         </div>
       )}
 
-      <div className="card p-3 flex flex-wrap gap-3 items-center">
-        <div className="relative w-full sm:w-64">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-          <input
-            className="input pl-9 w-full"
-            placeholder="Search design name or serial number…"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-          />
-        </div>
-        <select className="input w-auto" value={purityId} onChange={(e) => setPurityId(e.target.value)}>
-          <option value="">All purities</option>
-          {karats?.map((k) => (
-            <option key={k.id} value={k.id}>
-              {k.code}
-            </option>
-          ))}
-        </select>
-        <select className="input w-auto" value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="">All statuses</option>
-          {STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {s.replace(/_/g, " ")}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+      <div className="pgrid">
         {data?.items.map((p) => (
           <ProductCard key={p.id} product={p} />
         ))}
       </div>
       {data?.items.length === 0 && (
-        <div className="text-center py-16 text-text-muted">No products match these filters.</div>
+        <div className="text-center py-16 text-mute">No products match these filters.</div>
       )}
 
       {data && data.total > pageSize && (
-        <div className="flex items-center justify-center gap-2 pt-2">
+        <div className="flex items-center justify-center gap-2 pt-3.5">
           <button
-            className="btn btn-outline"
+            className="console-btn"
             disabled={page <= 1}
             onClick={() => setPage((p) => p - 1)}
           >
             Previous
           </button>
-          <span className="text-sm text-text-muted">
+          <span className="text-xs text-mute">
             Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, data.total)} of {data.total}
           </span>
           <button
-            className="btn btn-outline"
+            className="console-btn"
             disabled={page * pageSize >= data.total}
             onClick={() => setPage((p) => p + 1)}
           >

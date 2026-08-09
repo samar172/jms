@@ -56,22 +56,23 @@ export default function VisualSearchPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Visual Search</h1>
-        <p className="text-sm text-text-muted mt-1">
+    <div>
+      <div className="mb-3.5">
+        <div className="text-[11px] text-mute mb-1">Product</div>
+        <h1 className="text-[19px] font-semibold text-ink">Visual Search</h1>
+        <p className="text-xs text-ink2 mt-0.5">
           Upload a photo of a jewelry piece to instantly find visually similar designs from your catalogue using AI.
         </p>
       </div>
 
-      <div className="grid md:grid-cols-3 gap-6">
-        <div className="md:col-span-1 space-y-4">
-          <div className="card p-5 border-dashed border-2 border-border flex flex-col items-center justify-center text-center bg-bg">
+      <div className="grid md:grid-cols-3 gap-3.5">
+        <div className="md:col-span-1 space-y-3">
+          <div className="console-panel p-4 border-dashed border-2 flex flex-col items-center justify-center text-center bg-neu-bg">
             {preview ? (
-              <div className="space-y-4 w-full">
-                <img src={preview} alt="Upload preview" className="w-full max-h-64 object-contain rounded-lg" />
-                <button 
-                  className="btn btn-outline w-full"
+              <div className="space-y-3 w-full">
+                <img src={preview} alt="Upload preview" className="w-full max-h-64 object-contain rounded-md" />
+                <button
+                  className="console-btn w-full justify-center"
                   onClick={() => {
                     setFile(null);
                     setPreview(null);
@@ -82,75 +83,72 @@ export default function VisualSearchPage() {
                 </button>
               </div>
             ) : (
-              <div className="py-10 space-y-3 cursor-pointer w-full" onClick={() => fileInputRef.current?.click()}>
-                <div className="mx-auto w-12 h-12 rounded-full bg-gold-tint text-gold flex items-center justify-center">
-                  <Upload size={24} />
+              <div className="py-10 space-y-2.5 cursor-pointer w-full" onClick={() => fileInputRef.current?.click()}>
+                <div className="mx-auto w-11 h-11 rounded-full bg-accent-bg text-accent flex items-center justify-center">
+                  <Upload size={22} />
                 </div>
                 <div>
-                  <p className="font-medium">Click to upload image</p>
-                  <p className="text-xs text-text-muted mt-1">JPEG, PNG up to 5MB</p>
+                  <p className="font-medium text-[12.5px] text-ink">Click to upload image</p>
+                  <p className="text-xs text-mute mt-1">JPEG, PNG up to 5MB</p>
                 </div>
               </div>
             )}
-            <input 
-              type="file" 
-              className="hidden" 
-              ref={fileInputRef} 
-              accept="image/jpeg, image/png, image/webp" 
+            <input
+              type="file"
+              className="hidden"
+              ref={fileInputRef}
+              accept="image/jpeg, image/png, image/webp"
               onChange={handleFileChange}
             />
           </div>
 
-          <button 
-            className="btn btn-primary w-full py-3"
+          <button
+            className="console-btn primary w-full justify-center py-2.5"
             disabled={!file || loading}
             onClick={handleSearch}
           >
-            {loading ? "Searching..." : <><Search size={18} className="mr-2 inline" /> Find Similar Designs</>}
+            {loading ? "Searching..." : <><Search size={16} className="mr-1.5 inline" /> Find Similar Designs</>}
           </button>
 
-          {error && <p className="text-sm text-danger text-center">{error}</p>}
+          {error && <p className="text-sm text-err-tx text-center">{error}</p>}
         </div>
 
         <div className="md:col-span-2">
           {loading && (
-            <div className="h-full flex items-center justify-center text-text-muted py-20">
+            <div className="h-full flex items-center justify-center text-mute py-20">
               <div className="animate-pulse flex flex-col items-center">
-                <Search size={40} className="mb-4 text-gold" />
-                <p>Analyzing image vectors...</p>
+                <Search size={36} className="mb-3 text-accent" />
+                <p className="text-sm">Analyzing image vectors...</p>
               </div>
             </div>
           )}
 
           {!loading && results && (
-            <div className="space-y-4">
-              <h2 className="font-medium border-b border-border pb-2">
+            <div>
+              <h2 className="text-[11px] font-bold uppercase text-ink2 tracking-wide border-b border-line pb-2 mb-3">
                 Top Matches ({results.length})
               </h2>
-              
+
               {results.length === 0 ? (
-                <p className="text-text-muted py-10 text-center">No similar designs found in the catalogue.</p>
+                <p className="text-mute py-10 text-center text-sm">No similar designs found in the catalogue.</p>
               ) : (
-                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="pgrid">
                   {results.map((res) => (
-                    <Link key={res.imageId} href={`/products/${res.serialNo}`} className="card overflow-hidden hover:border-gold transition-colors group">
-                      <div className="aspect-square bg-bg relative overflow-hidden">
-                        <img 
-                          src={resolveMediaUrl(res.imageUrl)}  
+                    <Link key={res.imageId} href={`/products/${res.serialNo}`} className="border border-line rounded-md overflow-hidden bg-panel hover:border-accent transition-colors">
+                      <div className="aspect-square bg-neu-bg relative overflow-hidden">
+                        <img
+                          src={resolveMediaUrl(res.imageUrl)}
                           alt={res.designName}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
+                          className="w-full h-full object-cover"
                         />
                         <div className="absolute top-2 left-2">
                           <ProductStatusPill status={res.status} />
                         </div>
                       </div>
-                      <div className="p-3">
-                        <div className="font-mono text-xs text-gold mb-1">{res.serialNo}</div>
-                        <h3 className="font-medium text-sm truncate">{res.designName}</h3>
-                        {/* Cosine distance: 0 = perfect match, 2 = opposite. 
-                            If it's L2 distance, it might be different, but pgvector <-> is L2. 
-                            For L2 distance on normalized vectors, max is 2. */}
-                        <div className="text-xs text-text-muted mt-2 text-right">
+                      <div className="p-2.5">
+                        <div className="mono text-[11px] text-accent mb-0.5">{res.serialNo}</div>
+                        <h3 className="text-[12.5px] font-semibold text-ink truncate">{res.designName}</h3>
+                        <div className="text-[11px] text-mute mt-1.5 text-right mono">
                           Score: {res.distance.toFixed(3)}
                         </div>
                       </div>
@@ -162,9 +160,9 @@ export default function VisualSearchPage() {
           )}
 
           {!loading && !results && !preview && (
-            <div className="h-full flex flex-col items-center justify-center text-text-muted py-20 border-2 border-dashed border-border rounded-lg">
-              <ImageIcon size={48} className="mb-4 opacity-20" />
-              <p>Upload a photo to see results</p>
+            <div className="h-full flex flex-col items-center justify-center text-mute py-20 border-2 border-dashed border-line rounded-md">
+              <ImageIcon size={44} className="mb-3 opacity-20" />
+              <p className="text-sm">Upload a photo to see results</p>
             </div>
           )}
         </div>

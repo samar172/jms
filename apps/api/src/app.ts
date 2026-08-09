@@ -24,6 +24,12 @@ import settingsRoutes from "./modules/settings/settings.routes";
 import stockLedgerRoutes from "./modules/ledger/stock.routes";
 import customerLedgerRoutes from "./modules/ledger/customer.routes";
 import reportsRoutes from "./modules/reports/reports.routes";
+import ordersRoutes from "./modules/orders/orders.routes";
+import notificationsRoutes from "./modules/notifications/notifications.routes";
+import assemblyRoutes from "./modules/assembly/assembly.routes";
+import qcRoutes from "./modules/qc/qc.routes";
+import stonesRoutes from "./modules/stones/stones.routes";
+import globalSearchRoutes from "./modules/search/global.routes";
 
 export const app = express();
 
@@ -58,5 +64,11 @@ app.use("/api/settings", requireAuth, settingsRoutes);
 app.use("/api/ledger/stock", requireAuth, stockLedgerRoutes);
 app.use("/api/ledger/customers", requireAuth, customerLedgerRoutes);
 app.use("/api/reports", requireAuth, reportsRoutes);
+app.use("/api/orders", requireAuth, ordersRoutes);
+app.use("/api/notifications", requireAuth, notificationsRoutes);
+app.use("/api/assembly", requireAuth, assemblyRoutes);
+app.use("/api/qc", requireAuth, qcRoutes);
+app.use("/api/stones", requireAuth, stonesRoutes);
+app.use("/api/search", requireAuth, globalSearchRoutes);
 
 app.use(errorHandler);

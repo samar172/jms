@@ -54,6 +54,13 @@ model User {
   createdEstimates Estimate[]       @relation("EstimateCreatedBy")
   approvedEstimates Estimate[]      @relation("EstimateApprovedBy")
   approvedWastage  WastageRecord[]  @relation("WastageApprovedBy")
+  createdOrders    Order[]          @relation("OrderCreatedBy")
+  createdAssemblies Assembly[]      @relation("AssemblyCreatedBy")
+  qcInspections    QCInspection[]   @relation("QCInspectedBy")
+  createdStones    Stone[]          @relation("StoneCreatedBy")
+  stoneMovementsCreated StoneMovement[] @relation("StoneMovementCreatedBy")
+  notifications    Notification[]
+  notificationReads NotificationRead[]
 }
 
 enum AuditAction {
@@ -121,6 +128,7 @@ model StoneType {
   materialIssues   MaterialIssue[]
   estimateLines    EstimateLine[]
   stockLedgerEntries StockLedgerEntry[]
+  stones           Stone[]
 }
 
 model Category {
@@ -181,6 +189,9 @@ model Karigar {
   labourEntries   LabourEntry[]
   ledgerEntries   KarigarLedgerEntry[]
   estimates       Estimate[]
+  assembliesAssembled Assembly[]
+  stonesHeld      Stone[]
+  stoneMovements  StoneMovement[]
 
   @@index([isActive])
 }
@@ -213,7 +224,9 @@ model Customer {
 
   products  Product[]
   jobCards  JobCard[]
+  estimates Estimate[]
   ledgerEntries CustomerLedgerEntry[]
+  orders    Order[]
 }
 
 enum VendorType {
@@ -230,6 +243,7 @@ model Vendor {
 
   dustLots DustLot[]
   stockLedgerEntries StockLedgerEntry[]
+  stones   Stone[]
 }
 
 model ChargeType {
@@ -288,6 +302,7 @@ model Product {
   images         ProductImage[]
   jobCards       JobCard[]
   estimates      Estimate[]
+  orders         Order[]
 
   @@index([status])
   @@index([categoryId, purityId])
@@ -337,6 +352,11 @@ model JobCard {
   product            Product       @relation(fields: [productId], references: [id])
   customerId         String?
   customer           Customer?     @relation(fields: [customerId], references: [id])
+  // A multi-component order (e.g. a bridal set) has one JobCard per
+  // component, all pointing at the same Order — that's what Assembly later
+  // gathers back together. Single-piece jobs just leave this null.
+  orderId            String?
+  order              Order?        @relation(fields: [orderId], references: [id])
   targetDeliveryDate DateTime?
   status             JobCardStatus @default(OPEN)
   holdReason         String?
@@ -347,8 +367,10 @@ model JobCard {
   closedAt           DateTime?
 
   stages             JobStage[]
+  assemblyComponents AssemblyComponent[]
 
   @@index([status])
+  @@index([orderId])
 }
 
 enum JobStageStatus {
@@ -379,6 +401,8 @@ model JobStage {
   materialReceipts MaterialReceipt[]
   labourEntries    LabourEntry[]
   wastageRecord    WastageRecord?
+  stonesCurrentlyHere Stone[]
+  stoneMovements   StoneMovement[]
 
   @@index([jobCardId])
   @@index([status])
@@ -431,6 +455,17 @@ model MaterialReceipt {
   karigarId             String
   karigar               Karigar  @relation(fields: [karigarId], references: [id])
   finishedPieceWeightG  Decimal  @db.Decimal(10, 3)
+  // Non-gold material (wax, solder, support wire, etc.) a karigar mixes into
+  // the finished piece purely to shape/hold it while working — has zero gold
+  // value, so it must be netted out of finishedPieceWeightG before applying
+  // the purity factor, or it gets miscounted as fine gold "returned".
+  fillerWeightG         Decimal  @db.Decimal(10, 3) @default(0)
+  fillerNote            String?
+  // When true (the recommended default), (finishedPieceWeightG - fillerWeightG)
+  // is already the karigar's declared actual gold content and is credited
+  // as-is. When false, that net weight is still raw alloy and gets reduced by
+  // the product's purity factor first, same as before this field existed.
+  pieceWeightIsFine     Boolean  @default(true)
   dustWeightG           Decimal  @db.Decimal(10, 3) @default(0)
   unusedReturnedWeightG Decimal  @db.Decimal(10, 3) @default(0)
   stonesReturnedJson    Json?
@@ -590,6 +625,11 @@ model Estimate {
   product        Product        @relation(fields: [productId], references: [id])
   karigarId      String?
   karigar        Karigar?       @relation(fields: [karigarId], references: [id])
+  // Who this specific estimate is for — stored per-estimate (like JobCard.customerId)
+  // rather than on Product, since the same design is re-estimated for different
+  // customers over time and Product.customerId must not be overwritten by that.
+  customerId     String?
+  customer       Customer?      @relation(fields: [customerId], references: [id])
   type           EstimateType
   version        Int
   status         EstimateStatus @default(DRAFT)
@@ -618,8 +658,9 @@ model Estimate {
   approvedAt     DateTime?
 
   lines          EstimateLine[]
+  order          Order?
 
-  @@unique([productId, type, version])
+  @@unique([productId, type, customerId, version])
   @@index([productId])
 }
 
@@ -736,4 +777,244 @@ model CustomerLedgerEntry {
   createdAt     DateTime                 @default(now())
 
   @@index([customerId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Module 12 — Orders. An Order is created explicitly (Convert to Order) from
+// an APPROVED Final Costing estimate — it's the commercial commitment that
+// then drives everything downstream (material planning, assembly, QC,
+// delivery), separate from the estimate itself which stays locked per BR-08.
+// ---------------------------------------------------------------------------
+
+enum OrderStatus {
+  CONFIRMED
+  MATERIAL_PLANNING
+  MATERIAL_ISSUED
+  IN_PRODUCTION
+  MATERIAL_RETURN
+  RECONCILIATION
+  ASSEMBLY
+  QC
+  READY
+  DELIVERED
+}
+
+model Order {
+  id                   String      @id @default(cuid())
+  orderNo              String      @unique
+  productId            String
+  product              Product     @relation(fields: [productId], references: [id])
+  estimateId           String      @unique
+  estimate             Estimate    @relation(fields: [estimateId], references: [id])
+  customerId           String
+  customer             Customer    @relation(fields: [customerId], references: [id])
+  approvedAmount       Decimal     @db.Decimal(12, 2)
+  advanceReceived      Decimal     @db.Decimal(12, 2) @default(0)
+  status               OrderStatus @default(CONFIRMED)
+  expectedDeliveryDate DateTime?
+  deliveredAt          DateTime?
+
+  createdById          String
+  createdBy            User        @relation("OrderCreatedBy", fields: [createdById], references: [id])
+  createdAt            DateTime    @default(now())
+
+  jobCards             JobCard[]
+  assemblies           Assembly[]
+  qcInspections        QCInspection[]
+
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// Module 13 — Assembly. For a multi-component order (e.g. a bridal set with
+// separate JobCards for necklace/earrings/bangles), Assembly is where the
+// finished components get gathered, checked off, and weighed as one piece
+// before QC.
+// ---------------------------------------------------------------------------
+
+enum AssemblyStatus {
+  PENDING
+  IN_ASSEMBLY
+  ASSEMBLED
+}
+
+model Assembly {
+  id           String         @id @default(cuid())
+  orderId      String
+  order        Order          @relation(fields: [orderId], references: [id])
+  assemblerId  String?
+  assembler    Karigar?       @relation(fields: [assemblerId], references: [id])
+  status       AssemblyStatus @default(PENDING)
+  finalWeightG Decimal?       @db.Decimal(10, 3)
+  remarks      String?
+  startedAt    DateTime?
+  completedAt  DateTime?
+
+  createdById  String
+  createdBy    User           @relation("AssemblyCreatedBy", fields: [createdById], references: [id])
+  createdAt    DateTime       @default(now())
+
+  components   AssemblyComponent[]
+
+  @@index([orderId])
+}
+
+enum AssemblyComponentStatus {
+  PENDING
+  COMPLETE
+  MISSING
+}
+
+model AssemblyComponent {
+  id         String                   @id @default(cuid())
+  assemblyId String
+  assembly   Assembly                 @relation(fields: [assemblyId], references: [id])
+  jobCardId  String
+  jobCard    JobCard                  @relation(fields: [jobCardId], references: [id])
+  status     AssemblyComponentStatus  @default(PENDING)
+
+  @@index([assemblyId])
+}
+
+// ---------------------------------------------------------------------------
+// Module 14 — Quality Control. One inspection per Order (a failed inspection
+// gets re-submitted as a fresh row after rework, keeping the full history —
+// never edited in place, matching the append-only pattern used elsewhere).
+// ---------------------------------------------------------------------------
+
+enum QCResult {
+  PENDING
+  PASS
+  FAIL
+  REWORK_REQUIRED
+  APPROVED
+}
+
+model QCInspection {
+  id            String   @id @default(cuid())
+  orderId       String
+  order         Order    @relation(fields: [orderId], references: [id])
+  inspectorId   String
+  inspector     User     @relation("QCInspectedBy", fields: [inspectorId], references: [id])
+  checklistJson Json?
+  result        QCResult @default(PENDING)
+  remarks       String?
+  inspectedAt   DateTime @default(now())
+
+  @@index([orderId])
+}
+
+// ---------------------------------------------------------------------------
+// Module 15 — Stone / Diamond / Polki unit-level traceability. StoneType
+// (already in Module 1) is a rate/category master; Stone is the individual,
+// physically traceable unit — the thing the owner can ask "where is this
+// specific diamond right now?" about.
+// ---------------------------------------------------------------------------
+
+enum StoneStatus {
+  IN_STOCK
+  ISSUED
+  RETURNED
+  SET
+  SOLD
+}
+
+model Stone {
+  id                String      @id @default(cuid())
+  stoneCode         String      @unique
+  stoneTypeId       String
+  stoneType         StoneType   @relation(fields: [stoneTypeId], references: [id])
+  shape             String?
+  caratWeight       Decimal     @db.Decimal(10, 3)
+  colour            String?
+  clarity           String?
+  certification     String?
+  purchaseCost      Decimal?    @db.Decimal(12, 2)
+  vendorId          String?
+  vendor            Vendor?     @relation(fields: [vendorId], references: [id])
+  status            StoneStatus @default(IN_STOCK)
+  currentJobStageId String?
+  currentJobStage   JobStage?   @relation(fields: [currentJobStageId], references: [id])
+  currentKarigarId  String?
+  currentKarigar    Karigar?    @relation(fields: [currentKarigarId], references: [id])
+
+  createdById       String
+  createdBy         User        @relation("StoneCreatedBy", fields: [createdById], references: [id])
+  createdAt         DateTime    @default(now())
+
+  movements         StoneMovement[]
+
+  @@index([status])
+  @@index([stoneTypeId])
+}
+
+enum StoneMovementType {
+  PURCHASE
+  ISSUE
+  RETURN
+  SET
+  ADJUSTMENT
+}
+
+model StoneMovement {
+  id          String            @id @default(cuid())
+  stoneId     String
+  stone       Stone             @relation(fields: [stoneId], references: [id])
+  type        StoneMovementType
+  jobStageId  String?
+  jobStage    JobStage?         @relation(fields: [jobStageId], references: [id])
+  karigarId   String?
+  karigar     Karigar?          @relation(fields: [karigarId], references: [id])
+  note        String?
+
+  createdById String
+  createdBy   User              @relation("StoneMovementCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime          @default(now())
+
+  @@index([stoneId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Module 16 — Notifications. userId set = targeted at one person; role set
+// (userId null) = broadcast to everyone with that role. Read state is
+// per-recipient, so a broadcast is marked read only for the user who opened
+// it, not for everyone it was sent to.
+// ---------------------------------------------------------------------------
+
+model Notification {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  role       Role?
+  type       String
+  title      String
+  body       String?
+  entityType String?
+  entityId   String?
+  // Only meaningful for a targeted notification (userId set). A broadcast's
+  // read state is per-recipient and lives in NotificationRead instead —
+  // this field stays false on broadcast rows forever.
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  reads      NotificationRead[]
+
+  @@index([userId, isRead])
+  @@index([role, isRead])
+}
+
+// Per-user read receipts for broadcast notifications (Notification.userId
+// null). A targeted notification just flips Notification.isRead directly;
+// a broadcast is read by one recipient at a time without affecting whether
+// anyone else has seen it, so that state can't live on the Notification row
+// itself.
+model NotificationRead {
+  id             String       @id @default(cuid())
+  notificationId String
+  notification   Notification @relation(fields: [notificationId], references: [id])
+  userId         String
+  user           User         @relation(fields: [userId], references: [id])
+  readAt         DateTime     @default(now())
+
+  @@unique([notificationId, userId])
 }
