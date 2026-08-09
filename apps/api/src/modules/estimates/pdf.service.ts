@@ -15,7 +15,8 @@ const fonts = {
 const printer = new PdfPrinter(fonts);
 
 type EstimateWithRelations = Estimate & {
-  product: Product & { customer?: Customer | null };
+  product: Product;
+  customer?: Customer | null;
   lines: (EstimateLine & { purity?: Karat | null; stoneType?: StoneType | null })[];
 };
 
@@ -121,7 +122,7 @@ export async function generateEstimatePdf(estimate: EstimateWithRelations): Prom
             width: "50%",
             text: [
               { text: "Bill To:\n", bold: true },
-              estimate.product.customer ? estimate.product.customer.name : "Walk-in Customer",
+              estimate.customer ? estimate.customer.name : "Walk-in Customer",
             ]
           },
           {

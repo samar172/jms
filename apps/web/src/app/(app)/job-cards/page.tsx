@@ -3,6 +3,12 @@
 import Link from "next/link";
 import { Plus, Clock, TriangleAlert } from "lucide-react";
 import { useApi, useProcessStages } from "@/lib/hooks";
+import { PageHeader } from "@/components/shared/page-header";
+import { PageBoardSkeleton } from "@/components/shared/page-skeleton";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 interface JobStage {
   id: string;
@@ -32,26 +38,45 @@ export default function JobCardsPage() {
   const { data: jobCards } = useApi<JobCardRow[]>("/api/job-cards");
   const { data: stages } = useProcessStages();
 
-  const columns = (stages ?? []).map((stage) => ({
+  if (!jobCards || !stages) {
+    return <PageBoardSkeleton columns={5} />;
+  }
+
+  const columns = stages.map((stage) => ({
     stage,
-    cards: (jobCards ?? []).filter((jc) => activeStageOf(jc)?.processStageId === stage.id),
+    cards: jobCards.filter((jc) => activeStageOf(jc)?.processStageId === stage.id),
   }));
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Job Cards</h1>
-        <Link href="/job-cards/new" className="btn btn-primary">
-          <Plus size={16} /> New Job Card
-        </Link>
+      <PageHeader
+        title="Job Cards"
+        description="Manufacturing workflow, grouped by process stage."
+        actions={
+          <Link href="/job-cards/new" className={cn(buttonVariants(), "gap-1.5")}>
+            <Plus size={16} /> New Job Card
+          </Link>
+        }
+      />
+
+      <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full bg-success" /> On track
+        </span>
+        <span className="flex items-center gap-1.5">
+          <Clock size={12} className="text-destructive" /> Overdue
+        </span>
+        <span className="flex items-center gap-1.5">
+          <TriangleAlert size={12} className="text-warning" /> Wastage exception pending
+        </span>
       </div>
 
       <div className="flex gap-4 overflow-x-auto pb-4">
         {columns.map(({ stage, cards }) => (
           <div key={stage.id} className="w-72 shrink-0">
-            <div className="flex items-center justify-between px-1 mb-2">
+            <div className="mb-2 flex items-center justify-between px-1">
               <h2 className="text-sm font-semibold">{stage.name}</h2>
-              <span className="pill pill-neutral">{cards.length}</span>
+              <Badge variant="secondary">{cards.length}</Badge>
             </div>
             <div className="space-y-3">
               {cards.map((jc) => {
@@ -60,31 +85,39 @@ export default function JobCardsPage() {
                   jc.targetDeliveryDate && new Date(jc.targetDeliveryDate).getTime() < Date.now();
                 const hasException = stageInfo.wastageRecord?.exceptionStatus === "PENDING";
                 return (
-                  <Link
-                    key={jc.id}
-                    href={`/job-cards/${jc.id}`}
-                    className={`card p-3 block border-l-4 hover:shadow-md transition-shadow ${
-                      overdue ? "border-l-danger" : hasException ? "border-l-warning" : "border-l-success"
-                    }`}
-                  >
-                    <div className="font-mono text-gold font-semibold text-sm">{jc.product.serialNo}</div>
-                    <div className="text-xs text-text truncate">{jc.product.designName}</div>
-                    <div className="text-xs text-text-muted mt-2">{stageInfo.karigar?.name ?? "Unassigned"}</div>
-                    <div className="flex items-center justify-between mt-2 text-xs">
-                      <span className="flex items-center gap-1 text-text-muted">
-                        <Clock size={12} /> {daysOpen(jc.createdAt)}d open
-                      </span>
-                      {hasException && (
-                        <span className="flex items-center gap-1 text-warning font-medium">
-                          <TriangleAlert size={12} /> Wastage
-                        </span>
+                  <Link key={jc.id} href={`/job-cards/${jc.id}`}>
+                    <Card
+                      className={cn(
+                        "gap-2 border-l-4 py-3 transition-shadow hover:shadow-md",
+                        overdue ? "border-l-destructive" : hasException ? "border-l-warning" : "border-l-success"
                       )}
-                    </div>
+                    >
+                      <div className="px-4">
+                        <div className="font-mono text-sm font-semibold text-primary">{jc.product.serialNo}</div>
+                        <div className="truncate text-xs text-foreground">{jc.product.designName}</div>
+                        <div className="mt-2 text-xs text-muted-foreground">{stageInfo.karigar?.name ?? "Unassigned"}</div>
+                        <div className="mt-2 flex items-center justify-between text-xs">
+                          <span
+                            className={cn(
+                              "flex items-center gap-1",
+                              overdue ? "font-medium text-destructive" : "text-muted-foreground"
+                            )}
+                          >
+                            <Clock size={12} /> {daysOpen(jc.createdAt)}d open
+                          </span>
+                          {hasException && (
+                            <span className="flex items-center gap-1 font-medium text-warning">
+                              <TriangleAlert size={12} /> Wastage
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </Card>
                   </Link>
                 );
               })}
               {cards.length === 0 && (
-                <div className="text-xs text-text-muted text-center py-6 border border-dashed border-border rounded-lg">
+                <div className="rounded-lg border border-dashed border-border py-6 text-center text-xs text-muted-foreground">
                   No jobs
                 </div>
               )}

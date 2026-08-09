@@ -7,7 +7,7 @@ import { recordAudit } from "../../services/audit";
 import { badRequest, notFound } from "../../utils/httpError";
 import { fineWeight, round3 } from "@jms/shared";
 import { nextVoucherNumber } from "../../services/voucherNumber";
-import { recomputeStageWastage } from "./wastage.service";
+import { recomputeStageWastage, issuedGoldPurityFactor, receiptFineWeights } from "./wastage.service";
 import { isStockLedgerEnabled } from "../../services/settings";
 
 const router = Router();
@@ -129,12 +129,18 @@ const receiptSchema = z.object({
   jobStageId: z.string().min(1),
   karigarId: z.string().min(1),
   finishedPieceWeightG: z.number().nonnegative(),
+  fillerWeightG: z.number().nonnegative().default(0),
+  fillerNote: z.string().optional(),
+  pieceWeightIsFine: z.boolean().default(true),
   dustWeightG: z.number().nonnegative().default(0),
   unusedReturnedWeightG: z.number().nonnegative().default(0),
   stonesReturned: z
     .array(z.object({ stoneTypeId: z.string(), caratWeight: z.number(), pieces: z.number().int() }))
     .optional(),
   dustLotId: z.string().optional(),
+}).refine((v) => v.fillerWeightG <= v.finishedPieceWeightG, {
+  message: "Filler weight can't exceed the finished piece weight",
+  path: ["fillerWeightG"],
 });
 
 router.post(
@@ -150,6 +156,9 @@ router.post(
         jobStageId: body.jobStageId,
         karigarId: body.karigarId,
         finishedPieceWeightG: body.finishedPieceWeightG,
+        fillerWeightG: body.fillerWeightG,
+        fillerNote: body.fillerNote,
+        pieceWeightIsFine: body.pieceWeightIsFine,
         dustWeightG: body.dustWeightG,
         unusedReturnedWeightG: body.unusedReturnedWeightG,
         stonesReturnedJson: body.stonesReturned,
@@ -169,8 +178,19 @@ router.post(
       include: { jobCard: { include: { product: { include: { purity: true } } } } },
     });
     const purityFactor = Number(purity!.jobCard.product.purity.purityFactor);
+    const issuedPurityFactor = await issuedGoldPurityFactor(body.jobStageId, purityFactor);
     const totalFineReturned = round3(
-      (body.finishedPieceWeightG + body.dustWeightG + body.unusedReturnedWeightG) * purityFactor
+      receiptFineWeights(
+        {
+          finishedPieceWeightG: body.finishedPieceWeightG,
+          fillerWeightG: body.fillerWeightG,
+          pieceWeightIsFine: body.pieceWeightIsFine,
+          dustWeightG: body.dustWeightG,
+          unusedReturnedWeightG: body.unusedReturnedWeightG,
+        },
+        purityFactor,
+        issuedPurityFactor
+      ).totalFineG
     );
     await prisma.karigarLedgerEntry.create({
       data: {

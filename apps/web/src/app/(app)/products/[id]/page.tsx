@@ -7,6 +7,7 @@ import { Copy } from "lucide-react";
 import { useApi, useCustomers } from "@/lib/hooks";
 import { apiFetch, ApiError, resolveMediaUrl } from "@/lib/api";
 import { ProductStatusPill, JobStageStatusPill } from "@/components/StatusPill";
+import { ProductTimeline } from "@/components/shared/product-timeline";
 import { formatWeight, formatCarat, formatDate, formatINR } from "@/lib/format";
 import { useAuth } from "@/lib/auth-context";
 import { canSeeCost } from "@jms/shared";
@@ -61,18 +62,11 @@ interface ProductDetail {
   jobCards: JobCard[];
   estimates: Estimate[];
 }
-interface TimelineEntry {
-  type: string;
-  timestamp: string;
-  description: string;
-}
-
 export default function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
   const { user } = useAuth();
   const { data: product, mutate } = useApi<ProductDetail>(`/api/products/${id}`);
-  const { data: timeline } = useApi<TimelineEntry[]>(product ? `/api/products/${product.id}/timeline` : null);
   const [activeImage, setActiveImage] = useState<ProductImage | null>(null);
   const [cloning, setCloning] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -277,18 +271,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
 
       <div className="card p-5">
         <h2 className="font-semibold mb-4">Product History</h2>
-        <ol className="relative border-l border-border ml-2 space-y-4">
-          {timeline?.map((e, i) => (
-            <li key={i} className="ml-4">
-              <div className="absolute w-2 h-2 rounded-full bg-gold -ml-[21px] mt-1.5" />
-              <time className="text-xs text-text-muted">{formatDate(e.timestamp)}</time>
-              <p className="text-sm">{e.description}</p>
-            </li>
-          ))}
-          {(!timeline || timeline.length === 0) && (
-            <p className="text-sm text-text-muted ml-2">No history yet.</p>
-          )}
-        </ol>
+        <ProductTimeline productId={product.id} />
       </div>
     </div>
   );

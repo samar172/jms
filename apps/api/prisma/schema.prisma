@@ -213,6 +213,7 @@ model Customer {
 
   products  Product[]
   jobCards  JobCard[]
+  estimates Estimate[]
   ledgerEntries CustomerLedgerEntry[]
 }
 
@@ -431,6 +432,17 @@ model MaterialReceipt {
   karigarId             String
   karigar               Karigar  @relation(fields: [karigarId], references: [id])
   finishedPieceWeightG  Decimal  @db.Decimal(10, 3)
+  // Non-gold material (wax, solder, support wire, etc.) a karigar mixes into
+  // the finished piece purely to shape/hold it while working — has zero gold
+  // value, so it must be netted out of finishedPieceWeightG before applying
+  // the purity factor, or it gets miscounted as fine gold "returned".
+  fillerWeightG         Decimal  @db.Decimal(10, 3) @default(0)
+  fillerNote            String?
+  // When true (the recommended default), (finishedPieceWeightG - fillerWeightG)
+  // is already the karigar's declared actual gold content and is credited
+  // as-is. When false, that net weight is still raw alloy and gets reduced by
+  // the product's purity factor first, same as before this field existed.
+  pieceWeightIsFine     Boolean  @default(true)
   dustWeightG           Decimal  @db.Decimal(10, 3) @default(0)
   unusedReturnedWeightG Decimal  @db.Decimal(10, 3) @default(0)
   stonesReturnedJson    Json?
@@ -590,6 +602,11 @@ model Estimate {
   product        Product        @relation(fields: [productId], references: [id])
   karigarId      String?
   karigar        Karigar?       @relation(fields: [karigarId], references: [id])
+  // Who this specific estimate is for — stored per-estimate (like JobCard.customerId)
+  // rather than on Product, since the same design is re-estimated for different
+  // customers over time and Product.customerId must not be overwritten by that.
+  customerId     String?
+  customer       Customer?      @relation(fields: [customerId], references: [id])
   type           EstimateType
   version        Int
   status         EstimateStatus @default(DRAFT)

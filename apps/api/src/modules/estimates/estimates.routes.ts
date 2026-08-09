@@ -105,20 +105,11 @@ router.post(
       })
     );
 
-    // The customer picker on the create form writes through to the Product,
-    // which remains the single source of truth for "who is this piece for"
-    // (JobCard, CustomerLedgerEntry etc. all key off Product.customerId).
-    if (body.customerId) {
-      await prisma.product.update({
-        where: { id: body.productId },
-        data: { customerId: body.customerId },
-      });
-    }
-
     const estimate = await prisma.estimate.create({
       data: {
         productId: body.productId,
         karigarId: body.karigarId,
+        customerId: body.customerId,
         type: body.type,
         version,
         estimateDate: body.estimateDate,
@@ -159,17 +150,15 @@ router.get(
           ...(status ? { status } : {}),
           ...(search
             ? {
-                product: {
-                  OR: [
-                    { serialNo: { contains: search, mode: "insensitive" as const } },
-                    { designName: { contains: search, mode: "insensitive" as const } },
-                    { customer: { name: { contains: search, mode: "insensitive" as const } } },
-                  ],
-                },
+                OR: [
+                  { product: { serialNo: { contains: search, mode: "insensitive" as const } } },
+                  { product: { designName: { contains: search, mode: "insensitive" as const } } },
+                  { customer: { name: { contains: search, mode: "insensitive" as const } } },
+                ],
               }
             : {}),
         },
-        include: { product: { include: { customer: true } }, karigar: true },
+        include: { product: true, customer: true, karigar: true },
         orderBy: { createdAt: "desc" },
         take: 100,
       })
@@ -197,7 +186,8 @@ router.get(
       where: { id: req.params.id },
       include: {
         lines: { orderBy: { sortOrder: "asc" } },
-        product: { include: { customer: true } },
+        product: true,
+        customer: true,
         karigar: true,
       },
     });
@@ -228,10 +218,7 @@ router.patch(
     if (!before) throw notFound("Estimate not found");
     assertEditable(before.status);
 
-    const { customerId, ...body } = updateSchema.parse(req.body);
-    if (customerId) {
-      await prisma.product.update({ where: { id: before.productId }, data: { customerId } });
-    }
+    const body = updateSchema.parse(req.body);
     await prisma.estimate.update({ where: { id: req.params.id }, data: body });
     const withTotals = await recalculateEstimateTotals(req.params.id);
 
@@ -245,6 +232,75 @@ router.patch(
       ipAddress: req.ip ?? null,
     });
 
+    res.json(withTotals);
+  })
+);
+
+// --- Cancel a Draft estimate (FR-7.x) ----------------------------------------
+// Deletes it outright rather than soft-cancelling, so the next estimate
+// created for this product+type reuses the freed version number instead of
+// leaving a gap. Only a Draft can be cancelled — anything Submitted/Approved
+// has downstream state (ledger entries, audit history) that must be revised
+// via a new version instead.
+router.delete(
+  "/:id",
+  asyncHandler(async (req, res) => {
+    const estimate = await prisma.estimate.findUnique({ where: { id: req.params.id } });
+    if (!estimate) throw notFound("Estimate not found");
+    assertEditable(estimate.status);
+
+    await prisma.$transaction([
+      prisma.estimateLine.deleteMany({ where: { estimateId: estimate.id } }),
+      prisma.estimate.delete({ where: { id: estimate.id } }),
+    ]);
+
+    await recordAudit(prisma, {
+      userId: req.user!.id,
+      action: "DELETE",
+      entityType: "Estimate",
+      entityId: estimate.id,
+      before: estimate,
+      ipAddress: req.ip ?? null,
+    });
+
+    res.status(204).end();
+  })
+);
+
+const lineUpdateSchema = z.object({
+  description: z.string().optional(),
+  quantity: z.number().positive().optional(),
+  pieces: z.number().int().positive().optional(),
+  rate: z.number().nonnegative().optional(),
+});
+
+router.patch(
+  "/lines/:lineId",
+  asyncHandler(async (req, res) => {
+    const line = await prisma.estimateLine.findUnique({ where: { id: req.params.lineId } });
+    if (!line) throw notFound("Line not found");
+    const estimate = await prisma.estimate.findUniqueOrThrow({ where: { id: line.estimateId } });
+    assertEditable(estimate.status);
+
+    const body = lineUpdateSchema.parse(req.body);
+    const quantity = body.quantity ?? Number(line.quantity);
+    const rate = body.rate ?? Number(line.rate);
+    const pieces = body.pieces ?? line.pieces ?? undefined;
+    const amount =
+      line.rateBasis === "PER_PIECE" && pieces ? lineAmount(pieces, rate) : lineAmount(quantity, rate);
+
+    await prisma.estimateLine.update({
+      where: { id: line.id },
+      data: {
+        ...(body.description !== undefined ? { description: body.description } : {}),
+        ...(body.quantity !== undefined ? { quantity: body.quantity } : {}),
+        ...(body.pieces !== undefined ? { pieces: body.pieces } : {}),
+        ...(body.rate !== undefined ? { rate: body.rate } : {}),
+        amount,
+      },
+    });
+
+    const withTotals = await recalculateEstimateTotals(estimate.id);
     res.json(withTotals);
   })
 );
@@ -291,6 +347,69 @@ router.delete(
 
     await prisma.estimateLine.delete({ where: { id: req.params.lineId } });
     const withTotals = await recalculateEstimateTotals(estimate.id);
+    res.json(withTotals);
+  })
+);
+
+// --- Refresh gold rate on a Draft estimate (Section 16: production costing
+// left open for a few days shouldn't be stuck at a stale gold rate). Only
+// GOLD-head lines are re-priced at today's rate via their stored purity;
+// negotiated Polki/stone/making/other rates are left untouched. The source
+// Rough Estimate this was converted from is never touched, so it stays
+// historically accurate. ------------------------------------------------------
+router.post(
+  "/:id/refresh-gold-rate",
+  asyncHandler(async (req, res) => {
+    const estimate = await prisma.estimate.findUnique({
+      where: { id: req.params.id },
+      include: { lines: true },
+    });
+    if (!estimate) throw notFound("Estimate not found");
+    assertEditable(estimate.status);
+
+    const goldRateRow = await prisma.goldRate.findFirst({
+      where: { effectiveFrom: { lte: new Date() } },
+      orderBy: { effectiveFrom: "desc" },
+    });
+    if (!goldRateRow) throw badRequest("No gold rate configured on or before today");
+    const goldRate24k = Number(goldRateRow.ratePerGram24k);
+
+    const goldLines = estimate.lines.filter((l) => l.head === "GOLD" && l.purityId);
+    const purityIds = [...new Set(goldLines.map((l) => l.purityId!))];
+    const purities = purityIds.length
+      ? await prisma.karat.findMany({ where: { id: { in: purityIds } } })
+      : [];
+    const purityFactorById = new Map(purities.map((p) => [p.id, Number(p.purityFactor)]));
+
+    await Promise.all(
+      goldLines.map((l) => {
+        const purityFactor = purityFactorById.get(l.purityId!);
+        if (purityFactor === undefined) return Promise.resolve();
+        const rate = derivedGoldRate(goldRate24k, purityFactor);
+        return prisma.estimateLine.update({
+          where: { id: l.id },
+          data: { rate, amount: lineAmount(Number(l.quantity), rate) },
+        });
+      })
+    );
+
+    await prisma.estimate.update({
+      where: { id: estimate.id },
+      data: { goldRateSnapshot24k: goldRate24k },
+    });
+
+    const withTotals = await recalculateEstimateTotals(estimate.id);
+
+    await recordAudit(prisma, {
+      userId: req.user!.id,
+      action: "UPDATE",
+      entityType: "Estimate",
+      entityId: estimate.id,
+      before: estimate,
+      after: withTotals,
+      ipAddress: req.ip ?? null,
+    });
+
     res.json(withTotals);
   })
 );
@@ -427,10 +546,10 @@ router.post(
     // Mirror the approved Final Costing onto the customer's ledger as what
     // they now owe for this piece. Rough Estimates are quotations, not a
     // billable event, so only Final Costing posts here.
-    if (estimate.type === "FINAL_COSTING" && estimate.product.customerId) {
+    if (estimate.type === "FINAL_COSTING" && estimate.customerId) {
       await prisma.customerLedgerEntry.create({
         data: {
-          customerId: estimate.product.customerId,
+          customerId: estimate.customerId,
           type: "INVOICE_RAISED",
           amount: approved.netAmount,
           referenceType: "Estimate",
@@ -475,10 +594,10 @@ router.post(
       throw badRequest("Only an approved estimate needs amending — a Draft or Submitted one is already editable.");
     }
 
-    if (estimate.type === "FINAL_COSTING" && estimate.product.customerId) {
+    if (estimate.type === "FINAL_COSTING" && estimate.customerId) {
       await prisma.customerLedgerEntry.create({
         data: {
-          customerId: estimate.product.customerId,
+          customerId: estimate.customerId,
           type: "ADJUSTMENT",
           amount: -Number(estimate.netAmount),
           referenceType: "Estimate",
@@ -601,6 +720,7 @@ router.post(
     const estimate = await prisma.estimate.create({
       data: {
         productId: source.productId,
+        customerId: source.customerId,
         type: "FINAL_COSTING",
         version: priorCount + 1,
         estimateDate,
@@ -632,8 +752,9 @@ router.get(
   asyncHandler(async (req, res) => {
     const estimate = await prisma.estimate.findUnique({
       where: { id: req.params.id },
-      include: { 
-        product: { include: { customer: true } },
+      include: {
+        product: true,
+        customer: true,
         lines: { include: { purity: true, stoneType: true }, orderBy: { sortOrder: "asc" } }
       },
     });
@@ -651,8 +772,9 @@ router.get(
   asyncHandler(async (req, res) => {
     const estimate = await prisma.estimate.findUnique({
       where: { id: req.params.id },
-      include: { 
-        product: { include: { customer: true } },
+      include: {
+        product: true,
+        customer: true,
         lines: { include: { purity: true, stoneType: true }, orderBy: { sortOrder: "asc" } }
       },
     });

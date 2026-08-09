@@ -1,43 +1,183 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
-:root {
-  --color-bg: #faf9f6;
-  --color-surface: #ffffff;
-  --color-border: #e8e4da;
-  --color-text: #1f242e;
-  --color-text-muted: #5a606a;
-  --color-gold: #8a6d1f;
-  --color-gold-tint: #f6f0de;
-  --color-sidebar: #1f242e;
-  --color-success: #2e7d5b;
-  --color-success-tint: #e7f3ee;
-  --color-warning: #b7791f;
-  --color-warning-tint: #fbf1e2;
-  --color-danger: #c0392b;
-  --color-danger-tint: #fbeae8;
-}
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  /* ---- new design-system tokens (shadcn/base-ui component layer) ---- */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-inter);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* ---- legacy jms tokens — kept so every page not yet migrated to the
+     new component layer still renders (and picks up the refreshed
+     palette automatically, since these are just aliases below). ---- */
   --color-bg: var(--color-bg);
   --color-surface: var(--color-surface);
-  --color-border: var(--color-border);
   --color-text: var(--color-text);
   --color-text-muted: var(--color-text-muted);
   --color-gold: var(--color-gold);
   --color-gold-tint: var(--color-gold-tint);
-  --color-sidebar: var(--color-sidebar);
-  --color-success: var(--color-success);
   --color-success-tint: var(--color-success-tint);
-  --color-warning: var(--color-warning);
   --color-warning-tint: var(--color-warning-tint);
   --color-danger: var(--color-danger);
   --color-danger-tint: var(--color-danger-tint);
-  --font-sans: var(--font-inter);
+}
+
+/* ------------------------------------------------------------------
+   Design system — warm gold/brass primary (jewellery brand), the same
+   dark charcoal sidebar jms already had (kept theme-invariant across
+   light/dark, same convention documented for kuicko-admin), slate
+   neutrals, semantic success/warning/destructive. oklch throughout so
+   a single --primary edit reskins the whole app.
+------------------------------------------------------------------- */
+
+:root {
+  --background: oklch(0.995 0.003 87);
+  --foreground: oklch(0.208 0.042 265.755);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.208 0.042 265.755);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.208 0.042 265.755);
+  --primary: oklch(0.549 0.0996 87);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.968 0.01 87);
+  --secondary-foreground: oklch(0.208 0.042 265.755);
+  --muted: oklch(0.968 0.01 87);
+  --muted-foreground: oklch(0.552 0.02 80);
+  --accent: oklch(0.968 0.01 87);
+  --accent-foreground: oklch(0.208 0.042 265.755);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
+  --success: oklch(0.55 0.11 158);
+  --success-foreground: oklch(0.99 0 0);
+  --warning: oklch(0.62 0.14 65);
+  --warning-foreground: oklch(0.99 0 0);
+  --border: oklch(0.929 0.013 255.508);
+  --input: oklch(0.929 0.013 255.508);
+  --ring: oklch(0.6 0.1 87);
+  --chart-1: oklch(0.82 0.08 87);
+  --chart-2: oklch(0.7 0.1 87);
+  --chart-3: oklch(0.55 0.1 87);
+  --chart-4: oklch(0.45 0.09 87);
+  --chart-5: oklch(0.35 0.07 87);
+  --radius: 0.5rem;
+  --sidebar: oklch(0.208 0.042 265.755);
+  --sidebar-foreground: oklch(0.929 0.013 255.508);
+  --sidebar-primary: oklch(0.549 0.0996 87);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.279 0.041 260.031);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(0.279 0.041 260.031);
+  --sidebar-ring: oklch(0.6 0.1 87);
+
+  /* legacy jms aliases — indirection means a .dark override of the
+     tokens above is automatically picked up here too. */
+  --color-bg: var(--background);
+  --color-surface: var(--card);
+  --color-text: var(--foreground);
+  --color-text-muted: var(--muted-foreground);
+  --color-gold: var(--primary);
+  --color-gold-tint: oklch(0.95 0.03 87);
+  --color-success-tint: oklch(0.94 0.05 158);
+  --color-warning-tint: oklch(0.94 0.06 65);
+  --color-danger: var(--destructive);
+  --color-danger-tint: oklch(0.94 0.06 25);
+}
+
+.dark {
+  --background: oklch(0.145 0.025 264.7);
+  --foreground: oklch(0.968 0.007 247.896);
+  --card: oklch(0.208 0.042 265.755);
+  --card-foreground: oklch(0.968 0.007 247.896);
+  --popover: oklch(0.208 0.042 265.755);
+  --popover-foreground: oklch(0.968 0.007 247.896);
+  --primary: oklch(0.72 0.12 87);
+  --primary-foreground: oklch(0.208 0.03 87);
+  --secondary: oklch(0.279 0.041 260.031);
+  --secondary-foreground: oklch(0.968 0.007 247.896);
+  --muted: oklch(0.279 0.041 260.031);
+  --muted-foreground: oklch(0.704 0.04 256.788);
+  --accent: oklch(0.279 0.041 260.031);
+  --accent-foreground: oklch(0.968 0.007 247.896);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.985 0 0);
+  --success: oklch(0.7 0.14 158);
+  --success-foreground: oklch(0.145 0.02 158);
+  --warning: oklch(0.76 0.15 65);
+  --warning-foreground: oklch(0.145 0.02 65);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.72 0.12 87);
+  --chart-1: oklch(0.82 0.08 87);
+  --chart-2: oklch(0.7 0.1 87);
+  --chart-3: oklch(0.55 0.1 87);
+  --chart-4: oklch(0.45 0.09 87);
+  --chart-5: oklch(0.35 0.07 87);
+  --sidebar: oklch(0.208 0.042 265.755);
+  --sidebar-foreground: oklch(0.929 0.013 255.508);
+  --sidebar-primary: oklch(0.72 0.12 87);
+  --sidebar-primary-foreground: oklch(0.208 0.03 87);
+  --sidebar-accent: oklch(0.279 0.041 260.031);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(0.279 0.041 260.031);
+  --sidebar-ring: oklch(0.72 0.12 87);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
 }
 
 body {
-  background: var(--color-bg);
-  color: var(--color-text);
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
@@ -45,6 +185,12 @@ body {
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
 }
+
+/* ------------------------------------------------------------------
+   Legacy component classes — still used by pages not yet migrated to
+   the new src/components/ui primitives. Kept working, now sourced
+   from the tokens above so the whole app shares one palette.
+------------------------------------------------------------------- */
 
 .card {
   background: var(--color-surface);
@@ -104,7 +250,9 @@ body {
 }
 
 /* Shop-floor inputs/buttons: large tap targets for dusty/gloved hands
-   (design.md Screen 11) — used on the material receipt/reconciliation form. */
+   (design.md Screen 11). Formalized as size="shop-floor" on the new
+   Button/Input components; these classes remain for any page still
+   using the old form markup. */
 .input-lg {
   width: 100%;
   border: 1px solid var(--color-border);

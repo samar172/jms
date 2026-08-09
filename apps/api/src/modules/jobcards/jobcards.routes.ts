@@ -14,8 +14,12 @@ router.get(
   requireAuth,
   asyncHandler(async (req, res) => {
     const status = z.enum(["OPEN", "ON_HOLD", "CLOSED"]).optional().parse(req.query.status);
+    const productId = z.string().optional().parse(req.query.productId);
     const jobCards = await prisma.jobCard.findMany({
-      where: status ? { status } : { status: { not: "CLOSED" } },
+      where: {
+        ...(status ? { status } : { status: { not: "CLOSED" } }),
+        ...(productId ? { productId } : {}),
+      },
       include: {
         product: { include: { images: { where: { isPrimary: true }, take: 1 } } },
         stages: { include: { processStage: true, karigar: true }, orderBy: { sequenceOrder: "asc" } },

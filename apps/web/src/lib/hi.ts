@@ -26,6 +26,7 @@ export const hi = {
     title: "माल वापसी दर्ज करें",
     fineGoldIssued: "जारी किया गया सोना",
     finishedPieceWeight: "तैयार माल का वज़न",
+    fillerWeight: "मोम/अन्य मिलावट का वज़न",
     dustRecovered: "सोने की धूल",
     unusedReturned: "बिना इस्तेमाल सोना वापस",
     netWastage: "कुल घाटा (छीज)",
