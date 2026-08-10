@@ -3,7 +3,7 @@
 import { use, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useApi, useKarats, useStoneTypes, useKarigars, useCustomers } from "@/lib/hooks";
+import { useApi, useKarats, useStoneTypes, useKarigars, useCustomers, useProcessStages } from "@/lib/hooks";
 import { apiFetch, ApiError } from "@/lib/api";
 import { EstimateStatusPill } from "@/components/StatusPill";
 import { formatINR, formatDate } from "@/lib/format";
@@ -47,6 +47,19 @@ interface Estimate {
   customerId: string | null;
   customer: { id: string; name: string } | null;
   order: { id: string; orderNo: string } | null;
+}
+
+interface JobStageSummary {
+  id: string;
+  status: string;
+  karigarId: string | null;
+  karigar: { id: string; name: string } | null;
+  processStage: { id: string; name: string; sequenceOrder: number };
+}
+interface JobCardSummary {
+  id: string;
+  status: string;
+  stages: JobStageSummary[];
 }
 
 const HEADS: { key: EstimateLine["head"]; label: string; unit: string; hint: string }[] = [
@@ -320,6 +333,10 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
 
       {error && <p className="text-sm text-err-tx mb-3">{error}</p>}
 
+      {estimate.type === "FINAL_COSTING" && (
+        <ProductionPanel productId={estimate.productId} customerId={estimate.customerId} />
+      )}
+
       <div className="grid lg:grid-cols-[240px_1fr_320px] border border-line rounded-md bg-panel overflow-hidden items-start">
         <div className="border-b lg:border-b-0 lg:border-r border-line p-3.5">
           <label className="console-field-label">Estimate #</label>
@@ -504,6 +521,167 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
   );
 }
 
+// Lets a manager create the job card and assign a karigar per process stage
+// right from Final Costing — the same design is often split across several
+// karigars (one per stage), so a single "karigar" field on the estimate isn't
+// enough; "Pull Labour" then picks up each stage's approved labour separately.
+function ProductionPanel({ productId, customerId }: { productId: string; customerId: string | null }) {
+  const { data: jobCards, mutate } = useApi<JobCardSummary[]>(`/api/job-cards?productId=${productId}`);
+  const { data: stages } = useProcessStages();
+  const { data: karigars } = useKarigars();
+  const [showCreate, setShowCreate] = useState(false);
+  const [selectedStages, setSelectedStages] = useState<string[]>([]);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [assigningStage, setAssigningStage] = useState<string | null>(null);
+  const [stageKarigar, setStageKarigar] = useState<Record<string, string>>({});
+
+  function toggleStage(id: string) {
+    setSelectedStages((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
+  }
+
+  async function createJobCard() {
+    if (selectedStages.length === 0) {
+      setError("Select at least one process stage");
+      return;
+    }
+    setCreating(true);
+    setError(null);
+    try {
+      const orderedStageIds = (stages ?? [])
+        .filter((s) => selectedStages.includes(s.id))
+        .sort((a, b) => a.sequenceOrder - b.sequenceOrder)
+        .map((s) => s.id);
+      await apiFetch("/api/job-cards", {
+        method: "POST",
+        body: { productId, customerId: customerId || undefined, processStageIds: orderedStageIds },
+      });
+      setShowCreate(false);
+      setSelectedStages([]);
+      await mutate();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to create job card");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function assignKarigar(stageId: string) {
+    const karigarId = stageKarigar[stageId];
+    if (!karigarId) return;
+    setAssigningStage(stageId);
+    setError(null);
+    try {
+      await apiFetch(`/api/job-cards/stages/${stageId}`, { method: "PATCH", body: { karigarId } });
+      await mutate();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed");
+    } finally {
+      setAssigningStage(null);
+    }
+  }
+
+  const activeCards = jobCards?.filter((jc) => jc.status !== "CLOSED") ?? [];
+
+  return (
+    <div className="console-panel p-3.5 mb-3.5">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <h3 className="text-[12.5px] font-semibold text-ink">Production — Job Card &amp; Karigar Assignment</h3>
+        {jobCards && activeCards.length === 0 && !showCreate && (
+          <button className="console-btn" onClick={() => setShowCreate(true)}>
+            + Create Job Card
+          </button>
+        )}
+      </div>
+
+      {error && <p className="text-sm text-err-tx mb-2">{error}</p>}
+
+      {jobCards && activeCards.length === 0 && showCreate && (
+        <div className="bg-neu-bg p-3 rounded-md">
+          <label className="console-field-label">Process Stages</label>
+          <div className="space-y-1.5 mb-2">
+            {stages
+              ?.slice()
+              .sort((a, b) => a.sequenceOrder - b.sequenceOrder)
+              .map((s) => (
+                <label key={s.id} className="flex items-center gap-2 text-[12.5px] text-ink">
+                  <input type="checkbox" checked={selectedStages.includes(s.id)} onChange={() => toggleStage(s.id)} />
+                  {s.name}
+                </label>
+              ))}
+          </div>
+          <div className="flex gap-2">
+            <button className="console-btn primary" disabled={creating} onClick={createJobCard}>
+              {creating ? "Creating…" : "Create Job Card"}
+            </button>
+            <button className="console-btn" onClick={() => setShowCreate(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {activeCards.map((jc) => (
+        <div key={jc.id} className="mb-2 last:mb-0">
+          <table className="console-etable">
+            <thead>
+              <tr>
+                <th>Stage</th>
+                <th>Status</th>
+                <th>Karigar</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {jc.stages
+                .slice()
+                .sort((a, b) => a.processStage.sequenceOrder - b.processStage.sequenceOrder)
+                .map((stage) => (
+                  <tr key={stage.id}>
+                    <td>{stage.processStage.name}</td>
+                    <td>
+                      <span className="console-pill neu">{stage.status}</span>
+                    </td>
+                    <td>
+                      <select
+                        className="console-field w-auto"
+                        value={stageKarigar[stage.id] ?? stage.karigarId ?? ""}
+                        onChange={(e) => setStageKarigar((prev) => ({ ...prev, [stage.id]: e.target.value }))}
+                      >
+                        <option value="">Unassigned</option>
+                        {karigars?.map((k) => (
+                          <option key={k.id} value={k.id}>
+                            {k.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td>
+                      <button
+                        className="console-btn"
+                        disabled={
+                          assigningStage === stage.id ||
+                          !stageKarigar[stage.id] ||
+                          stageKarigar[stage.id] === stage.karigarId
+                        }
+                        onClick={() => assignKarigar(stage.id)}
+                      >
+                        {assigningStage === stage.id ? "Saving…" : "Assign"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+          <Link href={`/job-cards/${jc.id}`} className="text-[11px] text-accent hover:underline">
+            Open full job card (issue/receive material, log labour) →
+          </Link>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function SectionCard({
   head,
   label,
@@ -569,7 +747,10 @@ function SectionCard({
             <tbody>
               {lines.map((l) => (
                 <tr key={l.id}>
-                  <td>{l.description ?? l.karigarName ?? "—"}</td>
+                  <td>
+                    {l.description ?? "—"}
+                    {l.karigarName && <span className="text-mute"> · {l.karigarName}</span>}
+                  </td>
                   <td className="mono">
                     {l.rateBasis === "PER_PIECE" && l.pieces
                       ? `${l.pieces} pc`
