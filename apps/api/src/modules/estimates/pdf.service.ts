@@ -1,6 +1,6 @@
 import { TDocumentDefinitions } from "pdfmake/interfaces";
 import { Estimate, EstimateLine, Product, Karat, StoneType, Customer } from "@prisma/client";
-import { formatINR } from "@jms/shared";
+import { formatINR, round2 } from "@jms/shared";
 
 const fonts = {
   Helvetica: {
@@ -89,12 +89,23 @@ export async function generateEstimatePdf(estimate: EstimateWithRelations): Prom
     }
   }
 
-  // GST Row
+  // GST — shown as CGST + SGST split evenly, the conventional line-item
+  // format for an intra-state sale, rather than one combined GST row. Total
+  // tax is identical either way; CGST is rounded and SGST takes the
+  // remainder so the two always sum back to the exact gstAmount.
   if (Number(estimate.gstPct) > 0) {
+    const halfPct = Number(estimate.gstPct) / 2;
+    const cgstAmount = round2(Number(estimate.gstAmount) / 2);
+    const sgstAmount = round2(Number(estimate.gstAmount) - cgstAmount);
     tableBody.push([
-      { colSpan: 4, text: `GST (${Number(estimate.gstPct)}%)`, alignment: "right" },
+      { colSpan: 4, text: `CGST (${halfPct}%)`, alignment: "right" },
       {}, {}, {},
-      { text: formatINR(Number(estimate.gstAmount)), alignment: "right" }
+      { text: formatINR(cgstAmount), alignment: "right" }
+    ]);
+    tableBody.push([
+      { colSpan: 4, text: `SGST (${halfPct}%)`, alignment: "right" },
+      {}, {}, {},
+      { text: formatINR(sgstAmount), alignment: "right" }
     ]);
   }
 

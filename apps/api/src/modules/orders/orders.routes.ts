@@ -62,7 +62,16 @@ router.get(
       include: {
         product: true,
         customer: true,
-        estimate: { select: { id: true, netAmount: true, version: true } },
+        estimate: {
+          select: {
+            id: true,
+            estimateNo: true,
+            netAmount: true,
+            version: true,
+            goldRateSnapshot24k: true,
+            lines: { orderBy: { sortOrder: "asc" } },
+          },
+        },
         jobCards: {
           include: {
             product: { select: { serialNo: true, designName: true } },
@@ -121,6 +130,19 @@ router.patch(
     if (body.status === "DELIVERED" && before.status !== "DELIVERED") {
       if (Number(before.advanceReceived) < Number(before.approvedAmount)) {
         throw badRequest("Cannot mark as delivered while balance is still outstanding");
+      }
+      // JobCard.close() already enforces full metal/stone reconciliation
+      // (no unresolved wastage exception, no unapproved labour) before a job
+      // card itself can close — mirror that gate here so an order can't be
+      // marked delivered while its production is still mid-reconciliation.
+      const unclosedJobCards = await prisma.jobCard.findMany({
+        where: { orderId: before.id, status: { not: "CLOSED" } },
+        select: { id: true, product: { select: { serialNo: true } } },
+      });
+      if (unclosedJobCards.length > 0) {
+        throw badRequest(
+          `Cannot mark as delivered — ${unclosedJobCards.length} job card(s) are not yet closed/reconciled: ${unclosedJobCards.map((jc) => jc.product.serialNo).join(", ")}`
+        );
       }
     }
 

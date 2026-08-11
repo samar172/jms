@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 import { useApi } from "@/lib/hooks";
 import { formatINR, formatDate } from "@/lib/format";
-import { Drawer, DrawerSection, DrawerKV } from "@/components/Drawer";
 
 interface OrderRow {
   id: string;
@@ -31,12 +31,11 @@ const STATUS_PILL: Record<string, string> = {
 };
 
 export default function OrdersPage() {
+  const router = useRouter();
   const [search, setSearch] = useState("");
-  const [drawerId, setDrawerId] = useState<string | null>(null);
   const params = new URLSearchParams();
   if (search) params.set("search", search);
   const { data: orders } = useApi<OrderRow[]>(`/api/orders${params.toString() ? `?${params}` : ""}`);
-  const drawerOrder = orders?.find((o) => o.id === drawerId);
 
   return (
     <div>
@@ -73,7 +72,7 @@ export default function OrdersPage() {
               {orders?.map((o) => {
                 const balance = Number(o.approvedAmount) - Number(o.advanceReceived);
                 return (
-                  <tr key={o.id} onClick={() => setDrawerId(o.id)}>
+                  <tr key={o.id} className="cursor-pointer" onClick={() => router.push(`/orders/${o.id}`)}>
                     <td className="rid">{o.orderNo}</td>
                     <td className="text-ink2">{o.customer.name}</td>
                     <td>
@@ -102,33 +101,6 @@ export default function OrdersPage() {
           </table>
         </div>
       </div>
-
-      <Drawer
-        open={!!drawerId}
-        onClose={() => setDrawerId(null)}
-        id={drawerOrder?.orderNo ?? ""}
-        name={drawerOrder?.product.designName ?? ""}
-        fullHref={`/orders/${drawerId ?? ""}`}
-      >
-        {drawerOrder && (
-          <DrawerSection title="Overview">
-            <DrawerKV
-              items={[
-                ["Customer", drawerOrder.customer.name],
-                ["Design", drawerOrder.product.serialNo],
-                ["Status", drawerOrder.status.replace(/_/g, " ")],
-                ["Approved Amount", formatINR(Number(drawerOrder.approvedAmount))],
-                ["Advance Received", formatINR(Number(drawerOrder.advanceReceived))],
-                [
-                  "Balance",
-                  formatINR(Number(drawerOrder.approvedAmount) - Number(drawerOrder.advanceReceived)),
-                ],
-                ["Order Date", formatDate(drawerOrder.createdAt)],
-              ]}
-            />
-          </DrawerSection>
-        )}
-      </Drawer>
     </div>
   );
 }

@@ -15,13 +15,16 @@ router.get(
   asyncHandler(async (req, res) => {
     const status = z.enum(["OPEN", "ON_HOLD", "CLOSED"]).optional().parse(req.query.status);
     const productId = z.string().optional().parse(req.query.productId);
+    const estimateId = z.string().optional().parse(req.query.estimateId);
     const jobCards = await prisma.jobCard.findMany({
       where: {
         ...(status ? { status } : { status: { not: "CLOSED" } }),
         ...(productId ? { productId } : {}),
+        ...(estimateId ? { estimateId } : {}),
       },
       include: {
         product: { include: { images: { where: { isPrimary: true }, take: 1 } } },
+        customer: true,
         stages: { include: { processStage: true, karigar: true }, orderBy: { sequenceOrder: "asc" } },
       },
       orderBy: { createdAt: "desc" },
@@ -60,6 +63,7 @@ router.get(
 // --- Create (FR-3.01, FR-3.02) -----------------------------------------------
 const createSchema = z.object({
   productId: z.string().min(1),
+  estimateId: z.string().min(1),
   customerId: z.string().optional(),
   targetDeliveryDate: z.coerce.date().optional(),
   processStageIds: z.array(z.string().min(1)).min(1),
@@ -72,24 +76,25 @@ router.post(
     const body = createSchema.parse(req.body);
     const product = await prisma.product.findUnique({ where: { id: body.productId } });
     if (!product) throw badRequest("Unknown product");
+    const estimate = await prisma.estimate.findUnique({ where: { id: body.estimateId } });
+    if (!estimate) throw badRequest("Unknown estimate");
 
-    // A Product row is one physical serialized piece — it can only be mid-
-    // manufacture for one buyer at a time. Re-estimating the same design for
-    // a different customer needs its own piece (Clone Design → new serial
-    // number), not a second job card racing the first customer's in-progress
-    // one on the same physical item.
+    // Production runs are scoped to the Estimate (the specific customer's
+    // quotation/costing), not the Product (the reusable design) — the same
+    // design can be in production for several customers at once, each with
+    // their own job card, karigars and labour. Only block a duplicate job
+    // card on the SAME estimate.
     const activeJobCard = await prisma.jobCard.findFirst({
-      where: { productId: body.productId, status: { not: "CLOSED" } },
+      where: { estimateId: body.estimateId, status: { not: "CLOSED" } },
     });
     if (activeJobCard) {
-      throw badRequest(
-        `${product.serialNo} already has an active job card in production. If this is for a different customer, use "Clone Design" on the product page to get a new serial number for a separate physical piece first.`
-      );
+      throw badRequest(`This estimate already has an active job card in production.`);
     }
 
     const jobCard = await prisma.jobCard.create({
       data: {
         productId: body.productId,
+        estimateId: body.estimateId,
         customerId: body.customerId,
         targetDeliveryDate: body.targetDeliveryDate,
         createdById: req.user!.id,

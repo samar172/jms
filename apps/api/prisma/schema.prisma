@@ -351,6 +351,13 @@ model JobCard {
   product            Product       @relation(fields: [productId], references: [id])
   customerId         String?
   customer           Customer?     @relation(fields: [customerId], references: [id])
+  // Which specific quotation/costing this production run belongs to. Product
+  // is just the design/catalog item and gets reused across customers, so the
+  // thing that isolates one customer's job card (karigars, material issues,
+  // labour) from another customer's run on the same design is the Estimate,
+  // not the Product.
+  estimateId         String?
+  estimate           Estimate?     @relation(fields: [estimateId], references: [id])
   // A multi-component order (e.g. a bridal set) has one JobCard per
   // component, all pointing at the same Order — that's what Assembly later
   // gathers back together. Single-piece jobs just leave this null.
@@ -370,6 +377,7 @@ model JobCard {
 
   @@index([status])
   @@index([orderId])
+  @@index([estimateId])
 }
 
 enum JobStageStatus {
@@ -663,6 +671,7 @@ model Estimate {
 
   lines          EstimateLine[]
   order          Order?
+  jobCards       JobCard[]
 
   @@unique([productId, type, customerId, version])
   @@index([productId])

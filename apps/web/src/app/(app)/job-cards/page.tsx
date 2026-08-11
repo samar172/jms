@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { Plus } from "lucide-react";
 import { useApi, useProcessStages } from "@/lib/hooks";
 
 interface JobStage {
@@ -48,9 +47,13 @@ export default function JobCardsPage() {
       </div>
 
       <div className="flex items-center gap-2 py-2.5 border-t border-b border-line -mx-3.5 px-3.5 sm:-mx-[18px] sm:px-[18px] mb-3.5">
-        <Link href="/job-cards/new" className="console-btn primary">
-          <Plus size={14} /> New Job Card
-        </Link>
+        <span className="text-xs text-mute">
+          Production starts from an estimate —{" "}
+          <Link href="/costing" className="text-accent hover:underline">
+            open one in Estimates
+          </Link>{" "}
+          and use the Production panel there to create its job card.
+        </span>
       </div>
 
       <div className="console-kanban">

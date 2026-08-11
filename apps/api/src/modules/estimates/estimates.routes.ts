@@ -9,7 +9,7 @@ import { lineAmount, round2 } from "@jms/shared";
 import { recalculateEstimateTotals, derivedGoldRate } from "./estimates.service";
 import { generateEstimatePdf } from "./pdf.service";
 import { generateEstimateExcel } from "./excel.service";
-import { nextVoucherNumber } from "../../services/voucherNumber";
+import { nextVoucherNumber, nextSequenceNumber } from "../../services/voucherNumber";
 
 const router = Router();
 
@@ -108,7 +108,7 @@ router.post(
       })
     );
 
-    const estimateNo = await nextVoucherNumber(body.type === "ROUGH_ESTIMATE" ? "QT" : "FC");
+    const estimateNo = await nextSequenceNumber("ESTIMATE");
 
     const estimate = await prisma.estimate.create({
       data: {
@@ -425,12 +425,15 @@ router.post(
   asyncHandler(async (req, res) => {
     const estimate = await prisma.estimate.findUnique({
       where: { id: req.params.id },
-      include: { lines: true, product: { include: { jobCards: { include: { stages: true } } } } },
+      include: { lines: true, jobCards: { include: { stages: true } } },
     });
     if (!estimate) throw notFound("Estimate not found");
     assertEditable(estimate.status);
 
-    const stageIds = estimate.product.jobCards.flatMap((jc) => jc.stages.map((s) => s.id));
+    // Job cards are scoped to this specific estimate — the same design can be
+    // in production for several customers at once, and only this customer's
+    // job card's labour should ever land on this quote.
+    const stageIds = estimate.jobCards.flatMap((jc) => jc.stages.map((s) => s.id));
     const alreadyPulled = new Set(
       estimate.lines.filter((l) => l.sourceLabourEntryId).map((l) => l.sourceLabourEntryId)
     );
@@ -479,12 +482,12 @@ router.post(
   asyncHandler(async (req, res) => {
     const estimate = await prisma.estimate.findUnique({
       where: { id: req.params.id },
-      include: { product: { include: { jobCards: { include: { stages: { include: { wastageRecord: true } } } } } } },
+      include: { jobCards: { include: { stages: { include: { wastageRecord: true } } } } },
     });
     if (!estimate) throw notFound("Estimate not found");
     assertEditable(estimate.status);
 
-    const wastageRecords = estimate.product.jobCards
+    const wastageRecords = estimate.jobCards
       .flatMap((jc) => jc.stages)
       .map((s) => s.wastageRecord)
       .filter((w): w is NonNullable<typeof w> => w !== null && w.withinTolerance);
@@ -683,18 +686,6 @@ router.post(
     if (estimate.order) throw badRequest("This estimate has already been converted to an order");
     if (!estimate.customerId) throw badRequest("This estimate has no customer set");
 
-    // Same one-physical-piece invariant as job card creation: don't let a
-    // second customer's order attach to a product that's already someone
-    // else's active (undelivered) order.
-    const activeOrder = await prisma.order.findFirst({
-      where: { productId: estimate.productId, status: { not: "DELIVERED" } },
-    });
-    if (activeOrder && activeOrder.customerId !== estimate.customerId) {
-      throw badRequest(
-        `${estimate.product.serialNo} already has an active order (${activeOrder.orderNo}) for a different customer. Use "Clone Design" on the product page to get a new serial number for a separate physical piece.`
-      );
-    }
-
     const orderNo = await nextVoucherNumber("ORD");
     const order = await prisma.order.create({
       data: {
@@ -864,7 +855,7 @@ router.post(
       };
     });
 
-    const estimateNo = await nextVoucherNumber("FC");
+    const estimateNo = await nextSequenceNumber("ESTIMATE");
 
     const estimate = await prisma.estimate.create({
       data: {

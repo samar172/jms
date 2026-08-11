@@ -5,7 +5,7 @@ import { useApi, useStoneTypes } from "@/lib/hooks";
 import { apiFetch, ApiError } from "@/lib/api";
 import { JobStageStatusPill } from "@/components/StatusPill";
 import { formatINR, formatWeight, formatPct, formatCarat } from "@/lib/format";
-import { computeWastage, fineWeight } from "@jms/shared";
+import { computeWastage, fineWeight, round3 } from "@jms/shared";
 import { hi } from "@/lib/hi";
 import { AddKarigarForm } from "@/components/AddKarigarForm";
 import { useAuth } from "@/lib/auth-context";
@@ -188,6 +188,10 @@ export function JobStageCard({
           karigarId={stage.karigarId!}
           fineIssuedG={stage.materialIssues.reduce((s, i) => s + Number(i.fineWeightG), 0)}
           grossIssuedG={stage.materialIssues.reduce((s, i) => s + Number(i.grossWeightG ?? 0), 0)}
+          issuedStoneCarats={stage.materialIssues
+            .filter((i) => i.materialType === "POLKI" || i.materialType === "COLOURED_STONE")
+            .reduce((s, i) => s + Number(i.caratWeight ?? 0), 0)}
+          isSettingStage={/setting/i.test(stage.processStage.name)}
           purityFactor={purityFactor}
           tolerancePct={Number(stage.processStage.wastageTolerancePct)}
           onDone={() => {
@@ -371,6 +375,8 @@ function ReceiptForm({
   karigarId,
   fineIssuedG,
   grossIssuedG,
+  issuedStoneCarats,
+  isSettingStage,
   purityFactor,
   tolerancePct,
   onDone,
@@ -379,6 +385,8 @@ function ReceiptForm({
   karigarId: string;
   fineIssuedG: number;
   grossIssuedG: number;
+  issuedStoneCarats: number;
+  isSettingStage: boolean;
   purityFactor: number;
   tolerancePct: number;
   onDone: () => void;
@@ -406,6 +414,11 @@ function ReceiptForm({
     fineReturnedG: fineWeight(Number(unusedReturnedWeightG) || 0, purityFactor),
   });
   const withinTolerance = preview.wastagePct <= tolerancePct;
+  // On a Setting stage, once stones are mounted the karigar usually can only
+  // weigh the finished piece as one combined lump (metal + stones together)
+  // — the office has to subtract the stones' weight to isolate gold. This
+  // shop's convention for that: carats issued ÷ 5 (= carats × 0.2g/ct).
+  const suggestedStoneWeightG = isSettingStage && issuedStoneCarats > 0 ? round3(issuedStoneCarats / 5) : null;
   const totalReturnedRawG =
     (Number(finishedPieceWeightG) || 0) + (Number(dustWeightG) || 0) + (Number(unusedReturnedWeightG) || 0);
 
@@ -470,9 +483,18 @@ function ReceiptForm({
         </div>
         <div>
           <label className="label-lg">
-            Filler Weight (g) — wax/solder/support wire, if any
+            {isSettingStage ? "Filler Weight (g) — stones embedded in piece, wax/solder, if any" : "Filler Weight (g) — wax/solder/support wire, if any"}
             <span className="label-hi">Non-gold material mixed in — zero gold value</span>
           </label>
+          {suggestedStoneWeightG !== null && (
+            <button
+              type="button"
+              className="console-btn mb-2"
+              onClick={() => setFillerWeightG(String(suggestedStoneWeightG))}
+            >
+              Use suggested stone weight: {suggestedStoneWeightG}g ({issuedStoneCarats}ct issued ÷ 5)
+            </button>
+          )}
           <input
             type="number"
             inputMode="decimal"
