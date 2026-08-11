@@ -4,11 +4,13 @@ import { use, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useApi, useKarats, useStoneTypes, useKarigars, useCustomers, useProcessStages } from "@/lib/hooks";
-import { apiFetch, ApiError } from "@/lib/api";
+import { apiFetch, ApiError, openAuthenticated } from "@/lib/api";
 import { EstimateStatusPill } from "@/components/StatusPill";
 import { formatINR, formatDate } from "@/lib/format";
 import { deriveRate } from "@jms/shared";
 import { useAuth } from "@/lib/auth-context";
+import { ActivityTimeline } from "@/components/ActivityTimeline";
+import { JobStageCard, type JobStage } from "@/components/JobStageCard";
 
 interface EstimateLine {
   id: string;
@@ -24,9 +26,8 @@ interface EstimateLine {
 }
 interface Estimate {
   id: string;
+  estimateNo: string | null;
   productId: string;
-  karigarId: string | null;
-  karigar: { id: string; name: string } | null;
   type: string;
   version: number;
   status: string;
@@ -47,19 +48,18 @@ interface Estimate {
   customerId: string | null;
   customer: { id: string; name: string } | null;
   order: { id: string; orderNo: string } | null;
+  quotationSentAt: string | null;
 }
 
-interface JobStageSummary {
-  id: string;
-  status: string;
-  karigarId: string | null;
-  karigar: { id: string; name: string } | null;
-  processStage: { id: string; name: string; sequenceOrder: number };
-}
 interface JobCardSummary {
   id: string;
   status: string;
-  stages: JobStageSummary[];
+}
+interface JobCardDetail {
+  id: string;
+  status: string;
+  product: { purity: { purityFactor: string } };
+  stages: JobStage[];
 }
 
 const HEADS: { key: EstimateLine["head"]; label: string; unit: string; hint: string }[] = [
@@ -81,7 +81,6 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
   const { data: estimate, mutate } = useApi<Estimate>(`/api/estimates/${estimateId}`);
   const { data: karats } = useKarats();
   const { data: stoneTypes } = useStoneTypes();
-  const { data: karigars } = useKarigars();
   const { data: customers } = useCustomers();
   const [profitPct, setProfitPct] = useState<string | null>(null);
   const [gstPct, setGstPct] = useState<string | null>(null);
@@ -92,6 +91,7 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
   const [refreshingRate, setRefreshingRate] = useState(false);
   const [pullingLabour, setPullingLabour] = useState(false);
   const [pullingWastage, setPullingWastage] = useState(false);
+  const [sendingQuotation, setSendingQuotation] = useState(false);
 
   if (!estimate) return <div className="text-mute">Loading…</div>;
 
@@ -168,15 +168,6 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
     }
   }
 
-  async function saveKarigar(karigarId: string) {
-    try {
-      await apiFetch(`/api/estimates/${estimateId}`, { method: "PATCH", body: { karigarId: karigarId || null } });
-      await mutate();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed");
-    }
-  }
-
   async function saveCustomer(customerId: string) {
     if (!customerId) return;
     try {
@@ -198,6 +189,20 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed");
       setConverting(false);
+    }
+  }
+
+  async function sendQuotation() {
+    setError(null);
+    setSendingQuotation(true);
+    try {
+      await apiFetch(`/api/estimates/${estimateId}/send-quotation`, { method: "POST" });
+      await openAuthenticated(`/api/estimates/${estimateId}/pdf`);
+      await mutate();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed");
+    } finally {
+      setSendingQuotation(false);
     }
   }
 
@@ -263,7 +268,7 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
           </Link>
         </div>
         <h1 className="text-[19px] font-semibold flex items-center gap-2.5 flex-wrap text-ink">
-          Estimate —{" "}
+          {estimate.estimateNo ?? "Estimate"} —{" "}
           <Link href={`/products/${estimate.product.serialNo}`} className="mono text-accent">
             {estimate.product.serialNo}
           </Link>
@@ -292,7 +297,7 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
           <>
             {estimate.type === "ROUGH_ESTIMATE" && (
               <button className="console-btn" onClick={convertToFinalCosting} disabled={converting}>
-                {converting ? "Converting…" : "Convert to Final Costing"}
+                {converting ? "Sending…" : "Send to Production"}
               </button>
             )}
             {estimate.type === "FINAL_COSTING" &&
@@ -316,15 +321,21 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
                 {amending ? "Amending…" : "Amend (Super Admin)"}
               </button>
             )}
-            <a href={`/api/estimates/${estimateId}/pdf`} target="_blank" rel="noreferrer" className="console-btn">
+            <button className="console-btn" onClick={sendQuotation} disabled={sendingQuotation}>
+              {sendingQuotation ? "Sending…" : "Send Quotation"}
+            </button>
+            <button className="console-btn" onClick={() => openAuthenticated(`/api/estimates/${estimateId}/pdf`)}>
               Export PDF
-            </a>
-            <a href={`/api/estimates/${estimateId}/excel`} target="_blank" rel="noreferrer" className="console-btn">
+            </button>
+            <button className="console-btn" onClick={() => openAuthenticated(`/api/estimates/${estimateId}/excel`)}>
               Export Excel
-            </a>
+            </button>
           </>
         )}
         <div className="flex-1" />
+        {estimate.quotationSentAt && (
+          <div className="text-[11px] text-mute">Quotation sent {formatDate(estimate.quotationSentAt)}</div>
+        )}
         <div className="text-xs text-ink2">
           It costs <span className="mono font-semibold text-ink">{formatINR(Number(estimate.cost))}</span> to make ·
           customer pays <span className="mono font-semibold text-accent">{formatINR(Number(estimate.netAmount))}</span>
@@ -340,10 +351,10 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
       <div className="grid lg:grid-cols-[240px_1fr_320px] border border-line rounded-md bg-panel overflow-hidden items-start">
         <div className="border-b lg:border-b-0 lg:border-r border-line p-3.5">
           <label className="console-field-label">Estimate #</label>
-          <input className="console-field" value={estimate.product.serialNo} disabled />
+          <input className="console-field" value={estimate.estimateNo ?? "—"} disabled />
 
           <label className="console-field-label">Design</label>
-          <input className="console-field" value={estimate.product.designName} disabled />
+          <input className="console-field" value={`${estimate.product.designName} (${estimate.product.serialNo})`} disabled />
 
           <label className="console-field-label">Customer</label>
           {editable ? (
@@ -360,20 +371,6 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
           )}
           {editable && (
             <p className="text-[10.5px] text-mute -mt-1 mb-0">Same design, different customer? Pick who this estimate is for.</p>
-          )}
-
-          <label className="console-field-label">Karigar</label>
-          {editable ? (
-            <select className="console-field" value={estimate.karigarId ?? ""} onChange={(e) => saveKarigar(e.target.value)}>
-              <option value="">Not set…</option>
-              {karigars?.map((k) => (
-                <option key={k.id} value={k.id}>
-                  {k.name}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <div className="console-field-static">{estimate.karigar?.name ?? "Not set"}</div>
           )}
 
           <label className="console-field-label">Type</label>
@@ -517,6 +514,8 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
           )}
         </div>
       </div>
+
+      <ActivityTimeline sources={[{ entityType: "Estimate", entityId: estimateId }]} defaultOpen />
     </div>
   );
 }
@@ -528,13 +527,10 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
 function ProductionPanel({ productId, customerId }: { productId: string; customerId: string | null }) {
   const { data: jobCards, mutate } = useApi<JobCardSummary[]>(`/api/job-cards?productId=${productId}`);
   const { data: stages } = useProcessStages();
-  const { data: karigars } = useKarigars();
   const [showCreate, setShowCreate] = useState(false);
   const [selectedStages, setSelectedStages] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [assigningStage, setAssigningStage] = useState<string | null>(null);
-  const [stageKarigar, setStageKarigar] = useState<Record<string, string>>({});
 
   function toggleStage(id: string) {
     setSelectedStages((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
@@ -563,21 +559,6 @@ function ProductionPanel({ productId, customerId }: { productId: string; custome
       setError(err instanceof ApiError ? err.message : "Failed to create job card");
     } finally {
       setCreating(false);
-    }
-  }
-
-  async function assignKarigar(stageId: string) {
-    const karigarId = stageKarigar[stageId];
-    if (!karigarId) return;
-    setAssigningStage(stageId);
-    setError(null);
-    try {
-      await apiFetch(`/api/job-cards/stages/${stageId}`, { method: "PATCH", body: { karigarId } });
-      await mutate();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed");
-    } finally {
-      setAssigningStage(null);
     }
   }
 
@@ -622,62 +603,119 @@ function ProductionPanel({ productId, customerId }: { productId: string; custome
       )}
 
       {activeCards.map((jc) => (
-        <div key={jc.id} className="mb-2 last:mb-0">
-          <table className="console-etable">
-            <thead>
-              <tr>
-                <th>Stage</th>
-                <th>Status</th>
-                <th>Karigar</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {jc.stages
-                .slice()
-                .sort((a, b) => a.processStage.sequenceOrder - b.processStage.sequenceOrder)
-                .map((stage) => (
-                  <tr key={stage.id}>
-                    <td>{stage.processStage.name}</td>
-                    <td>
-                      <span className="console-pill neu">{stage.status}</span>
-                    </td>
-                    <td>
-                      <select
-                        className="console-field w-auto"
-                        value={stageKarigar[stage.id] ?? stage.karigarId ?? ""}
-                        onChange={(e) => setStageKarigar((prev) => ({ ...prev, [stage.id]: e.target.value }))}
-                      >
-                        <option value="">Unassigned</option>
-                        {karigars?.map((k) => (
-                          <option key={k.id} value={k.id}>
-                            {k.name}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td>
-                      <button
-                        className="console-btn"
-                        disabled={
-                          assigningStage === stage.id ||
-                          !stageKarigar[stage.id] ||
-                          stageKarigar[stage.id] === stage.karigarId
-                        }
-                        onClick={() => assignKarigar(stage.id)}
-                      >
-                        {assigningStage === stage.id ? "Saving…" : "Assign"}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-          <Link href={`/job-cards/${jc.id}`} className="text-[11px] text-accent hover:underline">
-            Open full job card (issue/receive material, log labour) →
-          </Link>
-        </div>
+        <JobCardStages key={jc.id} jobCardId={jc.id} />
       ))}
+    </div>
+  );
+}
+
+// Fetches the same full detail the standalone job-cards/[id] page uses, so
+// each stage can expand into the exact same JobStageCard — material issue,
+// receive/reconcile, wastage exceptions, labour — right here, no page-hop.
+// Compact table by default (matches the rest of the costing page's density)
+// with a per-stage "Details" toggle that expands the same full JobStageCard
+// used on the standalone job-cards/[id] page — issue/receive/wastage/labour,
+// all reachable from here, but only for the one stage actually being worked
+// on at a time, not all of them stretched open at once.
+function JobCardStages({ jobCardId }: { jobCardId: string }) {
+  const { data: jobCard, mutate } = useApi<JobCardDetail>(`/api/job-cards/${jobCardId}`);
+  const { data: karigars, mutate: mutateKarigars } = useKarigars();
+  const [expandedStage, setExpandedStage] = useState<string | null>(null);
+  const [busyStage, setBusyStage] = useState<string | null>(null);
+  const [stageKarigar, setStageKarigar] = useState<Record<string, string>>({});
+  const [assigningStage, setAssigningStage] = useState<string | null>(null);
+
+  if (!jobCard) return null;
+
+  async function assignKarigar(stageId: string, currentKarigarId: string | null) {
+    const karigarId = stageKarigar[stageId] ?? currentKarigarId;
+    if (!karigarId) return;
+    setAssigningStage(stageId);
+    try {
+      await apiFetch(`/api/job-cards/stages/${stageId}`, { method: "PATCH", body: { karigarId } });
+      await mutate();
+    } finally {
+      setAssigningStage(null);
+    }
+  }
+
+  const sortedStages = jobCard.stages.slice().sort((a, b) => a.processStage.sequenceOrder - b.processStage.sequenceOrder);
+  const expanded = sortedStages.find((s) => s.id === expandedStage);
+
+  return (
+    <div className="mb-2 last:mb-0">
+      <table className="console-etable">
+        <thead>
+          <tr>
+            <th>Stage</th>
+            <th>Status</th>
+            <th>Karigar</th>
+            <th></th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {sortedStages.map((stage) => (
+            <tr key={stage.id}>
+              <td>{stage.processStage.name}</td>
+              <td>
+                <span className="console-pill neu">{stage.status}</span>
+              </td>
+              <td>
+                <select
+                  className="console-field w-auto"
+                  value={stageKarigar[stage.id] ?? stage.karigarId ?? ""}
+                  onChange={(e) => setStageKarigar((prev) => ({ ...prev, [stage.id]: e.target.value }))}
+                >
+                  <option value="">Unassigned</option>
+                  {karigars?.map((k) => (
+                    <option key={k.id} value={k.id}>
+                      {k.name}
+                    </option>
+                  ))}
+                </select>
+              </td>
+              <td>
+                <button
+                  className="console-btn"
+                  disabled={
+                    assigningStage === stage.id || !stageKarigar[stage.id] || stageKarigar[stage.id] === stage.karigarId
+                  }
+                  onClick={() => assignKarigar(stage.id, stage.karigarId)}
+                >
+                  {assigningStage === stage.id ? "Saving…" : "Assign"}
+                </button>
+              </td>
+              <td>
+                <button
+                  className="text-[11px] text-accent hover:underline"
+                  onClick={() => setExpandedStage(expandedStage === stage.id ? null : stage.id)}
+                >
+                  {expandedStage === stage.id ? "Hide" : "Issue Material"}
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {expanded && (
+        <div className="mt-2">
+          <JobStageCard
+            stage={expanded}
+            purityFactor={Number(jobCard.product.purity.purityFactor)}
+            karigars={karigars ?? []}
+            onKarigarCreated={() => mutateKarigars()}
+            busy={busyStage === expanded.id}
+            setBusy={(v) => setBusyStage(v ? expanded.id : null)}
+            onChange={() => mutate()}
+          />
+        </div>
+      )}
+
+      <Link href={`/job-cards/${jobCard.id}`} className="text-[11px] text-accent hover:underline">
+        Open full job card →
+      </Link>
     </div>
   );
 }

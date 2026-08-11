@@ -10,6 +10,7 @@ import { formatINR, formatDate } from "@/lib/format";
 
 interface EstimateRow {
   id: string;
+  estimateNo: string | null;
   type: string;
   version: number;
   status: string;
@@ -161,8 +162,9 @@ function EstimateRowView({ e, onOpen, muted }: { e: EstimateRow; onOpen: () => v
     <tr onClick={onOpen} className={muted ? "opacity-60" : undefined}>
       <td>
         <Link href={`/costing/${e.id}`} className="rid" onClick={(ev) => ev.stopPropagation()}>
-          {e.product.serialNo}
+          {e.estimateNo ?? "—"}
         </Link>
+        <div className="text-[10px] text-mute mono">{e.product.serialNo}</div>
       </td>
       <td className="text-ink2">{e.customer?.name ?? "—"}</td>
       <td>{e.product.designName}</td>

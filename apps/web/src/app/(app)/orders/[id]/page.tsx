@@ -3,8 +3,9 @@
 import { use, useState } from "react";
 import Link from "next/link";
 import { useApi } from "@/lib/hooks";
-import { apiFetch, ApiError } from "@/lib/api";
+import { apiFetch, ApiError, openAuthenticated } from "@/lib/api";
 import { formatINR, formatDate } from "@/lib/format";
+import { ActivityTimeline } from "@/components/ActivityTimeline";
 
 const ORDER_STATUSES = [
   "CONFIRMED",
@@ -179,6 +180,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             {order.expectedDeliveryDate && (
               <p className="text-xs text-mute mt-3">Expected delivery: {formatDate(order.expectedDeliveryDate)}</p>
             )}
+            <button className="console-btn mt-3" onClick={() => openAuthenticated(`/api/orders/${id}/invoice`)}>
+              Export Invoice
+            </button>
           </div>
         </div>
 
@@ -258,6 +262,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           </div>
         )}
       </div>
+
+      <ActivityTimeline
+        sources={[{ entityType: "Order", entityId: id }, ...order.jobCards.map((jc) => ({ entityType: "JobCard", entityId: jc.id }))]}
+      />
     </div>
   );
 }

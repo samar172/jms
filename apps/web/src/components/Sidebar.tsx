@@ -22,6 +22,7 @@ import {
   Diamond,
   History,
   UserCog,
+  Receipt,
 } from "lucide-react";
 import type { Role } from "@jms/shared";
 import { useAuth } from "@/lib/auth-context";
@@ -48,6 +49,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/costing", label: "Estimates & Costing", icon: Calculator, roles: ["SUPER_ADMIN", "MANAGER", "COSTING", "AUDITOR"] },
       { href: "/orders", label: "Orders", icon: Package },
+      { href: "/invoices", label: "Invoicing", icon: Receipt, roles: ["SUPER_ADMIN", "MANAGER", "COSTING", "SALES", "AUDITOR"] },
     ],
   },
   {

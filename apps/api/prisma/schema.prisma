@@ -188,7 +188,6 @@ model Karigar {
   materialReceipts MaterialReceipt[]
   labourEntries   LabourEntry[]
   ledgerEntries   KarigarLedgerEntry[]
-  estimates       Estimate[]
   assembliesAssembled Assembly[]
   stonesHeld      Stone[]
   stoneMovements  StoneMovement[]
@@ -621,10 +620,14 @@ enum EstimateStatus {
 
 model Estimate {
   id             String         @id @default(cuid())
+  // Trackable document number, assigned once at creation (QT- for a Rough
+  // Estimate/quotation, FC- for a Final Costing) — same atomic-sequence
+  // pattern as Order.orderNo. Distinct from productId+version, which only
+  // says "which revision of this design"; this says "which specific document",
+  // since the same product/serial repeats across every quote and revision.
+  estimateNo     String?        @unique
   productId      String
   product        Product        @relation(fields: [productId], references: [id])
-  karigarId      String?
-  karigar        Karigar?       @relation(fields: [karigarId], references: [id])
   // Who this specific estimate is for — stored per-estimate (like JobCard.customerId)
   // rather than on Product, since the same design is re-estimated for different
   // customers over time and Product.customerId must not be overwritten by that.
@@ -656,6 +659,7 @@ model Estimate {
   approvedById   String?
   approvedBy     User?          @relation("EstimateApprovedBy", fields: [approvedById], references: [id])
   approvedAt     DateTime?
+  quotationSentAt DateTime?
 
   lines          EstimateLine[]
   order          Order?

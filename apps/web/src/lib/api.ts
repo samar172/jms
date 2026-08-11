@@ -86,4 +86,40 @@ export function resolveMediaUrl(url: string | null | undefined): string {
   return url.startsWith("http") ? url : `${API_URL}${url}`;
 }
 
+// Plain <a href> can't carry the access token (it only ever lives in this
+// module's in-memory variable, never a cookie), so any authenticated
+// download/preview route needs to go through fetch instead. Opens a blank
+// tab synchronously (inside the click handler's call stack) so the browser
+// doesn't treat the later async navigation as a blocked popup.
+export async function openAuthenticated(path: string): Promise<void> {
+  const newTab = window.open("", "_blank");
+  const doFetch = async (): Promise<Response> =>
+    fetch(`${API_URL}${path}`, {
+      credentials: "include",
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    });
+  try {
+    let res = await doFetch();
+    if (res.status === 401) {
+      const refreshed = await refreshAccessToken();
+      if (refreshed) res = await doFetch();
+    }
+    if (!res.ok) {
+      newTab?.close();
+      const data = await res.json().catch(() => null);
+      throw new ApiError(res.status, (data && "error" in data && String(data.error)) || "Failed to open file");
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    if (newTab) {
+      newTab.location.href = url;
+    } else {
+      window.open(url, "_blank");
+    }
+  } catch (err) {
+    newTab?.close();
+    throw err;
+  }
+}
+
 export { refreshAccessToken, API_URL };

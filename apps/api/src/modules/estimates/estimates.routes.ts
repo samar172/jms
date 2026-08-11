@@ -61,7 +61,6 @@ async function resolveLineRate(
 const createSchema = z.object({
   productId: z.string().min(1),
   customerId: z.string().optional(),
-  karigarId: z.string().optional(),
   type: z.enum(["ROUGH_ESTIMATE", "FINAL_COSTING"]),
   estimateDate: z.coerce.date().default(() => new Date()),
   profitPct: z.number().min(0),
@@ -109,10 +108,12 @@ router.post(
       })
     );
 
+    const estimateNo = await nextVoucherNumber(body.type === "ROUGH_ESTIMATE" ? "QT" : "FC");
+
     const estimate = await prisma.estimate.create({
       data: {
+        estimateNo,
         productId: body.productId,
-        karigarId: body.karigarId,
         customerId: body.customerId,
         type: body.type,
         version,
@@ -155,6 +156,7 @@ router.get(
           ...(search
             ? {
                 OR: [
+                  { estimateNo: { contains: search, mode: "insensitive" as const } },
                   { product: { serialNo: { contains: search, mode: "insensitive" as const } } },
                   { product: { designName: { contains: search, mode: "insensitive" as const } } },
                   { customer: { name: { contains: search, mode: "insensitive" as const } } },
@@ -162,7 +164,7 @@ router.get(
               }
             : {}),
         },
-        include: { product: true, customer: true, karigar: true, order: true },
+        include: { product: true, customer: true, order: true },
         orderBy: { createdAt: "desc" },
         take: 100,
       })
@@ -192,7 +194,6 @@ router.get(
         lines: { orderBy: { sortOrder: "asc" } },
         product: true,
         customer: true,
-        karigar: true,
         order: { select: { id: true, orderNo: true } },
       },
     });
@@ -212,7 +213,6 @@ const updateSchema = z.object({
   profitPct: z.number().min(0).optional(),
   showBreakdownOnPdf: z.boolean().optional(),
   gstPct: z.number().min(0).max(100).optional(),
-  karigarId: z.string().nullable().optional(),
   customerId: z.string().optional(),
 });
 
@@ -458,6 +458,17 @@ router.post(
     });
 
     const withTotals = await recalculateEstimateTotals(estimate.id);
+
+    await recordAudit(prisma, {
+      userId: req.user!.id,
+      action: "UPDATE",
+      entityType: "Estimate",
+      entityId: estimate.id,
+      before: estimate,
+      after: withTotals,
+      ipAddress: req.ip ?? null,
+    });
+
     res.json(withTotals);
   })
 );
@@ -498,6 +509,17 @@ router.post(
     });
 
     const withTotals = await recalculateEstimateTotals(estimate.id);
+
+    await recordAudit(prisma, {
+      userId: req.user!.id,
+      action: "UPDATE",
+      entityType: "Estimate",
+      entityId: estimate.id,
+      before: estimate,
+      after: withTotals,
+      ipAddress: req.ip ?? null,
+    });
+
     res.json(withTotals);
   })
 );
@@ -612,6 +634,36 @@ router.post(
   })
 );
 
+// --- Send Quotation (customer-facing share, tracked for the timeline) -------
+// Purely a timestamped event — the PDF itself already exists via GET /:id/pdf
+// (titled "QUOTATION" for a Rough Estimate). This just records that it was
+// actually shared, independent of and non-blocking with Send to Production.
+router.post(
+  "/:id/send-quotation",
+  asyncHandler(async (req, res) => {
+    const estimate = await prisma.estimate.findUnique({ where: { id: req.params.id } });
+    if (!estimate) throw notFound("Estimate not found");
+    if (estimate.status === "DRAFT") throw badRequest("Approve the estimate before sending it as a quotation");
+
+    const updated = await prisma.estimate.update({
+      where: { id: req.params.id },
+      data: { quotationSentAt: new Date() },
+    });
+
+    await recordAudit(prisma, {
+      userId: req.user!.id,
+      action: "UPDATE",
+      entityType: "Estimate",
+      entityId: updated.id,
+      before: estimate,
+      after: updated,
+      ipAddress: req.ip ?? null,
+    });
+
+    res.json(updated);
+  })
+);
+
 // --- Convert to Order ---------------------------------------------------
 // Explicit action (matches the mockup's "Convert to Order" button) rather
 // than an automatic side-effect of /approve — keeps the delicate
@@ -630,6 +682,18 @@ router.post(
     if (estimate.type !== "FINAL_COSTING") throw badRequest("Only a Final Costing can be converted to an order");
     if (estimate.order) throw badRequest("This estimate has already been converted to an order");
     if (!estimate.customerId) throw badRequest("This estimate has no customer set");
+
+    // Same one-physical-piece invariant as job card creation: don't let a
+    // second customer's order attach to a product that's already someone
+    // else's active (undelivered) order.
+    const activeOrder = await prisma.order.findFirst({
+      where: { productId: estimate.productId, status: { not: "DELIVERED" } },
+    });
+    if (activeOrder && activeOrder.customerId !== estimate.customerId) {
+      throw badRequest(
+        `${estimate.product.serialNo} already has an active order (${activeOrder.orderNo}) for a different customer. Use "Clone Design" on the product page to get a new serial number for a separate physical piece.`
+      );
+    }
 
     const orderNo = await nextVoucherNumber("ORD");
     const order = await prisma.order.create({
@@ -800,8 +864,11 @@ router.post(
       };
     });
 
+    const estimateNo = await nextVoucherNumber("FC");
+
     const estimate = await prisma.estimate.create({
       data: {
+        estimateNo,
         productId: source.productId,
         customerId: source.customerId,
         type: "FINAL_COSTING",

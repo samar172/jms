@@ -43,7 +43,7 @@ router.get(
           include: {
             processStage: true,
             karigar: true,
-            materialIssues: { where: { isReversed: false } },
+            materialIssues: { where: { isReversed: false }, include: { purity: true, stoneType: true } },
             materialReceipts: { where: { isReversed: false } },
             labourEntries: true,
             wastageRecord: true,
@@ -72,6 +72,20 @@ router.post(
     const body = createSchema.parse(req.body);
     const product = await prisma.product.findUnique({ where: { id: body.productId } });
     if (!product) throw badRequest("Unknown product");
+
+    // A Product row is one physical serialized piece — it can only be mid-
+    // manufacture for one buyer at a time. Re-estimating the same design for
+    // a different customer needs its own piece (Clone Design → new serial
+    // number), not a second job card racing the first customer's in-progress
+    // one on the same physical item.
+    const activeJobCard = await prisma.jobCard.findFirst({
+      where: { productId: body.productId, status: { not: "CLOSED" } },
+    });
+    if (activeJobCard) {
+      throw badRequest(
+        `${product.serialNo} already has an active job card in production. If this is for a different customer, use "Clone Design" on the product page to get a new serial number for a separate physical piece first.`
+      );
+    }
 
     const jobCard = await prisma.jobCard.create({
       data: {

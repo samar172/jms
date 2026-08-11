@@ -5,6 +5,7 @@ import { requireAuth, requireRole } from "../../middleware/auth";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { recordAudit } from "../../services/audit";
 import { badRequest, notFound } from "../../utils/httpError";
+import { generateOrderInvoicePdf } from "./invoice.service";
 
 const router = Router();
 
@@ -80,6 +81,27 @@ router.get(
     });
     if (!order) throw notFound("Order not found");
     res.json(order);
+  })
+);
+
+router.get(
+  "/:id/invoice",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const order = await prisma.order.findUnique({
+      where: { id: req.params.id },
+      include: {
+        product: true,
+        customer: true,
+        estimate: { include: { lines: { include: { purity: true, stoneType: true }, orderBy: { sortOrder: "asc" } } } },
+      },
+    });
+    if (!order) throw notFound("Order not found");
+
+    const pdfBuffer = await generateOrderInvoicePdf(order);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename=Invoice-${order.orderNo}.pdf`);
+    res.send(pdfBuffer);
   })
 );
 
@@ -162,6 +184,17 @@ router.post(
       entityType: "CustomerLedgerEntry",
       entityId: ledgerEntry.id,
       after: ledgerEntry,
+      ipAddress: req.ip ?? null,
+    });
+
+    // Also surface this on the Order's own timeline, not just the customer ledger.
+    await recordAudit(prisma, {
+      userId: req.user!.id,
+      action: "UPDATE",
+      entityType: "Order",
+      entityId: order.id,
+      before: order,
+      after: updated,
       ipAddress: req.ip ?? null,
     });
 
