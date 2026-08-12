@@ -9,7 +9,7 @@ import { lineAmount, round2 } from "@jms/shared";
 import { recalculateEstimateTotals, derivedGoldRate } from "./estimates.service";
 import { generateEstimatePdf } from "./pdf.service";
 import { generateEstimateExcel } from "./excel.service";
-import { nextVoucherNumber, nextSequenceNumber } from "../../services/voucherNumber";
+import { nextVoucherNumber } from "../../services/voucherNumber";
 
 const router = Router();
 
@@ -63,6 +63,8 @@ const createSchema = z.object({
   customerId: z.string().optional(),
   type: z.enum(["ROUGH_ESTIMATE", "FINAL_COSTING"]),
   estimateDate: z.coerce.date().default(() => new Date()),
+  pieces: z.number().int().positive().optional(),
+  grossWeightG: z.number().positive().optional(),
   profitPct: z.number().min(0),
   gstPct: z.number().min(0).max(100).optional(),
   lines: z.array(lineInputSchema).default([]),
@@ -108,7 +110,7 @@ router.post(
       })
     );
 
-    const estimateNo = await nextSequenceNumber("ESTIMATE");
+    const estimateNo = await nextVoucherNumber("EST");
 
     const estimate = await prisma.estimate.create({
       data: {
@@ -118,6 +120,8 @@ router.post(
         type: body.type,
         version,
         estimateDate: body.estimateDate,
+        pieces: body.pieces ?? 1,
+        grossWeightG: body.grossWeightG,
         goldRateSnapshot24k: goldRate24k, // FR-7.08: rate is frozen from this point on (BR-03)
         profitPct: body.profitPct,
         ...(body.gstPct !== undefined ? { gstPct: body.gstPct } : {}),
@@ -735,7 +739,7 @@ router.post(
     if (estimate.order) throw badRequest("This estimate has already been converted to an order");
     if (!estimate.customerId) throw badRequest("This estimate has no customer set");
 
-    const orderNo = await nextVoucherNumber("ORD");
+    const orderNo = await nextVoucherNumber("JOB");
     const order = await prisma.order.create({
       data: {
         orderNo,
@@ -904,7 +908,7 @@ router.post(
       };
     });
 
-    const estimateNo = await nextSequenceNumber("ESTIMATE");
+    const estimateNo = await nextVoucherNumber("EST");
 
     const estimate = await prisma.estimate.create({
       data: {

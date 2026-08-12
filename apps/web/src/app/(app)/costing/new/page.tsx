@@ -16,7 +16,7 @@ interface ProductOption {
 
 interface GoldLine { id: string; purityId: string; quantity: string; rate: string; }
 interface StoneLine { id: string; stoneTypeId: string; pieces: string; quantity: string; rate: string; particular: string; }
-interface ChargeLine { id: string; type: "MAKING" | "OTHER" | "WASTAGE"; amount: string; }
+interface ChargeLine { id: string; type: "MAKING" | "OTHER" | "WASTAGE"; mode: "amount" | "weight"; amount: string; wt: string; rate: string; }
 
 export default function NewEstimateForm() {
   const router = useRouter();
@@ -31,6 +31,8 @@ export default function NewEstimateForm() {
   const [karigarId, setKarigarId] = useState("");
   const [profitPct, setProfitPct] = useState("12");
   const [gstPct, setGstPct] = useState("3");
+  const [pieces, setPieces] = useState("1");
+  const [grossWeightG, setGrossWeightG] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -48,7 +50,7 @@ export default function NewEstimateForm() {
 
   const addGold = () => setGoldLines([...goldLines, { id: Math.random().toString(), purityId: karats?.[0]?.id ?? "", quantity: "", rate: "" }]);
   const addStone = () => setStoneLines([...stoneLines, { id: Math.random().toString(), stoneTypeId: stoneTypes?.[0]?.id ?? "", pieces: "", quantity: "", rate: "", particular: "" }]);
-  const addCharge = () => setChargeLines([...chargeLines, { id: Math.random().toString(), type: "MAKING", amount: "" }]);
+  const addCharge = () => setChargeLines([...chargeLines, { id: Math.random().toString(), type: "MAKING", mode: "amount", amount: "", wt: "", rate: "" }]);
 
   const goldTotal = goldLines.reduce((acc, g) => {
     const rate = g.rate ? Number(g.rate) : (g.purityId ? deriveRate(goldRate24k, Number(karats?.find(k => k.id === g.purityId)?.purityFactor ?? 0)) : 0);
@@ -59,7 +61,10 @@ export default function NewEstimateForm() {
     return acc + Number(s.quantity) * Number(s.rate);
   }, 0);
 
-  const chargeTotal = chargeLines.reduce((acc, c) => acc + Number(c.amount), 0);
+  const chargeTotal = chargeLines.reduce((acc, c) => {
+    if (c.mode === "weight") return acc + Number(c.wt) * Number(c.rate);
+    return acc + Number(c.amount);
+  }, 0);
 
   const cost = goldTotal + stoneTotal + chargeTotal;
   const profitAmt = cost * (Number(profitPct) / 100);
@@ -96,11 +101,11 @@ export default function NewEstimateForm() {
             };
           }),
         ...chargeLines
-          .filter(c => Number(c.amount) > 0)
+          .filter(c => Number(c.amount) > 0 || (Number(c.wt) > 0 && Number(c.rate) > 0))
           .map(c => ({
             head: c.type,
-            quantity: 1, // Charges as lumpsum for simplicity here
-            rate: Number(c.amount),
+            quantity: c.mode === "weight" ? Number(c.wt) || 1 : 1,
+            rate: c.mode === "weight" ? Number(c.rate) : Number(c.amount),
           })),
       ];
 
@@ -109,6 +114,8 @@ export default function NewEstimateForm() {
         body: {
           productId,
           type: "ROUGH_ESTIMATE",
+          pieces: pieces ? Number(pieces) : undefined,
+          grossWeightG: grossWeightG ? Number(grossWeightG) : undefined,
           profitPct: Number(profitPct),
           gstPct: Number(gstPct),
           lines: formattedLines,
@@ -148,8 +155,8 @@ export default function NewEstimateForm() {
             {/* ITEM SELECTION */}
             <div className="bg-white border border-slate-200 rounded-md">
               <div className="px-3 pt-2 text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Item & Header</div>
-              <div className="p-3 grid md:grid-cols-2 gap-3">
-                <div className="md:col-span-2">
+              <div className="p-3 grid md:grid-cols-4 gap-3">
+                <div className="md:col-span-4">
                   <label className="text-[11px] text-slate-500">Product</label>
                   <input
                     className="mt-0.5 w-full h-8 px-2 rounded border border-slate-200 text-[12px] mb-1"
@@ -166,7 +173,8 @@ export default function NewEstimateForm() {
                     ))}
                   </select>
                 </div>
-                <div>
+                
+                <div className="md:col-span-1">
                   <label className="text-[11px] text-slate-500">Party / Customer</label>
                   <select className="mt-0.5 w-full h-8 px-2 rounded border border-slate-200 text-[12px]" value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
                     <option value="">Select a customer…</option>
@@ -175,7 +183,31 @@ export default function NewEstimateForm() {
                     ))}
                   </select>
                 </div>
-                <div>
+
+                <div className="md:col-span-1">
+                  <label className="text-[11px] text-slate-500">Pieces</label>
+                  <input 
+                    type="number" 
+                    className="mt-0.5 w-full h-8 px-2 rounded border border-slate-200 text-[12px] mono" 
+                    value={pieces} 
+                    onChange={(e) => setPieces(e.target.value)} 
+                    placeholder="1"
+                  />
+                </div>
+
+                <div className="md:col-span-1">
+                  <label className="text-[11px] text-slate-500">Gross Weight — GW (g)</label>
+                  <input 
+                    type="number" 
+                    step="0.001" 
+                    className="mt-0.5 w-full h-8 px-2 rounded border border-slate-200 text-[12px] mono" 
+                    value={grossWeightG} 
+                    onChange={(e) => setGrossWeightG(e.target.value)} 
+                    placeholder="0.000"
+                  />
+                </div>
+
+                <div className="md:col-span-1">
                   <label className="text-[11px] text-slate-500">Karigar (Optional)</label>
                   <select className="mt-0.5 w-full h-8 px-2 rounded border border-slate-200 text-[12px]" value={karigarId} onChange={(e) => setKarigarId(e.target.value)}>
                     <option value="">No karigar yet…</option>
@@ -286,17 +318,34 @@ export default function NewEstimateForm() {
               <div className="px-3 pt-2 text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Charges</div>
               <div className="p-3">
                 <div className="grid grid-cols-2 gap-2 mb-2">
-                  {chargeLines.map((c) => (
-                    <div key={c.id} className="border border-slate-200 rounded-md p-2 relative">
-                      <button type="button" onClick={() => setChargeLines(chargeLines.filter(x => x.id !== c.id))} className="absolute top-1.5 right-1.5 text-slate-400 hover:text-rose-600">✕</button>
-                      <select className="h-7 w-[85%] border border-slate-200 rounded text-[12px] mb-1.5" value={c.type} onChange={e => setChargeLines(chargeLines.map(x => x.id === c.id ? { ...x, type: e.target.value as any } : x))}>
-                        <option value="MAKING">Making Charge</option>
-                        <option value="WASTAGE">Wastage Charge</option>
-                        <option value="OTHER">Other Charge</option>
-                      </select>
-                      <input type="number" className="w-full h-7 px-2 border border-slate-200 rounded text-[12px] mono" value={c.amount} onChange={e => setChargeLines(chargeLines.map(x => x.id === c.id ? { ...x, amount: e.target.value } : x))} placeholder="Amount" />
-                    </div>
-                  ))}
+                  {chargeLines.map((c) => {
+                    const amt = c.mode === "weight" ? Number(c.wt) * Number(c.rate) : Number(c.amount);
+                    return (
+                      <div key={c.id} className="border border-slate-200 rounded-md p-2 relative">
+                        <button type="button" onClick={() => setChargeLines(chargeLines.filter(x => x.id !== c.id))} className="absolute top-1.5 right-1.5 text-slate-400 hover:text-rose-600">✕</button>
+                        <div className="flex items-center gap-1.5 mb-1.5 w-[85%]">
+                          <select className="h-7 flex-1 border border-slate-200 rounded text-[12px]" value={c.type} onChange={e => setChargeLines(chargeLines.map(x => x.id === c.id ? { ...x, type: e.target.value as any } : x))}>
+                            <option value="MAKING">Making Charge</option>
+                            <option value="WASTAGE">Wastage Charge</option>
+                            <option value="OTHER">Other Charge</option>
+                          </select>
+                          <select className="h-7 w-20 border border-slate-200 rounded text-[11px]" value={c.mode} onChange={e => setChargeLines(chargeLines.map(x => x.id === c.id ? { ...x, mode: e.target.value as any } : x))}>
+                            <option value="amount">Fixed</option>
+                            <option value="weight">By Wt</option>
+                          </select>
+                        </div>
+                        {c.mode === "weight" ? (
+                          <div className="flex items-center gap-1.5">
+                            <input type="number" step="0.001" className="w-1/2 h-7 px-2 border border-slate-200 rounded text-[12px] mono" placeholder="Wt (g)" value={c.wt} onChange={e => setChargeLines(chargeLines.map(x => x.id === c.id ? { ...x, wt: e.target.value } : x))} />
+                            <input type="number" className="w-1/2 h-7 px-2 border border-slate-200 rounded text-[12px] mono" placeholder="Rate/g" value={c.rate} onChange={e => setChargeLines(chargeLines.map(x => x.id === c.id ? { ...x, rate: e.target.value } : x))} />
+                          </div>
+                        ) : (
+                          <input type="number" className="w-full h-7 px-2 border border-slate-200 rounded text-[12px] mono" placeholder="Amount" value={c.amount} onChange={e => setChargeLines(chargeLines.map(x => x.id === c.id ? { ...x, amount: e.target.value } : x))} />
+                        )}
+                        <div className="text-right text-[12px] font-medium text-slate-900 mono mt-1">{formatINR(amt)}</div>
+                      </div>
+                    );
+                  })}
                 </div>
                 <button type="button" onClick={addCharge} className="text-[12px] text-accent hover:underline flex items-center gap-1">+ Add charge card</button>
               </div>

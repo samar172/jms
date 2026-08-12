@@ -693,6 +693,8 @@ model Estimate {
   status         EstimateStatus @default(DRAFT)
 
   estimateDate       DateTime
+  pieces             Int?       @default(1)
+  grossWeightG       Decimal?   @db.Decimal(10, 3)
   goldRateSnapshot24k Decimal   @db.Decimal(12, 2)
   profitPct          Decimal    @db.Decimal(5, 2)
 

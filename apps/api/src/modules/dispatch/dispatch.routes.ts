@@ -71,7 +71,7 @@ router.post(
 
     let order = jobCard.order;
     if (!order) {
-      const orderNo = await nextVoucherNumber("ORD");
+      const orderNo = await nextVoucherNumber("JOB");
       order = await prisma.order.create({
         data: {
           orderNo,

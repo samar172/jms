@@ -35,7 +35,7 @@ interface Estimate {
   product: { serialNo: string; designName: string };
   customerId: string | null;
   customer: { id: string; name: string } | null;
-  order: { id: string; orderNo: string } | null;
+  order: { id: string; orderNo: string; targetDeliveryDate?: string | Date | null } | null;
   quotationSentAt: string | null;
 }
 
@@ -261,19 +261,24 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
         {!editable && (
           <>
             {estimate.type === "ROUGH_ESTIMATE" && (
-              <button className="console-btn" onClick={convertToFinalCosting} disabled={converting}>
-                {converting ? "Sending…" : "Send to Production"}
+              <button className="console-btn" onClick={sendQuotation} disabled={sendingQuotation}>
+                {sendingQuotation ? "Sending…" : "Send for Client Approval"}
+              </button>
+            )}
+            {estimate.type === "ROUGH_ESTIMATE" && estimate.status !== "APPROVED" && (
+              <button className="console-btn primary" onClick={convertToFinalCosting} disabled={converting}>
+                {converting ? "Recording…" : "Record Client Approval"}
               </button>
             )}
             {estimate.type === "FINAL_COSTING" &&
               estimate.status === "APPROVED" &&
               (estimate.order ? (
                 <Link href={`/orders/${estimate.order.id}`} className="console-btn primary">
-                  View Order {estimate.order.orderNo}
+                  View Job Card {estimate.order.orderNo}
                 </Link>
               ) : (
                 <button className="console-btn primary" onClick={convertToOrder} disabled={convertingOrder}>
-                  {convertingOrder ? "Converting…" : "Convert to Order"}
+                  {convertingOrder ? "Moving…" : "Move to Production"}
                 </button>
               ))}
             {canUnlock && (
@@ -286,9 +291,6 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
                 {amending ? "Amending…" : "Amend (Super Admin)"}
               </button>
             )}
-            <button className="console-btn" onClick={sendQuotation} disabled={sendingQuotation}>
-              {sendingQuotation ? "Sending…" : "Send Quotation"}
-            </button>
             <button className="console-btn" onClick={() => openAuthenticated(`/api/estimates/${estimateId}/pdf`)}>
               Export PDF
             </button>
@@ -495,6 +497,20 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
                 Once you hit &quot;Approve &amp; Lock&quot;, this can&apos;t be edited — you&apos;d need to create a new version instead.
               </p>
             </>
+          )}
+
+          {estimate.status === "APPROVED" && (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-md p-3 mt-4">
+              <div className="text-[11px] text-emerald-800 font-medium flex items-center gap-1.5">
+                Client Approved
+              </div>
+              <div className="text-[11px] text-emerald-700 mt-1">Target delivery: {estimate.order?.targetDeliveryDate ? formatDate(estimate.order.targetDeliveryDate.toString()) : "—"}</div>
+              {estimate.order ? (
+                <div className="text-[11px] text-emerald-700 mt-0.5">Job Card: <span className="mono">{estimate.order.orderNo}</span></div>
+              ) : (
+                <div className="text-[11px] text-emerald-700 mt-0.5">Pending move to production</div>
+              )}
+            </div>
           )}
         </div>
       </div>

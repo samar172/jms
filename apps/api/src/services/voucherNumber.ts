@@ -1,15 +1,16 @@
 import { prisma } from "../db";
 
-/** Same atomic-counter pattern as serialNumber.service.ts, reused for voucher numbering. */
-export async function nextVoucherNumber(prefix: string, width = 6): Promise<string> {
+export async function nextVoucherNumber(prefix: string, width = 4, includeYear = true): Promise<string> {
+  const currentYear = new Date().getFullYear();
+  const bucketKey = includeYear ? `${prefix}-${currentYear}` : prefix;
   const rows = await prisma.$queryRaw<{ lastValue: number }[]>`
     INSERT INTO "SerialSequence" ("bucketKey", "lastValue")
-    VALUES (${prefix}, 1)
+    VALUES (${bucketKey}, 1)
     ON CONFLICT ("bucketKey")
     DO UPDATE SET "lastValue" = "SerialSequence"."lastValue" + 1
     RETURNING "lastValue"
   `;
-  return `${prefix}-${String(rows[0].lastValue).padStart(width, "0")}`;
+  return `${bucketKey}-${String(rows[0].lastValue).padStart(width, "0")}`;
 }
 
 /**

@@ -12,6 +12,13 @@ import { useAuth } from "@/lib/auth-context";
 
 export interface WastageRecord {
   id: string;
+  grossWeightG: string;
+  pureGoldInPieceG: string;
+  goldScrapWeightG: string;
+  goldDustWeightG: string;
+  approvedLossWeightG: string;
+  chizzatWeightG: string;
+  stoneReturnedWeightG: string;
   netWastageG: string;
   wastagePct: string;
   tolerancePct: string;
@@ -71,17 +78,19 @@ export function JobStageCard({
   setBusy: (v: boolean) => void;
   onChange: () => void;
 }) {
-  const [karigarId, setKarigarId] = useState(stage.karigarId ?? "");
+  const [karigarId, setKarigarId] = useState("");
   const [showIssueForm, setShowIssueForm] = useState(false);
   const [showReceiptForm, setShowReceiptForm] = useState(false);
   const [showAddKarigar, setShowAddKarigar] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function assignKarigar() {
+    if (!karigarId) return;
     setBusy(true);
     setError(null);
     try {
       await apiFetch(`/api/job-cards/stages/${stage.id}`, { method: "PATCH", body: { karigarId } });
+      setShowAddKarigar(false);
       onChange();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed");
@@ -103,107 +112,124 @@ export function JobStageCard({
     }
   }
 
+  const isCurrent = stage.status !== "APPROVED" && stage.status !== "PENDING";
+  
   return (
-    <div className="console-panel p-3.5">
-      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-        <div className="flex items-center gap-2.5">
-          <h3 className="text-[13px] font-semibold text-ink">{stage.processStage.name}</h3>
-          <JobStageStatusPill status={stage.status} />
+    <div className={`border border-slate-200 rounded-md p-2.5 bg-white ${isCurrent ? 'ring-1 ring-blue-100' : ''}`}>
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-[12px] font-semibold text-slate-900">{stage.processStage.name}</span>
+        <JobStageStatusPill status={stage.status} />
+        <div className="ml-auto flex items-center gap-1.5">
+          {stage.status !== "APPROVED" && (
+            <button className="h-6 px-2 rounded bg-emerald-700 text-white text-[10.5px] hover:bg-emerald-800" disabled={busy} onClick={approveStage}>
+              Approve Stage
+            </button>
+          )}
+          {!stage.karigarId && (
+            <button className="h-6 px-2 rounded border border-slate-200 text-[10.5px] text-blue-800 hover:bg-blue-50 flex items-center gap-1" onClick={() => setShowAddKarigar(!showAddKarigar)}>
+              <span className="font-bold">+</span> Add Karigar
+            </button>
+          )}
         </div>
-        {stage.status !== "APPROVED" && (
-          <button className="console-btn" disabled={busy} onClick={approveStage}>
-            Approve Stage
-          </button>
-        )}
       </div>
 
-      {error && <p className="text-sm text-err-tx mb-2">{error}</p>}
+      {error && <p className="text-[11px] text-rose-600 mb-2 bg-rose-50 p-2 rounded">{error}</p>}
 
-      <div className="flex items-center gap-2 mb-3 flex-wrap">
-        <select className="console-field w-auto" value={karigarId} onChange={(e) => setKarigarId(e.target.value)}>
-          <option value="">Unassigned</option>
-          {karigars.map((k) => (
-            <option key={k.id} value={k.id}>
-              {k.name}
-            </option>
-          ))}
-        </select>
-        <button className="console-btn" disabled={busy || !karigarId} onClick={assignKarigar}>
-          Assign
-        </button>
-        <button type="button" className="text-xs text-accent hover:underline" onClick={() => setShowAddKarigar((v) => !v)}>
-          {showAddKarigar ? "Cancel" : "+ New Karigar"}
-        </button>
-      </div>
       {showAddKarigar && (
-        <div className="bg-neu-bg p-3 rounded-md mb-3">
-          <AddKarigarForm
-            onCreated={(k) => {
-              setKarigarId(k.id);
-              setShowAddKarigar(false);
-              onKarigarCreated();
-            }}
-            onCancel={() => setShowAddKarigar(false)}
-          />
+        <div className="bg-slate-50 border border-slate-100 p-2.5 rounded-md mb-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <select className="h-7 px-2 rounded border border-slate-200 text-[12px]" value={karigarId} onChange={(e) => setKarigarId(e.target.value)}>
+              <option value="">Select Karigar…</option>
+              {karigars.map((k) => (
+                <option key={k.id} value={k.id}>{k.name}</option>
+              ))}
+            </select>
+            <button className="h-7 px-3 rounded bg-blue-800 text-white text-[12px] font-medium hover:bg-blue-900" disabled={busy || !karigarId} onClick={assignKarigar}>
+              Assign
+            </button>
+            <button type="button" className="text-[11px] text-slate-500 hover:underline" onClick={() => setShowAddKarigar(false)}>Cancel</button>
+          </div>
         </div>
       )}
 
-      {stage.materialIssues.length > 0 && (
-        <div className="text-sm text-ink2 mb-2 space-y-0.5">
-          {stage.materialIssues.map((mi) => (
-            <div key={mi.id}>
-              {mi.materialType === "GOLD"
-                ? `Gold (${mi.purity?.code ?? "—"}): ${formatWeight(mi.fineWeightG)} fine`
-                : mi.materialType === "FINDING"
-                  ? `Finding: ${mi.grossWeightG ? formatWeight(mi.grossWeightG) : ""}${mi.pieces ? ` · ${mi.pieces} pc` : ""}`
-                  : `${mi.materialType.replace(/_/g, " ")} (${mi.stoneType?.name ?? "—"}): ${
-                      mi.caratWeight ? formatCarat(mi.caratWeight) : ""
-                    }${mi.pieces ? ` · ${mi.pieces} pc` : ""}`}
+      {stage.karigarId ? (
+        <div className="grid grid-cols-1 gap-2">
+          <div className="border border-slate-200 rounded-md p-2.5">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-700 grid place-items-center text-[10px] font-semibold shrink-0">
+                {stage.karigar?.name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[12px] text-slate-900 font-medium truncate">{stage.karigar?.name}</div>
+              </div>
             </div>
-          ))}
+            
+            {stage.materialIssues.length > 0 ? (
+              <div className="mt-2 space-y-1">
+                {stage.materialIssues.map((mi) => (
+                  <div key={mi.id} className="flex items-center gap-2 text-[11px] bg-slate-50 rounded px-2 py-1">
+                    <span className="text-slate-700 flex-1 truncate">
+                      {mi.materialType === "GOLD" ? `Gold · ${mi.purity?.code ?? ""}` : mi.materialType === "FINDING" ? "Finding" : `${mi.materialType} · ${mi.stoneType?.name ?? ""}`}
+                    </span>
+                    <span className="mono text-slate-500">
+                      {mi.materialType === "GOLD" ? `${formatWeight(mi.fineWeightG)}g fine` : mi.materialType === "FINDING" ? `${formatWeight(mi.grossWeightG ?? "0")}g` : `${formatCarat(mi.caratWeight ?? "0")} ct`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-2 text-[10px] text-slate-400">Abhi tak koi material issue nahi hua</div>
+            )}
+
+            {stage.wastageRecord && (
+              <div className="mt-2">
+                <WastageDisplay wastage={stage.wastageRecord} stageId={stage.id} onChange={onChange} />
+              </div>
+            )}
+
+            <div className="flex items-center gap-1.5 mt-2 border-t border-slate-100 pt-2">
+              <button className="h-6 px-2 rounded border border-slate-200 text-[10.5px] text-slate-700 hover:bg-slate-50 flex items-center gap-1" onClick={() => setShowIssueForm((s) => !s)}>
+                + Issue Material
+              </button>
+              {stage.materialIssues.length > 0 && !stage.wastageRecord && (
+                <button className="h-6 px-2 rounded bg-blue-800 text-white text-[10.5px] hover:bg-blue-900" onClick={() => setShowReceiptForm((s) => !s)}>
+                  Receive & Reconcile
+                </button>
+              )}
+            </div>
+
+            {showIssueForm && (
+              <div className="mt-2 pt-2 border-t border-slate-100">
+                <IssueForm
+                  stageId={stage.id}
+                  karigarId={stage.karigarId!}
+                  onDone={() => { setShowIssueForm(false); onChange(); }}
+                />
+              </div>
+            )}
+            
+            {showReceiptForm && (
+              <div className="mt-2 pt-2 border-t border-slate-100">
+                <ReceiptForm
+                  stageId={stage.id}
+                  karigarId={stage.karigarId!}
+                  fineIssuedG={stage.materialIssues.reduce((s, i) => s + Number(i.fineWeightG), 0)}
+                  grossIssuedG={stage.materialIssues.reduce((s, i) => s + Number(i.grossWeightG ?? 0), 0)}
+                  issuedStoneCarats={stage.materialIssues
+                    .filter((i) => i.materialType === "POLKI" || i.materialType === "COLOURED_STONE")
+                    .reduce((s, i) => s + Number(i.caratWeight ?? 0), 0)}
+                  isSettingStage={/setting/i.test(stage.processStage.name)}
+                  purityFactor={purityFactor}
+                  tolerancePct={Number(stage.processStage.wastageTolerancePct)}
+                  onDone={() => { setShowReceiptForm(false); onChange(); }}
+                />
+              </div>
+            )}
+          </div>
         </div>
+      ) : (
+        <div className="text-[11px] text-slate-400 py-1.5">Is stage ke liye abhi koi karigar assign nahi hai</div>
       )}
-      <button className="console-btn mb-3" onClick={() => setShowIssueForm((s) => !s)} disabled={!stage.karigarId}>
-        {showIssueForm ? "Cancel" : "+ Issue Material"}
-      </button>
-      {showIssueForm && (
-        <IssueForm
-          stageId={stage.id}
-          karigarId={stage.karigarId!}
-          onDone={() => {
-            setShowIssueForm(false);
-            onChange();
-          }}
-        />
-      )}
-
-      {stage.materialIssues.length > 0 && !stage.wastageRecord && (
-        <button className="console-btn primary mb-3" onClick={() => setShowReceiptForm((s) => !s)}>
-          {showReceiptForm ? "Cancel" : "Receive & Reconcile"}
-        </button>
-      )}
-      {showReceiptForm && (
-        <ReceiptForm
-          stageId={stage.id}
-          karigarId={stage.karigarId!}
-          fineIssuedG={stage.materialIssues.reduce((s, i) => s + Number(i.fineWeightG), 0)}
-          grossIssuedG={stage.materialIssues.reduce((s, i) => s + Number(i.grossWeightG ?? 0), 0)}
-          issuedStoneCarats={stage.materialIssues
-            .filter((i) => i.materialType === "POLKI" || i.materialType === "COLOURED_STONE")
-            .reduce((s, i) => s + Number(i.caratWeight ?? 0), 0)}
-          isSettingStage={/setting/i.test(stage.processStage.name)}
-          purityFactor={purityFactor}
-          tolerancePct={Number(stage.processStage.wastageTolerancePct)}
-          onDone={() => {
-            setShowReceiptForm(false);
-            onChange();
-          }}
-        />
-      )}
-
-      {stage.wastageRecord && <WastageDisplay wastage={stage.wastageRecord} stageId={stage.id} onChange={onChange} />}
-
-      <LabourSection stage={stage} onChange={onChange} />
     </div>
   );
 }
@@ -726,44 +752,43 @@ function WastageDisplay({
   }
 
   return (
-    <div className={`rounded-md p-3 mb-3 ${wastage.withinTolerance ? "bg-ok-bg" : "bg-err-bg"}`}>
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-ink">
-          Wastage {formatPct(wastage.wastagePct)} ({wastage.withinTolerance ? "within tolerance" : "exceeds tolerance"})
-        </span>
-        <div className="flex items-center gap-2">
-          <span className="console-pill neu">{wastage.exceptionStatus}</span>
-          {canRevise && isDecided && !revising && (
-            <button className="text-xs text-accent hover:underline" onClick={() => setRevising(true)}>
-              Edit Decision
-            </button>
-          )}
-        </div>
-      </div>
-      {showForm && (
-        <div className="mt-3 space-y-2">
+    <div className={`text-[10px] border rounded px-2 py-1.5 ${wastage.exceptionStatus === 'PENDING' ? 'text-rose-700 bg-rose-50 border-rose-200' : (!wastage.withinTolerance ? 'text-amber-700 bg-amber-50 border-amber-200' : 'text-emerald-700 bg-emerald-50 border-emerald-200')}`}>
+      Reconciled: {formatWeight(wastage.pureGoldInPieceG)} g actual gold · {formatWeight(wastage.goldDustWeightG)} g dust · {formatWeight(wastage.stoneReturnedWeightG)} g stone rtn · <b>{formatWeight(wastage.chizzatWeightG)} g chizzat ({formatPct(wastage.wastagePct)})</b>
+      
+      {showForm ? (
+        <div className="mt-1.5 bg-white border border-rose-200 rounded p-1.5 space-y-1">
+          <div className="font-semibold mb-1">⚠ Chizzat requires Manager approval</div>
           {revising && wastage.exceptionReason && (
-            <p className="text-xs text-mute">Current reason on file: {wastage.exceptionReason}</p>
+            <p className="text-[9px] text-slate-500 mb-1">Current reason: {wastage.exceptionReason}</p>
           )}
-          <textarea
-            className="console-field"
-            placeholder="Reason for excess wastage (required)"
+          <input
+            className="w-full h-6 px-1.5 rounded border border-slate-200 text-[10px]"
+            placeholder="Approval remarks"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
           />
-          <div className="flex gap-2">
-            <button className="console-btn primary flex-1" disabled={submitting || !reason} onClick={() => decide(true)}>
-              Approve Exception
+          <div className="flex items-center gap-1 pt-0.5">
+            <button className="h-6 px-2 rounded bg-rose-700 text-white text-[10px] hover:bg-rose-800" disabled={submitting} onClick={() => decide(true)}>
+              Approve
             </button>
-            <button className="console-btn flex-1" disabled={submitting || !reason} onClick={() => decide(false)}>
+            <button className="h-6 px-2 rounded border border-slate-200 text-[10px] text-slate-600 hover:bg-slate-50" disabled={submitting} onClick={() => decide(false)}>
               Reject
             </button>
             {revising && (
-              <button type="button" className="console-btn" onClick={() => setRevising(false)}>
+              <button type="button" className="h-6 px-2 rounded border border-slate-200 text-[10px] text-slate-600 hover:bg-slate-50" onClick={() => setRevising(false)}>
                 Cancel
               </button>
             )}
           </div>
+        </div>
+      ) : (
+        <div className="mt-1 flex items-center gap-2">
+          {!wastage.withinTolerance && (
+            <span>✓ Approved {wastage.exceptionReason ? `— ${wastage.exceptionReason}` : ''}</span>
+          )}
+          {canRevise && isDecided && (
+            <button className="text-[9.5px] text-blue-700 hover:underline" onClick={() => setRevising(true)}>Edit Decision</button>
+          )}
         </div>
       )}
     </div>

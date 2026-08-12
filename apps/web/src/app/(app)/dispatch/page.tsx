@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useApi } from "@/lib/hooks";
 import { apiFetch, ApiError } from "@/lib/api";
-import { InvoiceStatusPill } from "@/components/StatusPill";
+
 import { formatINR, formatDate } from "@/lib/format";
 import { Search } from "lucide-react";
 
@@ -180,5 +180,14 @@ export default function DispatchPage() {
         </table>
       </div>
     </div>
+  );
+}
+
+function InvoiceStatusPill({ status }: { status: string }) {
+  const isPaid = status === "PAID" || status === "SETTLED";
+  return (
+    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${isPaid ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>
+      {status}
+    </span>
   );
 }

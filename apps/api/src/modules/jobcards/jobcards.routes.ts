@@ -25,6 +25,7 @@ router.get(
       include: {
         product: { include: { images: { where: { isPrimary: true }, take: 1 } } },
         customer: true,
+        estimate: true,
         stages: { include: { processStage: true, karigar: true }, orderBy: { sequenceOrder: "asc" } },
       },
       orderBy: { createdAt: "desc" },
