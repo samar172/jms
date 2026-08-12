@@ -313,88 +313,107 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
         <ProductionPanel productId={estimate.productId} customerId={estimate.customerId} estimateId={estimateId} />
       )}
 
-      <div className="grid lg:grid-cols-[240px_1fr_320px] border border-line rounded-md bg-panel overflow-hidden items-start">
-        <div className="border-b lg:border-b-0 lg:border-r border-line p-3.5">
-          <label className="console-field-label">Estimate #</label>
-          <input className="console-field" value={estimate.estimateNo ?? "—"} disabled />
+      <div className="grid lg:grid-cols-3 gap-4 items-start">
+        {/* Left Side: Fields & Items (2/3) */}
+        <div className="lg:col-span-2 space-y-4 min-w-0">
+          
+          {/* Header Panel */}
+          <div className="bg-white border border-slate-200 rounded-md p-4 grid grid-cols-2 sm:grid-cols-3 gap-4">
+            <div>
+              <label className="console-field-label">Estimate #</label>
+              <input className="console-field" value={estimate.estimateNo ?? "—"} disabled />
+            </div>
 
-          <label className="console-field-label">Design</label>
-          <input className="console-field" value={`${estimate.product.designName} (${estimate.product.serialNo})`} disabled />
+            <div>
+              <label className="console-field-label">Design</label>
+              <input className="console-field" value={`${estimate.product.designName} (${estimate.product.serialNo})`} disabled />
+            </div>
 
-          <label className="console-field-label">Customer</label>
-          {editable ? (
-            <select className="console-field" value={estimate.customerId ?? ""} onChange={(e) => saveCustomer(e.target.value)}>
-              <option value="">Not set…</option>
-              {customers?.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <div className="console-field-static">{estimate.customer?.name ?? "Not set"}</div>
-          )}
-          {editable && (
-            <p className="text-[10.5px] text-mute -mt-1 mb-0">Same design, different customer? Pick who this estimate is for.</p>
-          )}
+            <div>
+              <label className="console-field-label">Customer</label>
+              {editable ? (
+                <select className="console-field" value={estimate.customerId ?? ""} onChange={(e) => saveCustomer(e.target.value)}>
+                  <option value="">Not set…</option>
+                  {customers?.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="console-field-static">{estimate.customer?.name ?? "Not set"}</div>
+              )}
+              {editable && (
+                <p className="text-[10.5px] text-mute mt-1 mb-0">Pick who this estimate is for.</p>
+              )}
+            </div>
 
-          <label className="console-field-label">Type</label>
-          <div className="console-field-static">{estimate.type.replace(/_/g, " ")}</div>
+            <div>
+              <label className="console-field-label">Type</label>
+              <div className="console-field-static">{estimate.type.replace(/_/g, " ")}</div>
+            </div>
 
-          <label className="console-field-label">Estimate Date</label>
-          <div className="console-field-static">{formatDate(estimate.estimateDate)}</div>
+            <div>
+              <label className="console-field-label">Estimate Date</label>
+              <div className="console-field-static">{formatDate(estimate.estimateDate)}</div>
+            </div>
 
-          <label className="console-field-label">Status</label>
-          <div className="pb-1">
-            <EstimateStatusPill status={estimate.status} />
+            <div>
+              <label className="console-field-label">Status</label>
+              <div className="pt-1">
+                <EstimateStatusPill status={estimate.status} />
+              </div>
+            </div>
+          </div>
+
+          {/* Lines Panel */}
+          <div className="bg-white border border-slate-200 rounded-md p-4 overflow-x-auto min-w-0">
+            <div className="text-[11px] font-bold uppercase text-ink2 tracking-wide mb-1.5">1. Materials — Gold &amp; Stones</div>
+            {HEADS.filter((h) => MATERIAL_HEADS.includes(h.key)).map((h) => (
+              <SectionCard
+                key={h.key}
+                head={h.key}
+                label={h.label}
+                unit={h.unit}
+                hint={h.hint}
+                lines={linesByHead(h.key)}
+                subtotal={subtotal(h.key)}
+                editable={editable}
+                estimateId={estimateId}
+                karats={karats ?? []}
+                stoneTypes={stoneTypes ?? []}
+                goldLines={linesByHead("GOLD")}
+                goldRate24k={Number(estimate.goldRateSnapshot24k)}
+                onChange={mutate}
+                onDeleteLine={deleteLine}
+              />
+            ))}
+
+            <div className="text-[11px] font-bold uppercase text-ink2 tracking-wide mt-4 mb-1.5">2. Making, Other Charges &amp; Wastage</div>
+            {HEADS.filter((h) => CHARGE_HEADS.includes(h.key)).map((h) => (
+              <SectionCard
+                key={h.key}
+                head={h.key}
+                label={h.label}
+                unit={h.unit}
+                hint={h.hint}
+                lines={linesByHead(h.key)}
+                subtotal={subtotal(h.key)}
+                editable={editable}
+                estimateId={estimateId}
+                karats={karats ?? []}
+                stoneTypes={stoneTypes ?? []}
+                goldLines={linesByHead("GOLD")}
+                goldRate24k={Number(estimate.goldRateSnapshot24k)}
+                onChange={mutate}
+                onDeleteLine={deleteLine}
+              />
+            ))}
           </div>
         </div>
 
-        <div className="p-3.5 overflow-x-auto min-w-0">
-          <div className="text-[11px] font-bold uppercase text-ink2 tracking-wide mb-1.5">1. Materials — Gold &amp; Stones</div>
-          {HEADS.filter((h) => MATERIAL_HEADS.includes(h.key)).map((h) => (
-            <SectionCard
-              key={h.key}
-              head={h.key}
-              label={h.label}
-              unit={h.unit}
-              hint={h.hint}
-              lines={linesByHead(h.key)}
-              subtotal={subtotal(h.key)}
-              editable={editable}
-              estimateId={estimateId}
-              karats={karats ?? []}
-              stoneTypes={stoneTypes ?? []}
-              goldLines={linesByHead("GOLD")}
-              goldRate24k={Number(estimate.goldRateSnapshot24k)}
-              onChange={mutate}
-              onDeleteLine={deleteLine}
-            />
-          ))}
-
-          <div className="text-[11px] font-bold uppercase text-ink2 tracking-wide mt-4 mb-1.5">2. Making, Other Charges &amp; Wastage</div>
-          {HEADS.filter((h) => CHARGE_HEADS.includes(h.key)).map((h) => (
-            <SectionCard
-              key={h.key}
-              head={h.key}
-              label={h.label}
-              unit={h.unit}
-              hint={h.hint}
-              lines={linesByHead(h.key)}
-              subtotal={subtotal(h.key)}
-              editable={editable}
-              estimateId={estimateId}
-              karats={karats ?? []}
-              stoneTypes={stoneTypes ?? []}
-              goldLines={linesByHead("GOLD")}
-              goldRate24k={Number(estimate.goldRateSnapshot24k)}
-              onChange={mutate}
-              onDeleteLine={deleteLine}
-            />
-          ))}
-        </div>
-
-        <div className="p-4 bg-[#FFFCF5] border-t lg:border-t-0 lg:border-l border-line lg:sticky lg:top-[60px] self-start">
+        {/* Right Side: Live Summary (1/3) */}
+        <div className="lg:col-span-1 p-4 bg-[#FFFCF5] border border-slate-200 rounded-md lg:sticky lg:top-[60px]">
           <div className="text-[11px] uppercase text-mute font-bold mb-2.5">Live Summary</div>
 
           <div className="console-sumrow">

@@ -132,6 +132,7 @@ const createSchema = z.object({
   designSource: z.enum(["IN_HOUSE", "CUSTOMER_SUPPLIED"]).default("IN_HOUSE"),
   customerId: z.string().optional(),
   legacyRef: z.string().optional(),
+  wastageRuleJson: z.any().optional(),
 });
 
 router.post(
@@ -168,6 +169,7 @@ router.post(
         description: body.description,
         designSource: body.designSource,
         customerId: body.customerId,
+        wastageRuleJson: body.wastageRuleJson,
         createdById: req.user!.id,
       },
       include: { category: true, purity: true },
@@ -239,6 +241,7 @@ const updateSchema = z.object({
     .enum(["DESIGN", "ESTIMATED", "IN_PRODUCTION", "FINISHED", "SOLD", "MELTED"])
     .optional(),
   customerId: z.string().optional(),
+  wastageRuleJson: z.any().optional(),
 });
 
 router.patch(
@@ -248,7 +251,17 @@ router.patch(
     const before = await prisma.product.findUnique({ where: { id: req.params.id } });
     if (!before) throw notFound("Product not found");
     const body = updateSchema.parse(req.body);
-    const product = await prisma.product.update({ where: { id: req.params.id }, data: body });
+    const product = await prisma.product.update({
+      where: { id: req.params.id },
+      data: {
+        designName: body.designName,
+        description: body.description,
+        size: body.size,
+        status: body.status,
+        customerId: body.customerId,
+        wastageRuleJson: body.wastageRuleJson,
+      },
+    });
     await recordAudit(prisma, {
       userId: req.user!.id,
       action: "UPDATE",

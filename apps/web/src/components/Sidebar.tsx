@@ -45,43 +45,33 @@ const NAV_GROUPS: NavGroup[] = [
     items: [{ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard }],
   },
   {
-    label: "Sales",
+    label: "Workflow",
     items: [
-      { href: "/costing", label: "Estimates & Costing", icon: Calculator, roles: ["SUPER_ADMIN", "MANAGER", "COSTING", "AUDITOR"] },
-      { href: "/orders", label: "Orders", icon: Package },
-      { href: "/invoices", label: "Invoicing", icon: Receipt, roles: ["SUPER_ADMIN", "MANAGER", "COSTING", "SALES", "AUDITOR"] },
-    ],
-  },
-  {
-    label: "Manufacturing",
-    items: [
+      { href: "/costing", label: "Estimates", icon: Calculator, roles: ["SUPER_ADMIN", "MANAGER", "COSTING", "AUDITOR"] },
       { href: "/job-cards", label: "Job Cards", icon: ClipboardList },
-      { href: "/karigars", label: "Karigars", icon: Users },
-      { href: "/assembly", label: "Assembly", icon: Wrench },
-      { href: "/qc", label: "Quality Control", icon: ShieldCheck },
+      { href: "/material-vouchers", label: "Issue Material", icon: Send, roles: ["SUPER_ADMIN", "MANAGER", "STORE", "COSTING", "AUDITOR"] },
+      { href: "/reconciliation", label: "Receive & Reconcile", icon: Scale, roles: ["SUPER_ADMIN", "MANAGER", "STORE", "COSTING", "AUDITOR"] },
+      { href: "/invoices", label: "Dispatch & Invoicing", icon: Package, roles: ["SUPER_ADMIN", "MANAGER", "COSTING", "SALES", "AUDITOR"] },
+      { href: "/costing/final", label: "Final Costing", icon: Receipt, roles: ["SUPER_ADMIN", "MANAGER", "COSTING", "AUDITOR"] },
     ],
   },
   {
-    label: "Material",
+    label: "Ledgers",
     items: [
-      { href: "/materials", label: "Materials & Stock", icon: Boxes, roles: ["SUPER_ADMIN", "MANAGER", "STORE", "COSTING", "AUDITOR"] },
-      { href: "/material-vouchers", label: "Material Issue / Return", icon: Send, roles: ["SUPER_ADMIN", "MANAGER", "STORE", "COSTING", "AUDITOR"] },
-      { href: "/reconciliation", label: "Reconciliation", icon: Scale, roles: ["SUPER_ADMIN", "MANAGER", "STORE", "COSTING", "AUDITOR"] },
+      { href: "/materials", label: "Gold Ledger", icon: Diamond, roles: ["SUPER_ADMIN", "MANAGER", "STORE", "COSTING", "AUDITOR"] },
       { href: "/stone-ledger", label: "Stone Ledger", icon: Diamond, roles: ["SUPER_ADMIN", "MANAGER", "STORE", "COSTING", "AUDITOR"] },
+      { href: "/karigars/ledger", label: "Karigar Ledger", icon: BookOpen },
+      { href: "/ledger", label: "Party / Customer Ledger", icon: BookOpen, roles: ["SUPER_ADMIN", "MANAGER", "COSTING", "SALES", "AUDITOR"] },
+      { href: "/cash-bank-ledger", label: "Cash & Bank Ledger", icon: BookOpen, roles: ["SUPER_ADMIN", "MANAGER", "COSTING", "AUDITOR"] },
     ],
   },
   {
-    label: "Product",
+    label: "Masters & Reports",
     items: [
-      { href: "/products", label: "Products", icon: Gem },
-      { href: "/visual-search", label: "Visual Search", icon: Camera },
-    ],
-  },
-  {
-    label: "Finance",
-    items: [
-      { href: "/ledger", label: "Ledger", icon: BookOpen, roles: ["SUPER_ADMIN", "MANAGER", "COSTING", "SALES", "AUDITOR"] },
       { href: "/reports", label: "Reports", icon: BarChart3 },
+      { href: "/karigars", label: "Karigars", icon: Users },
+      { href: "/products", label: "Item Master", icon: Gem },
+      { href: "/visual-search", label: "Visual Search", icon: Camera },
     ],
   },
   {

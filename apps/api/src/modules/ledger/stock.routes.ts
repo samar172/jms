@@ -85,6 +85,58 @@ router.get(
   })
 );
 
+router.get(
+  "/gold-flow",
+  requireRole("SUPER_ADMIN", "MANAGER", "COSTING", "AUDITOR"),
+  asyncHandler(async (req, res) => {
+    const stockEntries = await prisma.stockLedgerEntry.findMany({
+      where: { materialType: "GOLD" },
+      include: { vendor: true },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
+    
+    const karigarEntries = await prisma.karigarLedgerEntry.findMany({
+      where: { type: { in: ["METAL_DEBIT", "METAL_CREDIT"] } },
+      include: { karigar: true },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
+
+    const combined = [
+      ...stockEntries.map(e => ({
+        id: e.id,
+        date: e.createdAt,
+        type: e.direction === "IN" ? "INWARD" : "OUTWARD",
+        party: e.vendor?.name ?? "Store",
+        particulars: e.note || (e.referenceType === "Purchase" ? "Vendor Purchase" : "Stock Adjustment"),
+        weightIn: e.direction === "IN" ? Number(e.quantity) : 0,
+        weightOut: e.direction === "OUT" ? Number(e.quantity) : 0,
+        source: "STOCK"
+      })),
+      ...karigarEntries.map(e => ({
+        id: e.id,
+        date: e.createdAt,
+        type: e.type === "METAL_CREDIT" ? "INWARD" : "OUTWARD", // metal returned = INWARD to vault? Wait, KarigarLedger METAL_DEBIT means Karigar receives gold, so OUTWARD from vault. METAL_CREDIT means Karigar returns gold, so INWARD to vault.
+        party: e.karigar.name,
+        particulars: e.note || (e.type === "METAL_DEBIT" ? "Issued to Karigar" : "Returned from Karigar"),
+        weightIn: e.type === "METAL_CREDIT" ? Number(e.fineGoldG ?? 0) : 0,
+        weightOut: e.type === "METAL_DEBIT" ? Number(e.fineGoldG ?? 0) : 0,
+        source: "KARIGAR"
+      }))
+    ].sort((a, b) => b.date.getTime() - a.date.getTime()).slice(0, 200);
+
+    let runningBalance = 0;
+    // Calculate running balance from bottom up
+    const withBalance = combined.reverse().map(e => {
+      runningBalance += e.weightIn - e.weightOut;
+      return { ...e, balance: runningBalance };
+    }).reverse();
+
+    res.json(withBalance);
+  })
+);
+
 // FR-4.06: purchases from a vendor, updating store stock.
 const purchaseSchema = z.object({
   materialType: z.enum(["GOLD", "POLKI", "COLOURED_STONE", "FINDING"]),

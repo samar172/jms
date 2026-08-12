@@ -23,6 +23,122 @@ function startOfYear(date = new Date()) {
 
 // Comprehensive analytics dashboard data
 router.get(
+  "/owner",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    if (!canSeeCost(req.user!.role)) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+
+    const now = new Date();
+    const monthStart = startOfMonth(now);
+
+    const [
+      jobs,
+      materialReceipts,
+      karigarLedger,
+      customerLedger,
+      stockLedger,
+      wastageExceptions,
+      overReconciliations,
+      invoices,
+    ] = await Promise.all([
+      prisma.jobCard.findMany({
+        where: { status: { not: "CLOSED" } },
+        include: { stages: { include: { processStage: true } } },
+      }),
+      prisma.materialReceipt.findMany({
+        where: { receivedAt: { gte: monthStart }, isReversed: false },
+        select: { chizzatPct: true, chizzatWeightG: true },
+      }),
+      prisma.karigarLedgerEntry.findMany(),
+      prisma.customerLedgerEntry.findMany(),
+      prisma.stockLedgerEntry.findMany({ where: { materialType: "GOLD" } }),
+      prisma.wastageRecord.findMany({
+        where: { exceptionStatus: "PENDING" },
+        include: { jobStage: { include: { jobCard: { include: { product: true } } } } },
+      }),
+      prisma.materialReceipt.findMany({
+        where: { overAccounted: true, isReversed: false },
+        include: { jobStage: { include: { jobCard: { include: { product: true } } } } },
+      }),
+      prisma.order.findMany({ where: { invoiceNo: { not: null } } }),
+    ]);
+
+    // 1. Gold in Stock
+    const goldInStockG = stockLedger.reduce(
+      (sum, e) => sum + (e.direction === "IN" ? Number(e.quantity) : -Number(e.quantity)),
+      0
+    );
+
+    // 2. Gold with Karigars
+    const goldWithKarigarsG = karigarLedger.reduce(
+      (sum, e) =>
+        sum + (e.type === "METAL_DEBIT" ? Number(e.fineGoldG ?? 0) : e.type === "METAL_CREDIT" ? -Number(e.fineGoldG ?? 0) : 0),
+      0
+    );
+
+    // 3. Jobs in Production & Overdue
+    const jobsInProduction = jobs.length;
+    const overdueJobs = jobs.filter((j) => j.targetDeliveryDate && j.targetDeliveryDate < now).length;
+
+    // 4. Receivable (Customers)
+    const receivable = customerLedger.reduce((sum, e) => {
+      if (e.type === "INVOICE_RAISED" || e.type === "DEBIT_NOTE") return sum + Number(e.amount);
+      if (e.type === "PAYMENT_RECEIVED" || e.type === "CREDIT_NOTE") return sum - Number(e.amount);
+      return sum;
+    }, 0);
+
+    // 5. Payable to Karigars
+    const payableToKarigars = karigarLedger.reduce((sum, e) => {
+      if (e.type === "LABOUR_EARNED") return sum + Number(e.amount ?? 0);
+      if (e.type === "LABOUR_PAID" || e.type === "ADVANCE_PAID" || e.type === "WASTAGE_RECOVERY") return sum - Number(e.amount ?? 0);
+      if (e.type === "ADVANCE_ADJUSTED") return sum + Number(e.amount ?? 0); // Re-adds to payable since advance is adjusted
+      return sum;
+    }, 0);
+
+    // 6. Wastage Stats
+    const totalChizzatG = materialReceipts.reduce((sum, r) => sum + Number(r.chizzatWeightG ?? 0), 0);
+    const avgChizzatPct =
+      materialReceipts.length > 0
+        ? materialReceipts.reduce((sum, r) => sum + Number(r.chizzatPct ?? 0), 0) / materialReceipts.length
+        : 0;
+
+    // 7. Stage-wise Pipeline
+    const pipeline: Record<string, number> = {};
+    jobs.forEach((j) => {
+      const activeStage = j.stages.find((s) => s.status === "ISSUED" || s.status === "IN_PROGRESS" || s.status === "RECEIVED");
+      if (activeStage) {
+        const name = activeStage.processStage.name;
+        pipeline[name] = (pipeline[name] ?? 0) + 1;
+      }
+    });
+
+    // 8. Needs Attention
+    const needsAttention = [];
+    if (overdueJobs > 0) needsAttention.push(`${overdueJobs} jobs are overdue based on target delivery date.`);
+    if (wastageExceptions.length > 0) needsAttention.push(`Unresolved wastage exceptions on ${wastageExceptions.length} jobs.`);
+    if (overReconciliations.length > 0) needsAttention.push(`Over-reconciliation flagged on ${overReconciliations.length} jobs.`);
+    const overdueInvoices = invoices.filter((i) => i.invoicedAt && (now.getTime() - i.invoicedAt.getTime()) > 15 * 86400000);
+    if (overdueInvoices.length > 0) needsAttention.push(`${overdueInvoices.length} invoices pending > 15 days.`);
+
+    res.json({
+      goldInStockG: Math.round(goldInStockG * 100) / 100,
+      goldWithKarigarsG: Math.round(goldWithKarigarsG * 100) / 100,
+      jobsInProduction,
+      overdueJobs,
+      receivable,
+      payableToKarigars,
+      totalChizzatG: Math.round(totalChizzatG * 100) / 100,
+      avgChizzatPct: Math.round(avgChizzatPct * 100) / 100,
+      pipeline,
+      needsAttention,
+    });
+  })
+);
+
+// Comprehensive analytics dashboard data
+router.get(
   "/analytics",
   requireAuth,
   asyncHandler(async (req, res) => {

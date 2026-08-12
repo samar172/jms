@@ -394,33 +394,54 @@ function ReceiptForm({
   const { data: dustLots } = useApi<DustLot[]>("/api/materials/dust-lots");
   const openDustLots = dustLots?.filter((l) => l.status === "OPEN") ?? [];
   const [finishedPieceWeightG, setFinishedPieceWeightG] = useState("");
-  const [fillerWeightG, setFillerWeightG] = useState("0");
+  const [nonGoldInPieceWeightG, setNonGoldInPieceWeightG] = useState("0");
+  const [waxWireWeightG, setWaxWireWeightG] = useState("0");
+  const [otherNonGoldWeightG, setOtherNonGoldWeightG] = useState("0");
   const [fillerNote, setFillerNote] = useState("");
   const [pieceWeightIsFine, setPieceWeightIsFine] = useState(true);
+  
   const [dustWeightG, setDustWeightG] = useState("0");
   const [unusedReturnedWeightG, setUnusedReturnedWeightG] = useState("0");
+  const [goldScrapWeightG, setGoldScrapWeightG] = useState("0");
+  const [approvedLossWeightG, setApprovedLossWeightG] = useState("0");
+  const [stoneReturnedWeightG, setStoneReturnedWeightG] = useState("0");
+  const [stoneReturnedNote, setStoneReturnedNote] = useState("");
+  
   const [dustLotId, setDustLotId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Netted-out non-gold filler (wax/solder/support wire) never had gold value
-  // to begin with — mirrors receiptFineWeights() on the server so this
-  // preview matches what actually gets saved.
-  const netPieceG = Math.max((Number(finishedPieceWeightG) || 0) - (Number(fillerWeightG) || 0), 0);
+  // Net gold in finished piece
+  const netPieceG = Math.max(
+    (Number(finishedPieceWeightG) || 0) -
+      (Number(nonGoldInPieceWeightG) || 0) -
+      (Number(waxWireWeightG) || 0) -
+      (Number(otherNonGoldWeightG) || 0),
+    0
+  );
+
+  const finePieceG = pieceWeightIsFine ? netPieceG : fineWeight(netPieceG, purityFactor);
+  const fineReturnedG = fineWeight(
+    (Number(unusedReturnedWeightG) || 0) + (Number(goldScrapWeightG) || 0) + (Number(approvedLossWeightG) || 0),
+    purityFactor
+  );
+  
   const preview = computeWastage({
     fineIssuedG,
-    finePieceG: pieceWeightIsFine ? netPieceG : fineWeight(netPieceG, purityFactor),
+    finePieceG,
     fineDustG: fineWeight(Number(dustWeightG) || 0, purityFactor),
-    fineReturnedG: fineWeight(Number(unusedReturnedWeightG) || 0, purityFactor),
+    fineReturnedG,
   });
+  
   const withinTolerance = preview.wastagePct <= tolerancePct;
-  // On a Setting stage, once stones are mounted the karigar usually can only
-  // weigh the finished piece as one combined lump (metal + stones together)
-  // — the office has to subtract the stones' weight to isolate gold. This
-  // shop's convention for that: carats issued ÷ 5 (= carats × 0.2g/ct).
   const suggestedStoneWeightG = isSettingStage && issuedStoneCarats > 0 ? round3(issuedStoneCarats / 5) : null;
   const totalReturnedRawG =
-    (Number(finishedPieceWeightG) || 0) + (Number(dustWeightG) || 0) + (Number(unusedReturnedWeightG) || 0);
+    (Number(finishedPieceWeightG) || 0) +
+    (Number(dustWeightG) || 0) +
+    (Number(unusedReturnedWeightG) || 0) +
+    (Number(goldScrapWeightG) || 0) +
+    (Number(approvedLossWeightG) || 0) +
+    (Number(stoneReturnedWeightG) || 0);
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -433,11 +454,17 @@ function ReceiptForm({
           jobStageId: stageId,
           karigarId,
           finishedPieceWeightG: Number(finishedPieceWeightG) || 0,
-          fillerWeightG: Number(fillerWeightG) || 0,
+          nonGoldInPieceWeightG: Number(nonGoldInPieceWeightG) || 0,
+          waxWireWeightG: Number(waxWireWeightG) || 0,
+          otherNonGoldWeightG: Number(otherNonGoldWeightG) || 0,
           fillerNote: fillerNote || undefined,
           pieceWeightIsFine,
           dustWeightG: Number(dustWeightG) || 0,
           unusedReturnedWeightG: Number(unusedReturnedWeightG) || 0,
+          goldScrapWeightG: Number(goldScrapWeightG) || 0,
+          approvedLossWeightG: Number(approvedLossWeightG) || 0,
+          stoneReturnedWeightG: Number(stoneReturnedWeightG) || 0,
+          stoneReturnedNote: stoneReturnedNote || undefined,
           dustLotId: Number(dustWeightG) > 0 && dustLotId ? dustLotId : undefined,
         },
       });
@@ -450,118 +477,182 @@ function ReceiptForm({
   }
 
   return (
-    <form onSubmit={submit} className="bg-neu-bg p-4 rounded-md mb-3 grid sm:grid-cols-2 gap-4">
-      <div className="space-y-4">
-        <div className="rounded-md border border-line p-3 space-y-1 bg-panel">
-          <div className="text-sm text-ink2">
-            Gross Weight Issued <span className="text-xs">(karigar ko diya gaya kul vazan — weigh returns against this)</span>:{" "}
-            <span className="font-medium text-ink mono">{formatWeight(grossIssuedG)}</span>
-          </div>
-          <div className="text-xs text-ink2">
-            Fine Gold Issued <span className="text-xs">({hi.receipt.fineGoldIssued})</span>:{" "}
-            <span className="mono">{formatWeight(fineIssuedG)}</span>
-          </div>
-          <p className="text-xs text-mute pt-1">
-            Enter weights exactly as weighed on the scale (raw, not fine). Their total should come close to the
-            Gross Weight Issued above, not the Fine Gold Issued figure.
-          </p>
+    <form onSubmit={submit} className="bg-neu-bg p-4 rounded-md mb-3">
+      <div className="rounded-md border border-line p-3 space-y-1 bg-panel mb-4">
+        <div className="text-sm text-ink2">
+          Gross Weight Issued <span className="text-xs">(weigh returns against this)</span>:{" "}
+          <span className="font-medium text-ink mono">{formatWeight(grossIssuedG)}</span>
         </div>
-        <div>
-          <label className="label-lg">
-            Finished Piece Weight (g)
-            <span className="label-hi">{hi.receipt.finishedPieceWeight} (ग्राम)</span>
-          </label>
-          <input
-            required
-            type="number"
-            inputMode="decimal"
-            step="0.001"
-            className="input-lg tabular"
-            value={finishedPieceWeightG}
-            onChange={(e) => setFinishedPieceWeightG(e.target.value)}
-          />
-        </div>
-        <div>
-          <label className="label-lg">
-            {isSettingStage ? "Filler Weight (g) — stones embedded in piece, wax/solder, if any" : "Filler Weight (g) — wax/solder/support wire, if any"}
-            <span className="label-hi">Non-gold material mixed in — zero gold value</span>
-          </label>
-          {suggestedStoneWeightG !== null && (
-            <button
-              type="button"
-              className="console-btn mb-2"
-              onClick={() => setFillerWeightG(String(suggestedStoneWeightG))}
-            >
-              Use suggested stone weight: {suggestedStoneWeightG}g ({issuedStoneCarats}ct issued ÷ 5)
-            </button>
-          )}
-          <input
-            type="number"
-            inputMode="decimal"
-            step="0.001"
-            className="input-lg tabular"
-            value={fillerWeightG}
-            onChange={(e) => setFillerWeightG(e.target.value)}
-          />
-          {Number(fillerWeightG) > 0 && (
-            <input
-              className="input mt-2"
-              placeholder="What was the filler? (optional note)"
-              value={fillerNote}
-              onChange={(e) => setFillerNote(e.target.value)}
-            />
-          )}
-          <label className="flex items-center gap-2 mt-2 text-sm">
-            <input type="checkbox" checked={pieceWeightIsFine} onChange={(e) => setPieceWeightIsFine(e.target.checked)} />
-            Weight above (net of filler) is already fine gold — don&apos;t reduce it further by the piece&apos;s karat
-          </label>
-        </div>
-        <div>
-          <label className="label-lg">
-            Gold Dust Recovered (g)
-            <span className="label-hi">{hi.receipt.dustRecovered} (ग्राम)</span>
-          </label>
-          <input
-            type="number"
-            inputMode="decimal"
-            step="0.001"
-            className="input-lg tabular"
-            value={dustWeightG}
-            onChange={(e) => setDustWeightG(e.target.value)}
-          />
-          {Number(dustWeightG) > 0 && (
-            <select className="console-field mt-2" value={dustLotId} onChange={(e) => setDustLotId(e.target.value)}>
-              <option value="">Don&apos;t add to a dust lot</option>
-              {openDustLots.map((lot) => (
-                <option key={lot.id} value={lot.id}>
-                  Add to {lot.lotNo}
-                </option>
-              ))}
-            </select>
-          )}
-        </div>
-        <div>
-          <label className="label-lg">
-            Unused Gold Returned (g)
-            <span className="label-hi">{hi.receipt.unusedReturned} (ग्राम)</span>
-          </label>
-          <input
-            type="number"
-            inputMode="decimal"
-            step="0.001"
-            className="input-lg tabular"
-            value={unusedReturnedWeightG}
-            onChange={(e) => setUnusedReturnedWeightG(e.target.value)}
-          />
-        </div>
-        <div className="text-xs text-mute tabular">
-          Returned so far: {formatWeight(totalReturnedRawG)} of {formatWeight(grossIssuedG)} gross issued
+        <div className="text-xs text-ink2">
+          Fine Gold Issued: <span className="mono">{formatWeight(fineIssuedG)}</span>
         </div>
       </div>
-      <div className={`rounded-md p-4 flex flex-col justify-center items-center ${withinTolerance ? "bg-ok-bg" : "bg-err-bg"}`}>
-        <div className="text-sm text-ink2 mb-1 text-center">
-          Net Wastage <span className="block">{hi.receipt.netWastage}</span>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        {/* Left Column: Piece details */}
+        <div className="space-y-4">
+          <h4 className="font-semibold text-sm border-b pb-1">Finished Piece</h4>
+          <div>
+            <label className="label-lg">Total Finished Piece Weight (g)</label>
+            <input
+              required
+              type="number"
+              inputMode="decimal"
+              step="0.001"
+              className="input-lg tabular"
+              value={finishedPieceWeightG}
+              onChange={(e) => setFinishedPieceWeightG(e.target.value)}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="label-lg">Stone/Inlay in piece (g)</label>
+              {suggestedStoneWeightG !== null && (
+                <button
+                  type="button"
+                  className="text-xs text-blue-600 hover:underline block mb-1 text-left"
+                  onClick={() => setNonGoldInPieceWeightG(String(suggestedStoneWeightG))}
+                >
+                  Use suggestion: {suggestedStoneWeightG}g
+                </button>
+              )}
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.001"
+                className="input-lg tabular"
+                value={nonGoldInPieceWeightG}
+                onChange={(e) => setNonGoldInPieceWeightG(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="label-lg">Wax/Wire/Solder (g)</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.001"
+                className="input-lg tabular"
+                value={waxWireWeightG}
+                onChange={(e) => setWaxWireWeightG(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="label-lg">Other Non-Gold (g)</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.001"
+                className="input-lg tabular"
+                value={otherNonGoldWeightG}
+                onChange={(e) => setOtherNonGoldWeightG(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="label-lg">Filler Note</label>
+              <input
+                className="input-lg"
+                placeholder="e.g. enamel"
+                value={fillerNote}
+                onChange={(e) => setFillerNote(e.target.value)}
+              />
+            </div>
+          </div>
+          <label className="flex items-center gap-2 mt-2 text-sm">
+            <input type="checkbox" checked={pieceWeightIsFine} onChange={(e) => setPieceWeightIsFine(e.target.checked)} />
+            Net weight is Fine Gold (don't reduce by karat)
+          </label>
         </div>
+
+        {/* Right Column: Returns */}
+        <div className="space-y-4">
+          <h4 className="font-semibold text-sm border-b pb-1">Returns & Dust</h4>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="label-lg">Gold Dust (g)</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.001"
+                className="input-lg tabular"
+                value={dustWeightG}
+                onChange={(e) => setDustWeightG(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="label-lg">Unused Gold (g)</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.001"
+                className="input-lg tabular"
+                value={unusedReturnedWeightG}
+                onChange={(e) => setUnusedReturnedWeightG(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="label-lg">Gold Scrap/Sprue (g)</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.001"
+                className="input-lg tabular"
+                value={goldScrapWeightG}
+                onChange={(e) => setGoldScrapWeightG(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="label-lg">Pre-approved Loss (g)</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.001"
+                className="input-lg tabular"
+                value={approvedLossWeightG}
+                onChange={(e) => setApprovedLossWeightG(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="label-lg">Stones Returned (g)</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.001"
+                className="input-lg tabular"
+                value={stoneReturnedWeightG}
+                onChange={(e) => setStoneReturnedWeightG(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="label-lg">Stone Note</label>
+              <input
+                className="input-lg"
+                placeholder="e.g. 2 pcs broken"
+                value={stoneReturnedNote}
+                onChange={(e) => setStoneReturnedNote(e.target.value)}
+              />
+            </div>
+          </div>
+          {Number(dustWeightG) > 0 && (
+            <div>
+              <label className="label-lg">Assign Dust to Lot</label>
+              <select className="console-field mt-1" value={dustLotId} onChange={(e) => setDustLotId(e.target.value)}>
+                <option value="">Don&apos;t add to a dust lot</option>
+                {openDustLots.map((lot) => (
+                  <option key={lot.id} value={lot.id}>
+                    Add to {lot.lotNo}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div className="text-xs text-mute tabular mt-2">
+            Returned so far: {formatWeight(totalReturnedRawG)} of {formatWeight(grossIssuedG)} gross issued
+          </div>
+        </div>
+      </div>
+
+      <div className={`mt-6 rounded-md p-4 flex flex-col justify-center items-center ${withinTolerance ? "bg-ok-bg" : "bg-err-bg"}`}>
+        <div className="text-sm text-ink2 mb-1 text-center">Net Wastage</div>
         <div className={`text-4xl font-bold tabular ${withinTolerance ? "text-ok-tx" : "text-err-tx"}`}>
           {formatPct(preview.wastagePct)}
         </div>
@@ -569,10 +660,9 @@ function ReceiptForm({
         {!withinTolerance && (
           <p className="text-sm text-err-tx mt-2 text-center font-medium">
             Exceeds tolerance — Manager approval required.
-            <span className="block font-normal">{hi.receipt.exceedsTolerance}</span>
           </p>
         )}
-        <button className="console-btn primary mt-3 w-full justify-center" disabled={submitting}>
+        <button className="console-btn primary mt-3 w-full max-w-sm justify-center" disabled={submitting}>
           {submitting ? "Saving…" : "Submit Receipt"}
         </button>
         {error && <p className="text-sm text-err-tx mt-2">{error}</p>}

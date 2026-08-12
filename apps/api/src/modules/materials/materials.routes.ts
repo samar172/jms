@@ -7,7 +7,7 @@ import { recordAudit } from "../../services/audit";
 import { badRequest, notFound } from "../../utils/httpError";
 import { fineWeight, round3 } from "@jms/shared";
 import { nextVoucherNumber } from "../../services/voucherNumber";
-import { recomputeStageWastage, issuedGoldPurityFactor, receiptFineWeights } from "./wastage.service";
+import { recomputeStageWastage, issuedGoldPurityFactor, receiptFineWeights, computeChizzat } from "./wastage.service";
 import { isStockLedgerEnabled } from "../../services/settings";
 import { notify } from "../../services/notifications";
 
@@ -172,25 +172,43 @@ router.get(
 );
 
 // --- Material Receipt & reconciliation (FR-4.03, Module 5) ------------------
+// Input schema matches the mockup's full "Receive & Reconcile" form.
+// The server computes rawGapG, chizzatWeightG, and overAccounted — these are
+// NEVER sent by the client. Chizzat is a plug figure, not a manual entry.
 const receiptSchema = z
   .object({
     jobStageId: z.string().min(1),
     karigarId: z.string().min(1),
+    // === Finished piece breakdown ===
     finishedPieceWeightG: z.number().nonnegative(),
+    // Non-gold INSIDE the finished piece (netted from gold before chizzat calc)
+    nonGoldInPieceWeightG: z.number().nonnegative().default(0), // stones/inlay in piece
+    waxWireWeightG: z.number().nonnegative().default(0),        // wax/wire/solder in piece
+    otherNonGoldWeightG: z.number().nonnegative().default(0),   // other non-gold in piece
+    // Legacy filler field — honoured when the new fields are all 0
     fillerWeightG: z.number().nonnegative().default(0),
     fillerNote: z.string().optional(),
     pieceWeightIsFine: z.boolean().default(true),
+    // === Separately returned material ===
     dustWeightG: z.number().nonnegative().default(0),
     unusedReturnedWeightG: z.number().nonnegative().default(0),
+    goldScrapWeightG: z.number().nonnegative().default(0),      // sprue/filings recovered
+    approvedLossWeightG: z.number().nonnegative().default(0),   // pre-approved standing allowance
+    stoneReturnedWeightG: z.number().nonnegative().default(0),  // stones/polki returned
+    stoneReturnedNote: z.string().optional(),
+    // Legacy detailed stone return JSON (unit-level traceability)
     stonesReturned: z
       .array(z.object({ stoneTypeId: z.string(), caratWeight: z.number(), pieces: z.number().int() }))
       .optional(),
     dustLotId: z.string().optional(),
   })
-  .refine((v) => v.fillerWeightG <= v.finishedPieceWeightG, {
-    message: "Filler weight can't exceed the finished piece weight",
-    path: ["fillerWeightG"],
-  });
+  .refine(
+    (v) => {
+      const totalNonGold = v.nonGoldInPieceWeightG + v.waxWireWeightG + v.otherNonGoldWeightG + v.fillerWeightG;
+      return totalNonGold <= v.finishedPieceWeightG;
+    },
+    { message: "Non-gold components can't exceed the finished piece weight", path: ["nonGoldInPieceWeightG"] }
+  );
 
 router.post(
   "/receipts",
@@ -199,19 +217,58 @@ router.post(
     const body = receiptSchema.parse(req.body);
     const receiptNo = await nextVoucherNumber("MR");
 
+    // Fetch the stage's gold issues to compute chizzat server-side
+    const stageData = await prisma.jobStage.findUnique({
+      where: { id: body.jobStageId },
+      include: {
+        materialIssues: { where: { materialType: "GOLD", isReversed: false } },
+        jobCard: { include: { product: { include: { purity: true } } } },
+      },
+    });
+    if (!stageData) throw badRequest("Job stage not found");
+
+    const grossIssuedG = round3(stageData.materialIssues.reduce((s, i) => s + Number(i.grossWeightG ?? 0), 0));
+
+    // Server-side Chizzat computation — client NEVER sends these values.
+    // Matches computeChizzat() in wastage.service.ts (which mirrors the
+    // approved mockup's reconcileCalcNumbers()).
+    const chizzat = computeChizzat({
+      grossIssuedG,
+      finishedPieceWeightG: body.finishedPieceWeightG,
+      nonGoldInPieceWeightG: body.nonGoldInPieceWeightG,
+      waxWireWeightG: body.waxWireWeightG,
+      otherNonGoldWeightG: body.otherNonGoldWeightG,
+      dustWeightG: body.dustWeightG,
+      unusedReturnedWeightG: body.unusedReturnedWeightG,
+      goldScrapWeightG: body.goldScrapWeightG,
+      approvedLossWeightG: body.approvedLossWeightG,
+    });
+
     const receipt = await prisma.materialReceipt.create({
       data: {
         receiptNo,
         jobStageId: body.jobStageId,
         karigarId: body.karigarId,
         finishedPieceWeightG: body.finishedPieceWeightG,
+        nonGoldInPieceWeightG: body.nonGoldInPieceWeightG,
+        waxWireWeightG: body.waxWireWeightG,
+        otherNonGoldWeightG: body.otherNonGoldWeightG,
         fillerWeightG: body.fillerWeightG,
         fillerNote: body.fillerNote,
         pieceWeightIsFine: body.pieceWeightIsFine,
         dustWeightG: body.dustWeightG,
         unusedReturnedWeightG: body.unusedReturnedWeightG,
+        goldScrapWeightG: body.goldScrapWeightG,
+        approvedLossWeightG: body.approvedLossWeightG,
+        stoneReturnedWeightG: body.stoneReturnedWeightG,
+        stoneReturnedNote: body.stoneReturnedNote,
         stonesReturnedJson: body.stonesReturned,
         dustLotId: body.dustLotId,
+        // Server-computed reconciliation results (never from client)
+        rawGapG: chizzat.rawGapG,
+        chizzatWeightG: chizzat.chizzatWeightG,
+        chizzatPct: chizzat.chizzatPct,
+        overAccounted: chizzat.overAccounted,
         receivedById: req.user!.id,
       },
     });
@@ -222,16 +279,15 @@ router.post(
     });
 
     // Credit the karigar's metal ledger for everything they returned.
-    const purity = await prisma.jobStage.findUnique({
-      where: { id: body.jobStageId },
-      include: { jobCard: { include: { product: { include: { purity: true } } } } },
-    });
-    const purityFactor = Number(purity!.jobCard.product.purity.purityFactor);
+    const purityFactor = Number(stageData.jobCard.product.purity.purityFactor);
     const issuedPurityFactor = await issuedGoldPurityFactor(body.jobStageId, purityFactor);
     const totalFineReturned = round3(
       receiptFineWeights(
         {
           finishedPieceWeightG: body.finishedPieceWeightG,
+          nonGoldInPieceWeightG: body.nonGoldInPieceWeightG,
+          waxWireWeightG: body.waxWireWeightG,
+          otherNonGoldWeightG: body.otherNonGoldWeightG,
           fillerWeightG: body.fillerWeightG,
           pieceWeightIsFine: body.pieceWeightIsFine,
           dustWeightG: body.dustWeightG,
@@ -259,23 +315,50 @@ router.post(
       });
     }
 
-    // Store Stock Ledger (optional module): unused gold handed back by the
-    // karigar returns to the store's own stock, so it's an IN entry there
-    // (separate from the karigar ledger credit above, which just closes out
-    // what that karigar was carrying).
-    if (body.unusedReturnedWeightG > 0 && (await isStockLedgerEnabled())) {
-      await prisma.stockLedgerEntry.create({
-        data: {
-          materialType: "GOLD",
-          purityId: purity!.jobCard.product.purityId,
-          direction: "IN",
-          quantity: body.unusedReturnedWeightG,
-          referenceType: "MaterialReceipt",
-          referenceId: receipt.id,
-          note: `Unused gold returned — ${receiptNo}`,
-          createdById: req.user!.id,
-        },
-      });
+    // Stock Ledger: unused gold + gold scrap + dust return to store stock.
+    // Over-tolerance chizzat ledger posting is deferred (see wastage.service.ts
+    // comments) — only within-tolerance amounts post immediately here.
+    if (await isStockLedgerEnabled()) {
+      const stockEntries: Promise<unknown>[] = [];
+      const purityId = stageData.jobCard.product.purityId;
+
+      if (body.unusedReturnedWeightG > 0) {
+        stockEntries.push(
+          prisma.stockLedgerEntry.create({
+            data: {
+              materialType: "GOLD", purityId,
+              direction: "IN", quantity: body.unusedReturnedWeightG,
+              referenceType: "MaterialReceipt", referenceId: receipt.id,
+              note: `Unused gold returned — ${receiptNo}`, createdById: req.user!.id,
+            },
+          })
+        );
+      }
+      if (body.goldScrapWeightG > 0) {
+        stockEntries.push(
+          prisma.stockLedgerEntry.create({
+            data: {
+              materialType: "GOLD", purityId,
+              direction: "IN", quantity: body.goldScrapWeightG,
+              referenceType: "MaterialReceipt", referenceId: receipt.id,
+              note: `Gold scrap/sprue recovered — ${receiptNo}`, createdById: req.user!.id,
+            },
+          })
+        );
+      }
+      if (body.dustWeightG > 0) {
+        stockEntries.push(
+          prisma.stockLedgerEntry.create({
+            data: {
+              materialType: "GOLD", purityId,
+              direction: "IN", quantity: body.dustWeightG,
+              referenceType: "MaterialReceipt", referenceId: receipt.id,
+              note: `Gold dust/sweepings — ${receiptNo}`, createdById: req.user!.id,
+            },
+          })
+        );
+      }
+      await Promise.all(stockEntries);
     }
 
     const wastage = await recomputeStageWastage(body.jobStageId);
@@ -284,10 +367,21 @@ router.post(
       await notify({
         role: "MANAGER",
         type: "WASTAGE_EXCEPTION",
-        title: `Wastage exception on ${purity!.jobCard.product.serialNo}`,
+        title: `Wastage exception on ${stageData.jobCard.product.serialNo}`,
         body: `${wastage.wastagePct}% exceeds the ${wastage.tolerancePct}% tolerance — needs a decision.`,
         entityType: "JobStage",
         entityId: body.jobStageId,
+      });
+    }
+
+    if (chizzat.overAccounted) {
+      await notify({
+        role: "MANAGER",
+        type: "OVER_RECONCILIATION",
+        title: `Over-reconciliation on ${stageData.jobCard.product.serialNo}`,
+        body: `Gold returned (${round3(chizzat.accountedGold)}g) exceeds gold issued (${grossIssuedG}g) — data entry error, please review.`,
+        entityType: "MaterialReceipt",
+        entityId: receipt.id,
       });
     }
 
@@ -300,7 +394,7 @@ router.post(
       ipAddress: req.ip ?? null,
     });
 
-    res.status(201).json({ receipt, wastage });
+    res.status(201).json({ receipt, wastage, chizzat });
   })
 );
 

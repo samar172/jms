@@ -67,6 +67,19 @@ export default function KarigarDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
+  let goldBal = 0;
+  let payableBal = 0;
+  const ledgerWithBalances = ledger ? [...ledger].reverse().map(e => {
+    if (e.type === "METAL_DEBIT") goldBal += Number(e.fineGoldG ?? 0);
+    if (e.type === "METAL_CREDIT") goldBal -= Number(e.fineGoldG ?? 0);
+    if (e.type === "LABOUR_EARNED") payableBal += Number(e.amount ?? 0);
+    if (e.type === "ADVANCE_PAID" || e.type === "WASTAGE_RECOVERY") payableBal -= Number(e.amount ?? 0);
+    // ADVANCE_ADJUSTED doesn't change net payable directly because it's a bookkeeping entry that reduces Advance balance and offsets against labour. Wait, actually we said netPayable = labour - (advancesPaid - advanceAdjusted). So netPayable decreases when advance is paid. Wait: netPayable = labour - advancesPaid + advancesAdjusted. No, wait. 
+    if (e.type === "ADVANCE_ADJUSTED") payableBal += Number(e.amount ?? 0); 
+
+    return { ...e, goldBalance: goldBal, payableBalance: payableBal };
+  }).reverse() : [];
+
   return (
     <div>
       <div className="mb-2">
@@ -128,23 +141,35 @@ export default function KarigarDetailPage({ params }: { params: Promise<{ id: st
                 <th>Date</th>
                 <th>Type</th>
                 <th className="num">Gold (g)</th>
+                <th className="num">Gold Bal (g)</th>
                 {showCost && <th className="num">Amount</th>}
+                {showCost && <th className="num">Payable Bal</th>}
                 <th>Note</th>
               </tr>
             </thead>
             <tbody>
-              {ledger?.map((e) => (
+              {ledgerWithBalances?.map((e) => (
                 <tr key={e.id}>
                   <td className="text-ink2">{formatDateTime(e.createdAt)}</td>
                   <td>{e.type.replace(/_/g, " ")}</td>
-                  <td className="num mono">{e.fineGoldG ? Number(e.fineGoldG).toFixed(3) : "—"}</td>
-                  {showCost && <td className="num mono">{e.amount ? formatINR(Number(e.amount)) : "—"}</td>}
+                  <td className={`num mono ${e.type === 'METAL_DEBIT' ? 'text-emerald-600' : e.type === 'METAL_CREDIT' ? 'text-rose-600' : ''}`}>
+                    {e.fineGoldG ? (e.type === 'METAL_CREDIT' ? '-' : '') + Number(e.fineGoldG).toFixed(3) : "—"}
+                  </td>
+                  <td className="num mono font-medium">{e.goldBalance.toFixed(3)}</td>
+                  {showCost && (
+                    <>
+                      <td className={`num mono ${['LABOUR_EARNED', 'ADVANCE_ADJUSTED'].includes(e.type) ? 'text-emerald-600' : ['ADVANCE_PAID', 'WASTAGE_RECOVERY'].includes(e.type) ? 'text-rose-600' : ''}`}>
+                        {e.amount ? (['ADVANCE_PAID', 'WASTAGE_RECOVERY'].includes(e.type) ? '-' : '') + formatINR(Number(e.amount)) : "—"}
+                      </td>
+                      <td className="num mono font-medium">{formatINR(e.payableBalance)}</td>
+                    </>
+                  )}
                   <td className="text-ink2">{e.note ?? "—"}</td>
                 </tr>
               ))}
-              {ledger?.length === 0 && (
+              {ledgerWithBalances?.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-mute">
+                  <td colSpan={showCost ? 7 : 5} className="py-8 text-center text-mute">
                     No ledger entries yet.
                   </td>
                 </tr>

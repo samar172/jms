@@ -148,11 +148,13 @@ router.get(
       .enum(["DRAFT", "SUBMITTED", "APPROVED", "SUPERSEDED"])
       .optional()
       .parse(req.query.status);
+    const type = z.string().optional().parse(req.query.type);
     const search = z.string().optional().parse(req.query.search);
     res.json(
       await prisma.estimate.findMany({
         where: {
           ...(status ? { status } : {}),
+          ...(type ? { type } : {}),
           ...(search
             ? {
                 OR: [
@@ -607,6 +609,52 @@ router.post(
       data: { status: estimate.type === "ROUGH_ESTIMATE" ? "ESTIMATED" : undefined },
     });
 
+    // Auto-create Job Card on Estimate Approval (from Mockup Flow)
+    // When a Rough Estimate is approved, automatically create a Job Card with default process stages.
+    if (estimate.type === "ROUGH_ESTIMATE") {
+      const activeJobCard = await prisma.jobCard.findFirst({
+        where: { estimateId: estimate.id, status: { not: "CLOSED" } },
+      });
+
+      if (!activeJobCard) {
+        const processStages = await prisma.processStage.findMany({
+          where: { isActive: true },
+          orderBy: { sequenceOrder: "asc" },
+        });
+
+        if (processStages.length > 0) {
+          const jobCard = await prisma.jobCard.create({
+            data: {
+              productId: estimate.productId,
+              estimateId: estimate.id,
+              customerId: estimate.customerId,
+              createdById: req.user!.id,
+              stages: {
+                create: processStages.map((ps, index) => ({
+                  processStageId: ps.id,
+                  sequenceOrder: index,
+                })),
+              },
+            },
+          });
+
+          await prisma.product.update({
+            where: { id: estimate.productId },
+            data: { status: "IN_PRODUCTION" },
+          });
+
+          await recordAudit(prisma, {
+            userId: req.user!.id,
+            action: "CREATE",
+            entityType: "JobCard",
+            entityId: jobCard.id,
+            after: jobCard,
+            ipAddress: req.ip ?? null,
+          });
+        }
+      }
+    }
+
     // Mirror the approved Final Costing onto the customer's ledger as what
     // they now owe for this piece. Rough Estimates are quotations, not a
     // billable event, so only Final Costing posts here.
@@ -636,6 +684,7 @@ router.post(
     res.json(approved);
   })
 );
+
 
 // --- Send Quotation (customer-facing share, tracked for the timeline) -------
 // Purely a timestamped event — the PDF itself already exists via GET /:id/pdf

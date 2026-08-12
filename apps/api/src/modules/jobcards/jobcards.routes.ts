@@ -306,4 +306,51 @@ router.post(
   })
 );
 
+// --- Record Dispatch (mockup flow: popup when moving to Dispatched) ----------
+// Captures dispatch mode/tracking/date directly on the JobCard (1 job = 1 dispatch).
+// This is the final stage action — after this, the job moves to Dispatch & Invoicing.
+const dispatchSchema = z.object({
+  dispatchMode: z.enum(["Insured Courier", "Hand Delivery", "Self Pickup", "Registered Post"]),
+  dispatchTracking: z.string().optional(),
+  dispatchDate: z.coerce.date(),
+});
+
+router.post(
+  "/:id/record-dispatch",
+  requireRole("SUPER_ADMIN", "MANAGER"),
+  asyncHandler(async (req, res) => {
+    const jobCard = await prisma.jobCard.findUnique({
+      where: { id: req.params.id },
+      include: { stages: { include: { processStage: true }, orderBy: { sequenceOrder: "asc" } } },
+    });
+    if (!jobCard) throw notFound("Job card not found");
+    if (jobCard.dispatchedAt) throw badRequest("Dispatch already recorded for this job card");
+
+    const body = dispatchSchema.parse(req.body);
+
+    const updated = await prisma.jobCard.update({
+      where: { id: req.params.id },
+      data: {
+        dispatchMode: body.dispatchMode,
+        dispatchTracking: body.dispatchTracking ?? null,
+        dispatchDate: body.dispatchDate,
+        dispatchedAt: new Date(),
+      },
+    });
+
+    await recordAudit(prisma, {
+      userId: req.user!.id,
+      action: "UPDATE",
+      entityType: "JobCard",
+      entityId: updated.id,
+      before: jobCard,
+      after: updated,
+      ipAddress: req.ip ?? null,
+    });
+
+    res.json(updated);
+  })
+);
+
 export default router;
+
