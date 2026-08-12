@@ -74,28 +74,34 @@ export default function NewEstimateForm() {
     setError(null);
     try {
       const formattedLines = [
-        ...goldLines.map(g => ({
-          head: "GOLD" as const,
-          purityId: g.purityId,
-          quantity: Number(g.quantity),
-          rate: g.rate ? Number(g.rate) : undefined,
-        })),
-        ...stoneLines.map(s => {
-          const sType = stoneTypes?.find(st => st.id === s.stoneTypeId);
-          return {
-            head: sType?.category === "POLKI" ? "POLKI" as const : "COLOURED_STONE" as const,
-            stoneTypeId: s.stoneTypeId,
-            description: s.particular,
-            quantity: Number(s.quantity),
-            pieces: s.pieces ? Number(s.pieces) : undefined,
-            rate: Number(s.rate),
-          };
-        }),
-        ...chargeLines.map(c => ({
-          head: c.type,
-          quantity: 1, // Charges as lumpsum for simplicity here
-          rate: Number(c.amount),
-        })),
+        ...goldLines
+          .filter(g => Number(g.quantity) > 0)
+          .map(g => ({
+            head: "GOLD" as const,
+            purityId: g.purityId,
+            quantity: Number(g.quantity),
+            rate: g.rate ? Number(g.rate) : undefined,
+          })),
+        ...stoneLines
+          .filter(s => Number(s.quantity) > 0)
+          .map(s => {
+            const sType = stoneTypes?.find(st => st.id === s.stoneTypeId);
+            return {
+              head: sType?.category === "POLKI" ? "POLKI" as const : "COLOURED_STONE" as const,
+              stoneTypeId: s.stoneTypeId,
+              description: s.particular || undefined,
+              quantity: Number(s.quantity),
+              pieces: s.pieces ? Number(s.pieces) : undefined,
+              rate: Number(s.rate) || 0,
+            };
+          }),
+        ...chargeLines
+          .filter(c => Number(c.amount) > 0)
+          .map(c => ({
+            head: c.type,
+            quantity: 1, // Charges as lumpsum for simplicity here
+            rate: Number(c.amount),
+          })),
       ];
 
       const estimate = await apiFetch<{ id: string }>("/api/estimates", {

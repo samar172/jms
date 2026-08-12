@@ -410,6 +410,7 @@ function ReceiptForm({
   const [dustLotId, setDustLotId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [forceOverAccounted, setForceOverAccounted] = useState(false);
 
   // Net gold in finished piece
   const netPieceG = Math.max(
@@ -443,6 +444,15 @@ function ReceiptForm({
     (Number(approvedLossWeightG) || 0) +
     (Number(stoneReturnedWeightG) || 0);
 
+  const accountedGold =
+    netPieceG +
+    (Number(dustWeightG) || 0) +
+    (Number(unusedReturnedWeightG) || 0) +
+    (Number(goldScrapWeightG) || 0) +
+    (Number(approvedLossWeightG) || 0);
+
+  const overAccounted = grossIssuedG > 0 && accountedGold > grossIssuedG + 0.001;
+
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setSubmitting(true);
@@ -466,6 +476,7 @@ function ReceiptForm({
           stoneReturnedWeightG: Number(stoneReturnedWeightG) || 0,
           stoneReturnedNote: stoneReturnedNote || undefined,
           dustLotId: Number(dustWeightG) > 0 && dustLotId ? dustLotId : undefined,
+          forceOverAccounted,
         },
       });
       onDone();
@@ -662,7 +673,18 @@ function ReceiptForm({
             Exceeds tolerance — Manager approval required.
           </p>
         )}
-        <button className="console-btn primary mt-3 w-full max-w-sm justify-center" disabled={submitting}>
+        
+        {overAccounted && (
+          <div className="bg-rose-50 border border-rose-200 text-rose-700 p-3 rounded text-sm mt-3 mb-2 w-full text-left">
+            <strong>Warning:</strong> Total accounted gold ({formatWeight(accountedGold)}) exceeds issued gold ({formatWeight(grossIssuedG)}). Please check your entries.
+            <label className="flex items-center gap-2 mt-2 font-medium cursor-pointer">
+              <input type="checkbox" checked={forceOverAccounted} onChange={(e) => setForceOverAccounted(e.target.checked)} />
+              Force submit over-reconciliation
+            </label>
+          </div>
+        )}
+
+        <button className="console-btn primary mt-3 w-full max-w-sm justify-center" disabled={submitting || (overAccounted && !forceOverAccounted)}>
           {submitting ? "Saving…" : "Submit Receipt"}
         </button>
         {error && <p className="text-sm text-err-tx mt-2">{error}</p>}

@@ -206,7 +206,6 @@ export default function CostingListPage() {
           </table>
         </div>
       </div>
-    </div>
   );
 }
 

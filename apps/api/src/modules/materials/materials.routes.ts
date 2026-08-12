@@ -201,6 +201,7 @@ const receiptSchema = z
       .array(z.object({ stoneTypeId: z.string(), caratWeight: z.number(), pieces: z.number().int() }))
       .optional(),
     dustLotId: z.string().optional(),
+    forceOverAccounted: z.boolean().optional(),
   })
   .refine(
     (v) => {
@@ -243,6 +244,10 @@ router.post(
       goldScrapWeightG: body.goldScrapWeightG,
       approvedLossWeightG: body.approvedLossWeightG,
     });
+
+    if (chizzat.overAccounted && !body.forceOverAccounted) {
+      throw badRequest(`Total accounted gold exceeds issued gold. Re-check entries or pass forceOverAccounted.`);
+    }
 
     const receipt = await prisma.materialReceipt.create({
       data: {
@@ -312,6 +317,26 @@ router.post(
       await prisma.dustLot.update({
         where: { id: body.dustLotId },
         data: { totalDustWeightG: { increment: body.dustWeightG } },
+      });
+    }
+
+    // Determine if chizzat is within tolerance right now to auto-approve
+    const tolerancePct = Number(stageData.processStage.wastageTolerancePct);
+    const withinTolerance = chizzat.chizzatPct <= tolerancePct;
+
+    // Credit Karigar for within-tolerance chizzat immediately (auto-approval)
+    if (chizzat.chizzatWeightG > 0 && withinTolerance) {
+      // Need fine gold equivalent of the chizzat. Chizzat is valued at the issued purity.
+      const fineChizzatG = chizzat.chizzatWeightG * issuedPurityFactor;
+      await prisma.karigarLedgerEntry.create({
+        data: {
+          karigarId: body.karigarId,
+          type: "METAL_CREDIT",
+          fineGoldG: round3(fineChizzatG),
+          referenceType: "MaterialReceipt",
+          referenceId: receipt.id,
+          note: `Process loss (within tolerance) — ${receiptNo}`,
+        },
       });
     }
 
@@ -584,6 +609,36 @@ router.post(
           note: `Wastage recovery — ${body.reason}`,
         },
       });
+    }
+
+    if (body.approve) {
+      // If approved, we must credit the Karigar for the over-tolerance chizzat so their ledger balances out.
+      const stage = await prisma.jobStage.findUnique({
+        where: { id: req.params.jobStageId },
+        include: {
+          materialIssues: { where: { materialType: "GOLD", isReversed: false } },
+          jobCard: { include: { product: { include: { purity: true } } } },
+        },
+      });
+      if (stage) {
+        const purityFactor = Number(stage.jobCard.product.purity.purityFactor);
+        const fineIssuedG = stage.materialIssues.reduce((sum, i) => sum + Number(i.fineWeightG), 0);
+        const grossIssuedG = stage.materialIssues.reduce((sum, i) => sum + Number(i.grossWeightG ?? 0), 0);
+        const issuedPurityFactor = grossIssuedG > 0 ? fineIssuedG / grossIssuedG : purityFactor;
+        
+        const fineChizzatG = Number(record.netWastageG) * issuedPurityFactor;
+        
+        await prisma.karigarLedgerEntry.create({
+          data: {
+            karigarId: stage.karigarId!,
+            type: "METAL_CREDIT",
+            fineGoldG: round3(fineChizzatG),
+            referenceType: "WastageRecord",
+            referenceId: record.id,
+            note: `Approved over-tolerance wastage exception`,
+          },
+        });
+      }
     }
 
     await recordAudit(prisma, {
