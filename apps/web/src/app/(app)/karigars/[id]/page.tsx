@@ -1,6 +1,7 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useApi, useProcessStages, type ProcessStage } from "@/lib/hooks";
 import { Gem, Wallet, HandCoins, Scale } from "lucide-react";
 import { formatWeight, formatINR, formatDateTime } from "@/lib/format";
@@ -40,6 +41,14 @@ interface Karigar {
 
 export default function KarigarDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const router = useRouter();
+  
+  useEffect(() => {
+    if (id === "ledger") {
+      router.replace("/karigars");
+    }
+  }, [id, router]);
+
   const { user } = useAuth();
   const { data: karigar, mutate: mutateKarigar } = useApi<Karigar>(`/api/masters/karigars/${id}`);
   const { data: summary, mutate: mutateSummary } = useApi<Summary>(`/api/labour/karigars/${id}/summary`);

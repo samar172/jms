@@ -84,15 +84,15 @@ router.get(
 
     // 4. Receivable (Customers)
     const receivable = customerLedger.reduce((sum, e) => {
-      if (e.type === "INVOICE_RAISED" || e.type === "DEBIT_NOTE") return sum + Number(e.amount);
-      if (e.type === "PAYMENT_RECEIVED" || e.type === "CREDIT_NOTE") return sum - Number(e.amount);
+      if (e.type === "INVOICE_RAISED") return sum + Number(e.amount);
+      if (e.type === "PAYMENT_RECEIVED") return sum - Number(e.amount);
       return sum;
     }, 0);
 
     // 5. Payable to Karigars
     const payableToKarigars = karigarLedger.reduce((sum, e) => {
       if (e.type === "LABOUR_EARNED") return sum + Number(e.amount ?? 0);
-      if (e.type === "LABOUR_PAID" || e.type === "ADVANCE_PAID" || e.type === "WASTAGE_RECOVERY") return sum - Number(e.amount ?? 0);
+      if (e.type === "ADVANCE_PAID" || e.type === "WASTAGE_RECOVERY") return sum - Number(e.amount ?? 0);
       if (e.type === "ADVANCE_ADJUSTED") return sum + Number(e.amount ?? 0); // Re-adds to payable since advance is adjusted
       return sum;
     }, 0);

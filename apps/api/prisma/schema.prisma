@@ -294,6 +294,10 @@ model Product {
   //          fixedWt: number | null, fixedAmt: number | null, customRate: number | null }
   // Null = no standard wastage rule configured for this item.
   wastageRuleJson Json?
+  
+  // Standard material composition to auto-load in new estimates.
+  // Shape: { gold: [{ k: string, wt: number, rate: number }], stones: [{ group: string, particular: string, pcs: number, wt: number, rate: number }] }
+  compositionTemplate Json?
   designSource   DesignSource  @default(IN_HOUSE)
   customerId     String?
   customer       Customer?     @relation(fields: [customerId], references: [id])

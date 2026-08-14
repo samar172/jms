@@ -60,7 +60,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/materials", label: "Gold Ledger", icon: Diamond, roles: ["SUPER_ADMIN", "MANAGER", "STORE", "COSTING", "AUDITOR"] },
       { href: "/stone-ledger", label: "Stone Ledger", icon: Diamond, roles: ["SUPER_ADMIN", "MANAGER", "STORE", "COSTING", "AUDITOR"] },
-      { href: "/karigars/ledger", label: "Karigar Ledger", icon: BookOpen },
+      { href: "/karigars", label: "Karigar Ledger", icon: BookOpen },
       { href: "/ledger", label: "Party / Customer Ledger", icon: BookOpen, roles: ["SUPER_ADMIN", "MANAGER", "COSTING", "SALES", "AUDITOR"] },
       { href: "/cash-bank-ledger", label: "Cash & Bank Ledger", icon: BookOpen, roles: ["SUPER_ADMIN", "MANAGER", "COSTING", "AUDITOR"] },
     ],

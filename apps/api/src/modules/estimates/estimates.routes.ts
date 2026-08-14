@@ -60,7 +60,7 @@ async function resolveLineRate(
 
 const createSchema = z.object({
   productId: z.string().min(1),
-  customerId: z.string().optional(),
+  customerId: z.string().nullable().optional().transform(v => v === "" ? null : v),
   type: z.enum(["ROUGH_ESTIMATE", "FINAL_COSTING"]),
   estimateDate: z.coerce.date().default(() => new Date()),
   pieces: z.number().int().positive().optional(),
@@ -82,13 +82,12 @@ router.post(
     if (!goldRateRow) throw badRequest("No gold rate configured on or before the estimate date");
     const goldRate24k = Number(goldRateRow.ratePerGram24k);
 
-    // Scoped per customer, not just per product+type — otherwise quoting the
-    // same design to two different customers makes their independent
-    // estimates look like "v1"/"v2" of one lineage instead of separate quotes.
-    const priorCount = await prisma.estimate.count({
+    const latestEstimate = await prisma.estimate.findFirst({
       where: { productId: body.productId, type: body.type, customerId: body.customerId ?? null },
+      orderBy: { version: "desc" },
+      select: { version: true }
     });
-    const version = priorCount + 1;
+    const version = (latestEstimate?.version ?? 0) + 1;
 
     const linesData = await Promise.all(
       body.lines.map(async (line) => {
@@ -152,7 +151,7 @@ router.get(
       .enum(["DRAFT", "SUBMITTED", "APPROVED", "SUPERSEDED"])
       .optional()
       .parse(req.query.status);
-    const type = z.string().optional().parse(req.query.type);
+    const type = z.enum(["ROUGH_ESTIMATE", "FINAL_COSTING"]).optional().parse(req.query.type);
     const search = z.string().optional().parse(req.query.search);
     res.json(
       await prisma.estimate.findMany({
@@ -170,7 +169,7 @@ router.get(
               }
             : {}),
         },
-        include: { product: true, customer: true, order: true },
+        include: { product: true, customer: true, jobCards: true },
         orderBy: { createdAt: "desc" },
         take: 100,
       })
@@ -200,7 +199,7 @@ router.get(
         lines: { orderBy: { sortOrder: "asc" } },
         product: true,
         customer: true,
-        order: { select: { id: true, orderNo: true } },
+        jobCards: { select: { id: true, targetDeliveryDate: true } },
       },
     });
     if (!estimate) throw notFound("Estimate not found");
@@ -219,7 +218,7 @@ const updateSchema = z.object({
   profitPct: z.number().min(0).optional(),
   showBreakdownOnPdf: z.boolean().optional(),
   gstPct: z.number().min(0).max(100).optional(),
-  customerId: z.string().optional(),
+  customerId: z.string().nullable().optional().transform(v => v === "" ? null : v),
 });
 
 router.patch(
@@ -451,6 +450,15 @@ router.post(
 
     const newLines = labourEntries.filter((e) => !alreadyPulled.has(e.id));
     if (newLines.length === 0) return res.json(await recalculateEstimateTotals(estimate.id));
+
+    // Fix: Delete existing MANUAL making charge lines before appending pulled labour
+    await prisma.estimateLine.deleteMany({
+      where: {
+        estimateId: estimate.id,
+        head: "MAKING",
+        sourceType: "MANUAL",
+      },
+    });
 
     await prisma.estimateLine.createMany({
       data: newLines.map((e) => ({
@@ -699,11 +707,14 @@ router.post(
   asyncHandler(async (req, res) => {
     const estimate = await prisma.estimate.findUnique({ where: { id: req.params.id } });
     if (!estimate) throw notFound("Estimate not found");
-    if (estimate.status === "DRAFT") throw badRequest("Approve the estimate before sending it as a quotation");
+    if (estimate.status !== "DRAFT") throw badRequest("Only DRAFT estimates can be sent for approval");
 
     const updated = await prisma.estimate.update({
       where: { id: req.params.id },
-      data: { quotationSentAt: new Date() },
+      data: { 
+        status: "SUBMITTED",
+        quotationSentAt: new Date() 
+      },
     });
 
     await recordAudit(prisma, {
@@ -720,47 +731,86 @@ router.post(
   })
 );
 
-// --- Convert to Order ---------------------------------------------------
-// Explicit action (matches the mockup's "Convert to Order" button) rather
-// than an automatic side-effect of /approve — keeps the delicate
-// approve/amend/customer-ledger flow above untouched, and lets Sales choose
-// the moment an approved costing actually becomes a firm order.
+// --- Record Client Approval -----------------------------------------------
 router.post(
-  "/:id/convert-to-order",
+  "/:id/record-approval",
+  requireRole("SUPER_ADMIN", "MANAGER", "SALES"),
+  asyncHandler(async (req, res) => {
+    const estimate = await prisma.estimate.findUnique({ where: { id: req.params.id } });
+    if (!estimate) throw notFound("Estimate not found");
+    if (estimate.status !== "SUBMITTED" && estimate.status !== "DRAFT") throw badRequest("Estimate cannot be approved in its current state");
+
+    const updated = await prisma.estimate.update({
+      where: { id: req.params.id },
+      data: { status: "APPROVED" },
+    });
+
+    await recordAudit(prisma, {
+      userId: req.user!.id,
+      action: "UPDATE",
+      entityType: "Estimate",
+      entityId: updated.id,
+      before: estimate,
+      after: updated,
+      ipAddress: req.ip ?? null,
+    });
+
+    res.json(updated);
+  })
+);
+
+// --- Convert to Job Card ---------------------------------------------------
+// Explicit action (matches the mockup's "Move to Production" button).
+// Bypasses the separate 'Order' step to align with the simpler mockup UI
+// where Job Cards ARE the production orders.
+router.post(
+  "/:id/convert-to-jobcard",
   requireRole("SUPER_ADMIN", "MANAGER", "SALES"),
   asyncHandler(async (req, res) => {
     const estimate = await prisma.estimate.findUnique({
       where: { id: req.params.id },
-      include: { product: true, order: true },
+      include: { product: true, jobCards: true },
     });
     if (!estimate) throw notFound("Estimate not found");
-    if (estimate.status !== "APPROVED") throw badRequest("Only an approved estimate can be converted to an order");
-    if (estimate.type !== "FINAL_COSTING") throw badRequest("Only a Final Costing can be converted to an order");
-    if (estimate.order) throw badRequest("This estimate has already been converted to an order");
-    if (!estimate.customerId) throw badRequest("This estimate has no customer set");
+    if (estimate.status !== "APPROVED") throw badRequest("Only an approved estimate can be moved to production");
+    if (estimate.jobCards && estimate.jobCards.length > 0) throw badRequest("This estimate is already in production");
 
-    const orderNo = await nextVoucherNumber("JOB");
-    const order = await prisma.order.create({
+    // Fetch all default process stages to attach to the new Job Card automatically
+    const defaultStages = await prisma.processStage.findMany({
+      orderBy: { sequenceOrder: "asc" }
+    });
+    if (!defaultStages.length) throw badRequest("No process stages defined in the system. Please create process stages first.");
+
+    const jobCard = await prisma.jobCard.create({
       data: {
-        orderNo,
         productId: estimate.productId,
         estimateId: estimate.id,
         customerId: estimate.customerId,
-        approvedAmount: estimate.netAmount,
         createdById: req.user!.id,
+        stages: {
+          create: defaultStages.map((stage, index) => ({
+            processStageId: stage.id,
+            sequenceOrder: stage.sequenceOrder,
+          })),
+        },
       },
+    });
+
+    await prisma.product.update({
+      where: { id: estimate.productId },
+      data: { status: "IN_PRODUCTION" },
     });
 
     await recordAudit(prisma, {
       userId: req.user!.id,
       action: "CREATE",
-      entityType: "Order",
-      entityId: order.id,
-      after: order,
+      entityType: "JobCard",
+      entityId: jobCard.id,
+      after: jobCard,
       ipAddress: req.ip ?? null,
     });
 
-    res.status(201).json(order);
+    res.status(201).json(jobCard);
   })
 );
 

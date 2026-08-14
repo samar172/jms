@@ -133,6 +133,7 @@ const createSchema = z.object({
   customerId: z.string().optional(),
   legacyRef: z.string().optional(),
   wastageRuleJson: z.any().optional(),
+  compositionTemplate: z.any().optional(),
 });
 
 router.post(
@@ -170,6 +171,7 @@ router.post(
         designSource: body.designSource,
         customerId: body.customerId,
         wastageRuleJson: body.wastageRuleJson,
+        compositionTemplate: body.compositionTemplate,
         createdById: req.user!.id,
       },
       include: { category: true, purity: true },
@@ -242,6 +244,7 @@ const updateSchema = z.object({
     .optional(),
   customerId: z.string().optional(),
   wastageRuleJson: z.any().optional(),
+  compositionTemplate: z.any().optional(),
 });
 
 router.patch(
@@ -260,6 +263,7 @@ router.patch(
         status: body.status,
         customerId: body.customerId,
         wastageRuleJson: body.wastageRuleJson,
+        compositionTemplate: body.compositionTemplate,
       },
     });
     await recordAudit(prisma, {

@@ -41,9 +41,10 @@ router.get(
 // --- Post Entry (FR-6.04) ---------------------------------------------------
 const postEntrySchema = z.object({
   account: z.enum(["CASH", "BANK"]),
-  type: z.enum(["PAYMENT_RECEIVED", "EXPENSE_PAID", "TRANSFER", "ADJUSTMENT"]),
+  entryType: z.enum(["INVOICE_PAID", "KARIGAR_PAYMENT", "ADVANCE_RECEIVED", "PURCHASE", "MANUAL"]).default("MANUAL"),
   direction: z.enum(["IN", "OUT"]),
   amount: z.number().positive(),
+  description: z.string().min(1),
   note: z.string().optional(),
 });
 
@@ -56,9 +57,10 @@ router.post(
     const entry = await prisma.cashBankLedgerEntry.create({
       data: {
         account: body.account,
-        type: body.type,
-        direction: body.direction,
-        amount: body.amount,
+        entryType: body.entryType,
+        description: body.description,
+        inAmount: body.direction === "IN" ? body.amount : 0,
+        outAmount: body.direction === "OUT" ? body.amount : 0,
         note: body.note,
         createdById: req.user!.id,
       },

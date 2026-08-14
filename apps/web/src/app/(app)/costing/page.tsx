@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Plus, Download, MoreHorizontal, FileText, CheckCircle, XCircle } from "lucide-react";
 import { useApi } from "@/lib/hooks";
 import { EstimateStatusPill } from "@/components/StatusPill";
@@ -25,12 +25,13 @@ interface EstimateRow {
 
 export default function CostingListPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [search, setSearch] = useState("");
-  const params = new URLSearchParams();
-  if (search) params.set("search", search);
-  const { data: estimates } = useApi<EstimateRow[]>(`/api/estimates${params.toString() ? `?${params}` : ""}`);
+  const apiParams = new URLSearchParams();
+  if (search) apiParams.set("search", search);
+  const { data: estimates } = useApi<EstimateRow[]>(`/api/estimates${apiParams.toString() ? `?${apiParams}` : ""}`);
 
-  const estFilter = params.get("status") || "ALL";
+  const estFilter = searchParams.get("status") || "ALL";
 
   const allEstimates = estimates || [];
   

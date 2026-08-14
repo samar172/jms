@@ -32,10 +32,10 @@ interface Estimate {
   gstAmount: string;
   netAmount: string;
   lines: EstimateLine[];
-  product: { serialNo: string; designName: string };
+  product: { serialNo: string; designName: string; grossWeightG: number | null };
   customerId: string | null;
   customer: { id: string; name: string } | null;
-  order: { id: string; orderNo: string; targetDeliveryDate?: string | Date | null } | null;
+  jobCards: { id: string; targetDeliveryDate?: string | Date | null }[];
   quotationSentAt: string | null;
 }
 
@@ -57,6 +57,7 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
   const [pullingLabour, setPullingLabour] = useState(false);
   const [pullingWastage, setPullingWastage] = useState(false);
   const [sendingQuotation, setSendingQuotation] = useState(false);
+  const [recordingApproval, setRecordingApproval] = useState(false);
 
   if (!estimate) return <div className="text-mute">Loading…</div>;
 
@@ -162,7 +163,6 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
     setSendingQuotation(true);
     try {
       await apiFetch(`/api/estimates/${estimateId}/send-quotation`, { method: "POST" });
-      await openAuthenticated(`/api/estimates/${estimateId}/pdf`);
       await mutate();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed");
@@ -171,14 +171,27 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
     }
   }
 
-  async function convertToOrder() {
+  async function recordApproval() {
+    setError(null);
+    setRecordingApproval(true);
+    try {
+      await apiFetch(`/api/estimates/${estimateId}/record-approval`, { method: "POST" });
+      await mutate();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed");
+    } finally {
+      setRecordingApproval(false);
+    }
+  }
+
+  async function convertToJobCard() {
     setError(null);
     setConvertingOrder(true);
     try {
-      const created = await apiFetch<{ id: string }>(`/api/estimates/${estimateId}/convert-to-order`, {
+      const created = await apiFetch<{ id: string }>(`/api/estimates/${estimateId}/convert-to-jobcard`, {
         method: "POST",
       });
-      router.push(`/orders/${created.id}`);
+      router.push(`/job-cards/${created.id}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed");
       setConvertingOrder(false);
@@ -245,60 +258,66 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
       </div>
 
       <div className="flex items-center gap-2 flex-wrap py-2.5 border-t border-b border-line -mx-3.5 px-3.5 sm:-mx-[18px] sm:px-[18px] mb-3.5">
-        {editable && estimate.type === "FINAL_COSTING" && (
+        {estimate.status === "DRAFT" && (
+          <>
+            <button className="console-btn" onClick={sendQuotation} disabled={sendingQuotation}>
+              {sendingQuotation ? "Sending…" : "Send for Client Approval"}
+            </button>
+            <button className="console-btn primary" onClick={recordApproval} disabled={recordingApproval}>
+              Client Already Approved
+            </button>
+          </>
+        )}
+        {estimate.status === "SUBMITTED" && (
+          <button className="console-btn primary" onClick={recordApproval} disabled={recordingApproval}>
+            {recordingApproval ? "Recording…" : "Record Client Approval"}
+          </button>
+        )}
+        {estimate.status === "APPROVED" &&
+          (estimate.jobCards && estimate.jobCards.length > 0 ? (
+            <Link href={`/job-cards/${estimate.jobCards[0].id}`} className="console-btn primary flex items-center gap-1.5">
+              <span className="w-3.5 h-3.5 flex items-center justify-center">⛟</span> View Job Card {estimate.jobCards[0].id.split('-').pop()}
+            </Link>
+          ) : (
+            <button className="console-btn primary flex items-center gap-1.5" onClick={convertToJobCard} disabled={convertingOrder}>
+              <span className="w-3.5 h-3.5 flex items-center justify-center">⛟</span> {convertingOrder ? "Moving…" : "Move to Production"}
+            </button>
+          ))}
+        
+        {/* Helper Actions */}
+        {editable && (
           <>
             <button className="console-btn" onClick={refreshGoldRate} disabled={refreshingRate}>
               {refreshingRate ? "Refreshing…" : "Refresh Gold Rate"}
             </button>
-            <button className="console-btn" onClick={pullLabour} disabled={pullingLabour}>
-              {pullingLabour ? "Pulling…" : "Pull Labour"}
-            </button>
-            <button className="console-btn" onClick={pullWastage} disabled={pullingWastage}>
-              {pullingWastage ? "Pulling…" : "Pull Wastage"}
-            </button>
-          </>
-        )}
-        {!editable && (
-          <>
-            {estimate.type === "ROUGH_ESTIMATE" && (
-              <button className="console-btn" onClick={sendQuotation} disabled={sendingQuotation}>
-                {sendingQuotation ? "Sending…" : "Send for Client Approval"}
-              </button>
-            )}
-            {estimate.type === "ROUGH_ESTIMATE" && estimate.status !== "APPROVED" && (
-              <button className="console-btn primary" onClick={convertToFinalCosting} disabled={converting}>
-                {converting ? "Recording…" : "Record Client Approval"}
-              </button>
-            )}
-            {estimate.type === "FINAL_COSTING" &&
-              estimate.status === "APPROVED" &&
-              (estimate.order ? (
-                <Link href={`/orders/${estimate.order.id}`} className="console-btn primary">
-                  View Job Card {estimate.order.orderNo}
-                </Link>
-              ) : (
-                <button className="console-btn primary" onClick={convertToOrder} disabled={convertingOrder}>
-                  {convertingOrder ? "Moving…" : "Move to Production"}
+            {estimate.type === "FINAL_COSTING" && (
+              <>
+                <button className="console-btn" onClick={pullLabour} disabled={pullingLabour}>
+                  {pullingLabour ? "Pulling…" : "Pull Labour"}
                 </button>
-              ))}
-            {canUnlock && (
-              <button className="console-btn" onClick={unlock}>
-                Unlock for Editing
-              </button>
+                <button className="console-btn" onClick={pullWastage} disabled={pullingWastage}>
+                  {pullingWastage ? "Pulling…" : "Pull Wastage"}
+                </button>
+              </>
             )}
-            {canAmend && (
-              <button className="console-btn text-err-tx" onClick={amend} disabled={amending}>
-                {amending ? "Amending…" : "Amend (Super Admin)"}
-              </button>
-            )}
-            <button className="console-btn" onClick={() => openAuthenticated(`/api/estimates/${estimateId}/pdf`)}>
-              Export PDF
-            </button>
-            <button className="console-btn" onClick={() => openAuthenticated(`/api/estimates/${estimateId}/excel`)}>
-              Export Excel
-            </button>
           </>
         )}
+        {canUnlock && (
+          <button className="console-btn" onClick={unlock}>
+            Unlock for Editing
+          </button>
+        )}
+        {canAmend && (
+          <button className="console-btn text-err-tx" onClick={amend} disabled={amending}>
+            {amending ? "Amending…" : "Amend (Super Admin)"}
+          </button>
+        )}
+        <button className="console-btn" onClick={() => openAuthenticated(`/api/estimates/${estimateId}/pdf`)}>
+          Export PDF
+        </button>
+        <button className="console-btn" onClick={() => openAuthenticated(`/api/estimates/${estimateId}/excel`)}>
+          Export Excel
+        </button>
         <div className="flex-1" />
         {estimate.quotationSentAt && (
           <div className="text-[11px] text-mute">Quotation sent {formatDate(estimate.quotationSentAt)}</div>
@@ -411,6 +430,54 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
                 onDeleteLine={deleteLine}
               />
             ))}
+
+            {/* Finished Product Composition */}
+            <div className="mt-6 border-t border-slate-100 pt-5">
+              <div className="text-[12px] font-semibold text-slate-800 mb-1">Finished Product Composition</div>
+              <div className="text-[10px] text-slate-400 mb-3 leading-relaxed">
+                Client ki Chowker Excel methodology — Pure Gold + Stone Equivalent + Wax/Wire/Other Non-Gold. Ye finished product ka weight hai, costing charges se alag (Chizzat ek costing line hai, weight ka hissa nahi).
+              </div>
+              
+              {(() => {
+                const goldWt = linesByHead("GOLD").reduce((sum, l) => sum + Number(l.quantity), 0);
+                const stoneCt = linesByHead("POLKI").reduce((sum, l) => sum + Number(l.quantity), 0) + linesByHead("COLOURED_STONE").reduce((sum, l) => sum + Number(l.quantity), 0);
+                const stoneEquivWt = Number((stoneCt / 5).toFixed(2));
+                const grossWt = Number(estimate.product?.grossWeightG) || 0;
+                const nonGoldWt = Math.max(0, Number((grossWt - goldWt - stoneEquivWt).toFixed(2)));
+                
+                return (
+                  <div className="flex items-center gap-2 text-[12px] flex-wrap">
+                    <div className="flex-1 min-w-[110px] bg-slate-50 border border-slate-200 rounded-md p-2 text-center">
+                      <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-0.5">Pure Gold</div>
+                      <div className="text-[15px] font-semibold text-slate-900 mono">{goldWt.toFixed(2)} g</div>
+                    </div>
+                    <div className="text-slate-300 font-semibold">+</div>
+                    <div className="flex-1 min-w-[110px] bg-slate-50 border border-slate-200 rounded-md p-2 text-center">
+                      <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-0.5">Stone Equivalent</div>
+                      <div className="text-[15px] font-semibold text-slate-900 mono">{stoneEquivWt.toFixed(2)} g</div>
+                      <div className="text-[9.5px] text-slate-400 mt-0.5">{stoneCt.toFixed(2)} ct ÷ 5</div>
+                    </div>
+                    <div className="text-slate-300 font-semibold">+</div>
+                    <div className="flex-1 min-w-[110px] bg-slate-50 border border-slate-200 rounded-md p-2 text-center">
+                      <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-0.5">Wax / Wire / Other</div>
+                      <div className="text-[15px] font-semibold text-slate-900 mono">{nonGoldWt.toFixed(2)} g</div>
+                    </div>
+                    <div className="text-slate-300 font-semibold">=</div>
+                    <div className="flex-1 min-w-[110px] bg-blue-50 border border-blue-200 rounded-md p-2 text-center">
+                      <div className="text-[10px] text-blue-700 uppercase tracking-wider mb-0.5">Gross Product Weight</div>
+                      <div className="text-[15px] font-semibold text-blue-900 mono">{grossWt.toFixed(2)} g</div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Approval & Production Trail */}
+            <div className="mt-6 border-t border-slate-100 pt-5">
+              <div className="text-[12px] font-semibold text-slate-800 mb-3">Approval &amp; Production Trail</div>
+              <ActivityTimeline sources={[{ entityType: "Estimate", entityId: estimateId }]} defaultOpen={true} />
+            </div>
+
           </div>
         </div>
 
@@ -504,9 +571,9 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
               <div className="text-[11px] text-emerald-800 font-medium flex items-center gap-1.5">
                 Client Approved
               </div>
-              <div className="text-[11px] text-emerald-700 mt-1">Target delivery: {estimate.order?.targetDeliveryDate ? formatDate(estimate.order.targetDeliveryDate.toString()) : "—"}</div>
-              {estimate.order ? (
-                <div className="text-[11px] text-emerald-700 mt-0.5">Job Card: <span className="mono">{estimate.order.orderNo}</span></div>
+              <div className="text-[11px] text-emerald-700 mt-1">Target delivery: {estimate.jobCards?.[0]?.targetDeliveryDate ? formatDate(estimate.jobCards[0].targetDeliveryDate.toString()) : "—"}</div>
+              {estimate.jobCards && estimate.jobCards.length > 0 ? (
+                <div className="text-[11px] text-emerald-700 mt-0.5">Job Card: <span className="mono">{estimate.jobCards[0].id.split('-').pop()}</span></div>
               ) : (
                 <div className="text-[11px] text-emerald-700 mt-0.5">Pending move to production</div>
               )}

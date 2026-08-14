@@ -5,6 +5,7 @@ import { requireAuth, requireRole } from "../../middleware/auth";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { recordAudit } from "../../services/audit";
 import { badRequest, notFound } from "../../utils/httpError";
+import { nextVoucherNumber } from "../../services/voucherNumber";
 
 const router = Router();
 
@@ -43,6 +44,7 @@ router.get(
       include: {
         product: { include: { purity: true } },
         customer: true,
+        estimate: true,
         stages: {
           include: {
             processStage: true,
@@ -210,6 +212,57 @@ router.post(
       where: { id: jobCard.productId },
       data: { status: "FINISHED" },
     });
+
+    if (jobCard.estimateId) {
+      const roughEstimate = await prisma.estimate.findUnique({
+        where: { id: jobCard.estimateId },
+      });
+      
+      if (roughEstimate && roughEstimate.type === "ROUGH_ESTIMATE") {
+        const allJobCards = await prisma.jobCard.findMany({
+          where: { estimateId: roughEstimate.id },
+        });
+        const allClosed = allJobCards.every((jc) => jc.status === "CLOSED");
+        
+        if (allClosed) {
+          const latestEstimate = await prisma.estimate.findFirst({
+            where: { productId: roughEstimate.productId, type: "FINAL_COSTING", customerId: roughEstimate.customerId ?? null },
+            orderBy: { version: "desc" },
+            select: { version: true }
+          });
+          const version = (latestEstimate?.version ?? 0) + 1;
+          const estimateNo = await nextVoucherNumber("EST");
+          
+          const goldRateRow = await prisma.goldRate.findFirst({
+            where: { effectiveFrom: { lte: new Date() } },
+            orderBy: { effectiveFrom: "desc" },
+          });
+          const goldRate24k = goldRateRow ? Number(goldRateRow.ratePerGram24k) : Number(roughEstimate.goldRateSnapshot24k);
+
+          const finalCosting = await prisma.estimate.create({
+            data: {
+              estimateNo,
+              productId: roughEstimate.productId,
+              customerId: roughEstimate.customerId,
+              type: "FINAL_COSTING",
+              version,
+              estimateDate: new Date(),
+              pieces: roughEstimate.pieces,
+              grossWeightG: roughEstimate.grossWeightG,
+              goldRateSnapshot24k: goldRate24k,
+              profitPct: roughEstimate.profitPct,
+              gstPct: roughEstimate.gstPct,
+              createdById: req.user!.id,
+            }
+          });
+          
+          await prisma.jobCard.updateMany({
+            where: { estimateId: roughEstimate.id },
+            data: { estimateId: finalCosting.id }
+          });
+        }
+      }
+    }
 
     await recordAudit(prisma, {
       userId: req.user!.id,

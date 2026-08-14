@@ -5,7 +5,9 @@ import Link from "next/link";
 import { useApi, useKarigars } from "@/lib/hooks";
 import { apiFetch, ApiError } from "@/lib/api";
 import { JobStageCard, type JobStage } from "@/components/JobStageCard";
-import { formatDate } from "@/lib/format";
+import { formatINR, formatDate } from "@/lib/format";
+import { useAuth } from "@/lib/auth-context";
+import { ActivityTimeline } from "@/components/ActivityTimeline";
 
 interface JobCardDetail {
   id: string;
@@ -18,7 +20,7 @@ interface JobCardDetail {
   dispatchTracking: string | null;
   product: { serialNo: string; designName: string; purity: { code: string; purityFactor: string } };
   customer?: { name: string } | null;
-  estimate?: { grossWeightG: string | null; id: string; estimateNo: string | null } | null;
+  estimate?: { grossWeightG: string | null; id: string; estimateNo: string | null; netAmount: string } | null;
   stages: JobStage[];
 }
 
@@ -130,7 +132,7 @@ export default function JobCardDetailPage({ params }: { params: Promise<{ id: st
             <div className="px-4 pt-3 pb-1 text-[11px] uppercase tracking-wider text-slate-500 font-semibold border-b border-slate-100">Job Details</div>
             <div className="p-4 grid grid-cols-5 gap-4">
               <div>
-                <label className="block text-[10px] text-slate-400 uppercase tracking-wider mb-0.5">Party / Customer</label>
+                <label className="block text-[10px] text-slate-400 uppercase tracking-wider mb-0.5">Customer</label>
                 <div className="text-[12px] text-slate-900 font-medium">{jobCard.customer?.name ?? "—"}</div>
               </div>
               <div>
@@ -138,7 +140,7 @@ export default function JobCardDetailPage({ params }: { params: Promise<{ id: st
                 <div className="text-[12px] text-rose-600 font-medium">{jobCard.targetDeliveryDate ? formatDate(jobCard.targetDeliveryDate.toString()).split(',')[0] : "—"}</div>
               </div>
               <div>
-                <label className="block text-[10px] text-slate-400 uppercase tracking-wider mb-0.5">GW Est</label>
+                <label className="block text-[10px] text-slate-400 uppercase tracking-wider mb-0.5">Gross Weight (Est.)</label>
                 <div className="text-[12px] text-slate-900 font-medium mono">{jobCard.estimate?.grossWeightG ? `${Number(jobCard.estimate.grossWeightG).toFixed(3)} g` : "—"}</div>
               </div>
               <div>
@@ -183,6 +185,12 @@ export default function JobCardDetailPage({ params }: { params: Promise<{ id: st
                 <span className="text-[12px] text-slate-500">Estimate No.</span>
                 <Link href={`/costing/${jobCard.estimate?.id}`} className="text-[12px] text-blue-700 font-medium hover:underline mono">{jobCard.estimate?.estimateNo ?? jobCard.estimate?.id?.split("-").pop() ?? "—"}</Link>
               </div>
+              {jobCard.estimate && (
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[12px] text-slate-500">Estimate Amount</span>
+                  <span className="text-[12px] text-slate-900 font-semibold">{formatINR(Number(jobCard.estimate.netAmount))}</span>
+                </div>
+              )}
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[12px] text-slate-500">Client Approved</span>
                 <span className="text-[12px] text-slate-900 font-medium">{jobCard.createdAt ? formatDate(jobCard.createdAt).split(',')[0] : "—"}</span>
@@ -211,11 +219,16 @@ export default function JobCardDetailPage({ params }: { params: Promise<{ id: st
               <div className="flex justify-between items-center text-[12px]">
                 <span className="text-slate-500">Actual Chizzat (Net)</span>
                 <span className="font-semibold text-rose-600 mono">
-                  {jobCard.stages.reduce((sum, s) => sum + (s.wastageRecord ? Number(s.wastageRecord.chizzatWeightG) : 0), 0).toFixed(3)} g
+                  {jobCard.stages.reduce((sum, s) => sum + (s.wastageRecord ? Number(s.wastageRecord.netWastageG) : 0), 0).toFixed(3)} g
                 </span>
               </div>
             </div>
           </div>
+
+          <div className="bg-white border border-slate-200 rounded-md">
+            <ActivityTimeline sources={[{ entityType: "JobCard", entityId: id }]} defaultOpen={true} />
+          </div>
+
         </div>
       </div>
     </div>
@@ -223,13 +236,13 @@ export default function JobCardDetailPage({ params }: { params: Promise<{ id: st
 }
 
 function MaterialAccountabilityPanel({ jobCard }: { jobCard: JobCardDetail }) {
-  const goldIssued = jobCard.stages.reduce((sum, s) => sum + (s.wastageRecord ? Number(s.wastageRecord.grossWeightG) : 0), 0);
-  const returned = jobCard.stages.reduce((sum, s) => sum + (s.wastageRecord ? Number(s.wastageRecord.stoneReturnedWeightG) : 0), 0);
-  const consumed = jobCard.stages.reduce((sum, s) => sum + (s.wastageRecord ? Number(s.wastageRecord.pureGoldInPieceG) : 0), 0);
-  const scrap = jobCard.stages.reduce((sum, s) => sum + (s.wastageRecord ? Number(s.wastageRecord.goldScrapWeightG) : 0), 0);
-  const dust = jobCard.stages.reduce((sum, s) => sum + (s.wastageRecord ? Number(s.wastageRecord.goldDustWeightG) : 0), 0);
-  const approvedLoss = jobCard.stages.reduce((sum, s) => sum + (s.wastageRecord ? Number(s.wastageRecord.approvedLossWeightG) : 0), 0);
-  const variance = jobCard.stages.reduce((sum, s) => sum + (s.wastageRecord ? Number(s.wastageRecord.chizzatWeightG) : 0), 0);
+  const goldIssued = jobCard.stages.reduce((sum, s) => sum + s.materialIssues.filter(i => i.materialType === "GOLD").reduce((acc, i) => acc + Number(i.grossWeightG || 0), 0), 0);
+  const returned = jobCard.stages.reduce((sum, s) => sum + s.materialReceipts.reduce((acc, r) => acc + Number(r.unusedReturnedWeightG) + Number(r.stoneReturnedWeightG), 0), 0);
+  const consumed = jobCard.stages.reduce((sum, s) => sum + s.materialReceipts.reduce((acc, r) => acc + Number(r.finishedPieceWeightG) - Number(r.nonGoldInPieceWeightG) - Number(r.waxWireWeightG) - Number(r.otherNonGoldWeightG) - Number(r.fillerWeightG), 0), 0);
+  const scrap = jobCard.stages.reduce((sum, s) => sum + s.materialReceipts.reduce((acc, r) => acc + Number(r.goldScrapWeightG), 0), 0);
+  const dust = jobCard.stages.reduce((sum, s) => sum + s.materialReceipts.reduce((acc, r) => acc + Number(r.dustWeightG), 0), 0);
+  const approvedLoss = jobCard.stages.reduce((sum, s) => sum + s.materialReceipts.reduce((acc, r) => acc + Number(r.approvedLossWeightG), 0), 0);
+  const variance = jobCard.stages.reduce((sum, s) => sum + (s.wastageRecord ? Number(s.wastageRecord.netWastageG) : 0), 0);
 
   const stats = [
     { label: "Issued", val: goldIssued, c: "blue" },
@@ -243,8 +256,11 @@ function MaterialAccountabilityPanel({ jobCard }: { jobCard: JobCardDetail }) {
 
   return (
     <div className="bg-white border border-slate-200 rounded-md">
-      <div className="px-4 pt-3 pb-1 text-[11px] uppercase tracking-wider text-slate-500 font-semibold border-b border-slate-100 mb-3">Material Control Summary</div>
+      <div className="px-4 pt-3 pb-1 text-[11px] uppercase tracking-wider text-slate-500 font-semibold border-b border-slate-100 mb-3 flex items-center justify-between">
+        Material Control Summary
+      </div>
       <div className="px-4 pb-4">
+        <div className="text-[10px] text-slate-400 mb-2">Poore job ke across-stage material accountability ka rollup — Issued / Returned / Consumed / Scrap / Dust / Approved Loss / Chizzat</div>
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
           {stats.map(({ label, val, c }) => (
             <div key={label} className={`bg-${c}-50 border border-${c}-200 rounded-md p-2 text-center`}>
@@ -252,6 +268,11 @@ function MaterialAccountabilityPanel({ jobCard }: { jobCard: JobCardDetail }) {
               <div className={`text-[13px] font-semibold mono text-${c}-900 mt-0.5`}>{val.toFixed(3)} g</div>
             </div>
           ))}
+        </div>
+        <div className="flex items-center gap-2 mt-3">
+          <Link href="/materials" className="h-7 px-2.5 rounded border border-slate-200 text-[11px] text-slate-700 hover:bg-slate-50 flex items-center gap-1">
+            <span className="w-3 h-3 flex items-center justify-center">📦</span> View Ledger
+          </Link>
         </div>
       </div>
     </div>
@@ -270,7 +291,7 @@ function DispatchModal({ jobCardId, onClose, onSuccess }: { jobCardId: string; o
     setSaving(true);
     setError(null);
     try {
-      await apiFetch(`/api/job-cards/${jobCardId}/dispatch`, {
+      await apiFetch(`/api/job-cards/${jobCardId}/record-dispatch`, {
         method: "POST",
         body: { dispatchMode, dispatchTracking, dispatchDate },
       });

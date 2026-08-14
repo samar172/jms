@@ -12,6 +12,9 @@ interface ProductOption {
   id: string;
   serialNo: string;
   designName: string;
+  grossWeightG: number;
+  compositionTemplate: any;
+  wastageRuleJson: any;
 }
 
 interface GoldLine { id: string; purityId: string; quantity: string; rate: string; }
@@ -51,6 +54,58 @@ export default function NewEstimateForm() {
   const addGold = () => setGoldLines([...goldLines, { id: Math.random().toString(), purityId: karats?.[0]?.id ?? "", quantity: "", rate: "" }]);
   const addStone = () => setStoneLines([...stoneLines, { id: Math.random().toString(), stoneTypeId: stoneTypes?.[0]?.id ?? "", pieces: "", quantity: "", rate: "", particular: "" }]);
   const addCharge = () => setChargeLines([...chargeLines, { id: Math.random().toString(), type: "MAKING", mode: "amount", amount: "", wt: "", rate: "" }]);
+
+  const selectedProduct = productResults?.items.find((p) => p.id === productId);
+  const hasTemplate = !!selectedProduct?.compositionTemplate;
+
+  const loadStandardComposition = () => {
+    if (!selectedProduct) return;
+    
+    // Auto-fill gross weight
+    if (selectedProduct.grossWeightG) {
+      setGrossWeightG(String(selectedProduct.grossWeightG));
+    }
+
+    const template = selectedProduct.compositionTemplate as any;
+    if (template) {
+      if (template.gold && Array.isArray(template.gold)) {
+        setGoldLines(template.gold.map((g: any) => ({
+          id: Math.random().toString(),
+          purityId: karats?.find(k => k.code === g.k)?.id ?? karats?.[0]?.id ?? "",
+          quantity: g.wt ? String(g.wt) : "",
+          rate: g.rate ? String(g.rate) : "",
+        })));
+      }
+      if (template.stones && Array.isArray(template.stones)) {
+        setStoneLines(template.stones.map((s: any) => ({
+          id: Math.random().toString(),
+          stoneTypeId: stoneTypes?.find(st => st.name === s.group)?.id ?? stoneTypes?.[0]?.id ?? "",
+          particular: s.particular ?? "",
+          pieces: s.pcs ? String(s.pcs) : "",
+          quantity: s.wt ? String(s.wt) : "",
+          rate: s.rate ? String(s.rate) : "",
+        })));
+      }
+    }
+
+    // Auto-load wastage charge if defined
+    if (selectedProduct.wastageRuleJson) {
+      const w = selectedProduct.wastageRuleJson as any;
+      const rateBasis = w.rateBasis;
+      // Approximate Chizzat weight for display (exact calculation happens later)
+      setChargeLines(prev => {
+        if (prev.some(c => c.type === "WASTAGE")) return prev;
+        return [...prev, {
+          id: Math.random().toString(),
+          type: "WASTAGE",
+          mode: "weight",
+          wt: w.fixedWt ? String(w.fixedWt) : "", 
+          rate: rateBasis === "24K" ? String(goldRate24k) : "",
+          amount: "",
+        }];
+      });
+    }
+  };
 
   const goldTotal = goldLines.reduce((acc, g) => {
     const rate = g.rate ? Number(g.rate) : (g.purityId ? deriveRate(goldRate24k, Number(karats?.find(k => k.id === g.purityId)?.purityFactor ?? 0)) : 0);
@@ -164,7 +219,7 @@ export default function NewEstimateForm() {
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                   />
-                  <select required className="w-full h-8 px-2 rounded border border-slate-200 text-[12px]" value={productId} onChange={(e) => setProductId(e.target.value)}>
+                  <select required className="w-full h-8 px-2 rounded border border-slate-200 text-[12px] mb-1" value={productId} onChange={(e) => setProductId(e.target.value)}>
                     <option value="">Select a product…</option>
                     {productResults?.items.map((p) => (
                       <option key={p.id} value={p.id}>
@@ -172,6 +227,11 @@ export default function NewEstimateForm() {
                       </option>
                     ))}
                   </select>
+                  {hasTemplate && (
+                    <button type="button" onClick={loadStandardComposition} className="h-7 px-2.5 rounded border border-slate-200 text-[11px] text-slate-700 hover:bg-slate-50 shrink-0">
+                      Load standard composition
+                    </button>
+                  )}
                 </div>
                 
                 <div className="md:col-span-1">

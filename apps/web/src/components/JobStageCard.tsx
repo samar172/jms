@@ -44,6 +44,19 @@ export interface MaterialIssue {
   purity?: { code: string } | null;
   stoneType?: { name: string } | null;
 }
+export interface MaterialReceipt {
+  id: string;
+  finishedPieceWeightG: string;
+  nonGoldInPieceWeightG: string;
+  waxWireWeightG: string;
+  otherNonGoldWeightG: string;
+  fillerWeightG: string;
+  dustWeightG: string;
+  unusedReturnedWeightG: string;
+  goldScrapWeightG: string;
+  approvedLossWeightG: string;
+  stoneReturnedWeightG: string;
+}
 export interface JobStage {
   id: string;
   status: string;
@@ -51,7 +64,7 @@ export interface JobStage {
   karigar?: { name: string } | null;
   processStage: { id: string; name: string; sequenceOrder: number; wastageTolerancePct: string };
   materialIssues: MaterialIssue[];
-  materialReceipts: unknown[];
+  materialReceipts: MaterialReceipt[];
   labourEntries: LabourEntry[];
   wastageRecord: WastageRecord | null;
 }

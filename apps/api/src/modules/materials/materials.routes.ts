@@ -224,6 +224,7 @@ router.post(
       include: {
         materialIssues: { where: { materialType: "GOLD", isReversed: false } },
         jobCard: { include: { product: { include: { purity: true } } } },
+        processStage: true,
       },
     });
     if (!stageData) throw badRequest("Job stage not found");
