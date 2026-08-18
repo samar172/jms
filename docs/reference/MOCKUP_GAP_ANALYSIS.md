@@ -12,7 +12,8 @@ Goal: wire the app up to match the mockup **exactly** (UI + backend). This doc l
 - ✅ **Phase C2** — stage write flows (assign/issue/reconcile/cast/jadai/finding/stones/labour/approve/close/reopen/hold). Verified end-to-end: full 5-stage run reproduces 220 → 206.780g, labour ₹5554, gross 210.46g, closes.
 - ✅ **Phase D1** — Job Cards list + detail (5 stage cards, all action modals, §7 costing summary, activity, reopen), wired to /api/production.
 - ✅ **Phase D2** — Karigar Ledger, Settings (purity tiers + rates), Item Master grid, Dashboard — all wired to /api/production (+ config write endpoints). Nav now points at the silver screens; bilingual Hindi labels. **Full `next build` passes on all routes.**
-- ⏭️ **Phase E (remaining, optional cutover cleanup)** — retire the now-unused gold API modules + orphaned gold pages (`/products/new`, `/karigars/[id]`, gold `products/[id]` detail); port ItemMaster *detail* to the mockup layout; rename Prod*→clean spec names; update seed.ts so a reseed reproduces the Chowker tiers/settings.
+- ✅ **Gap closure (all 8 done):** #1 Edit/Cancel reconcile · #2 Job Card page (image, editable details, delivery target) · #3 multi-row Jadai stones + Fitting findings/items · #4 Material Breakdown override inputs (manual silver value / today's rate) · #5 Karigar "Currently Holding" strip + New/Edit karigar · #6 Item Master detail page · #7 Settings pure-eq calculator · #8 bilingual StatusPill + buttons. Full build passes.
+- ⏭️ **Phase E (remaining, optional cutover cleanup)** — retire the now-unused gold API modules + orphaned gold `/karigars/[id]` page; rename Prod*→clean spec names; update seed.ts so a reseed reproduces the Chowker tiers/settings/karigars/bulk-stock. (`/products/new` already removed.)
 
 ---
 
