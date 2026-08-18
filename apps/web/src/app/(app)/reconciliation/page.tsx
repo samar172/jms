@@ -7,6 +7,7 @@ import { formatWeight } from "@/lib/format";
 interface ReconRow {
   jobStageId: string;
   jobCardId: string;
+  jobNo: string | null;
   serialNo: string;
   designName: string;
   processStageName: string;
@@ -68,8 +69,8 @@ export default function ReconciliationPage() {
                 return (
                   <tr key={r.jobStageId} className={r.status !== "RECONCILED" && r.status !== "RETURN_PENDING" ? "row-major" : ""}>
                     <td>
-                      <Link href={`/job-cards/${r.jobCardId}`} className="rid">
-                        {r.serialNo}
+                      <Link href={`/job-cards/${r.jobCardId}`} className="rid hover:underline text-blue-800 font-medium mono text-[12px]">
+                        {r.jobNo ?? r.serialNo}
                       </Link>
                       <div className="text-[11px] text-mute">{r.processStageName}</div>
                     </td>

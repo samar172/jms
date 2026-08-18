@@ -330,7 +330,7 @@ export default function EstimatePage({ params }: { params: Promise<{ estimateId:
 
       {error && <p className="text-sm text-err-tx mb-3">{error}</p>}
 
-      {estimate.type === "FINAL_COSTING" && (
+      {estimate.type !== "FINAL_COSTING" && (
         <ProductionPanel productId={estimate.productId} customerId={estimate.customerId} estimateId={estimateId} />
       )}
 

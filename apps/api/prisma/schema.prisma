@@ -163,6 +163,15 @@ model ProcessStage {
 
   jobStages          JobStage[]
   karigarRates       KarigarStageRate[]
+  labourRule         LabourRule?
+}
+
+model LabourRule {
+  id             String       @id @default(cuid())
+  processStageId String       @unique
+  processStage   ProcessStage @relation(fields: [processStageId], references: [id])
+  calcBase       String       // e.g. "Gold+Making", "Gold+Stones"
+  pct            Decimal      @db.Decimal(5, 2)
 }
 
 enum EmploymentType {
@@ -213,6 +222,9 @@ enum LabourRateBasis {
   PER_PIECE
   PER_CARAT
   DAILY_WAGE
+  PERCENT_GOLD_MAKING
+  PERCENT_GOLD_STONE
+  LUMPSUM
 }
 
 model Customer {
@@ -358,6 +370,7 @@ enum JobCardStatus {
 
 model JobCard {
   id                 String        @id @default(cuid())
+  jobNo              String?       @unique
   productId          String
   product            Product       @relation(fields: [productId], references: [id])
   customerId         String?
@@ -611,6 +624,7 @@ model DustLot {
 enum LabourEntryStatus {
   PENDING
   APPROVED
+  PULLED
 }
 
 model LabourEntry {

@@ -6,6 +6,7 @@ import { asyncHandler } from "../../utils/asyncHandler";
 import { recordAudit } from "../../services/audit";
 import { badRequest, notFound } from "../../utils/httpError";
 import { nextVoucherNumber } from "../../services/voucherNumber";
+import { recalculateEstimateTotals } from "../estimates/estimates.service";
 
 const router = Router();
 
@@ -96,6 +97,7 @@ router.post(
 
     const jobCard = await prisma.jobCard.create({
       data: {
+        jobNo: await nextVoucherNumber("JOB"),
         productId: body.productId,
         estimateId: body.estimateId,
         customerId: body.customerId,
@@ -219,10 +221,11 @@ router.post(
       });
       
       if (roughEstimate && roughEstimate.type === "ROUGH_ESTIMATE") {
-        const allJobCards = await prisma.jobCard.findMany({
+        const allJobCardsWithStages = await prisma.jobCard.findMany({
           where: { estimateId: roughEstimate.id },
+          include: { stages: { include: { labourEntries: true } } }
         });
-        const allClosed = allJobCards.every((jc) => jc.status === "CLOSED");
+        const allClosed = allJobCardsWithStages.every((jc) => jc.status === "CLOSED");
         
         if (allClosed) {
           const latestEstimate = await prisma.estimate.findFirst({
@@ -231,6 +234,7 @@ router.post(
             select: { version: true }
           });
           const version = (latestEstimate?.version ?? 0) + 1;
+          const { nextVoucherNumber } = await import("../../services/voucherNumber");
           const estimateNo = await nextVoucherNumber("EST");
           
           const goldRateRow = await prisma.goldRate.findFirst({
@@ -238,6 +242,51 @@ router.post(
             orderBy: { effectiveFrom: "desc" },
           });
           const goldRate24k = goldRateRow ? Number(goldRateRow.ratePerGram24k) : Number(roughEstimate.goldRateSnapshot24k);
+
+          let totalPulledLabour = 0;
+          for (const jc of allJobCardsWithStages) {
+            for (const stage of jc.stages) {
+              for (const entry of stage.labourEntries) {
+                if (entry.status === "PULLED" || entry.status === "APPROVED") {
+                  totalPulledLabour += Number(entry.amount);
+                }
+              }
+            }
+          }
+
+          const roughLines = await prisma.estimateLine.findMany({ where: { estimateId: roughEstimate.id } });
+          let finalLinesData = roughLines.map(line => ({
+            head: line.head,
+            description: line.description,
+            purityId: line.purityId,
+            stoneTypeId: line.stoneTypeId,
+            chargeTypeId: line.chargeTypeId,
+            karigarName: line.karigarName,
+            quantity: Number(line.quantity),
+            pieces: line.pieces,
+            rateBasis: line.rateBasis,
+            rate: Number(line.rate),
+            amount: Number(line.amount),
+            sourceType: line.sourceType,
+          }));
+
+          if (totalPulledLabour > 0) {
+            finalLinesData = finalLinesData.filter(l => l.head !== "MAKING");
+            finalLinesData.push({
+              head: "MAKING",
+              description: "Actual Labour (Pulled from Job Cards)",
+              purityId: null,
+              stoneTypeId: null,
+              chargeTypeId: null,
+              karigarName: null,
+              quantity: 1,
+              pieces: null,
+              rateBasis: null,
+              rate: totalPulledLabour,
+              amount: totalPulledLabour,
+              sourceType: "FROM_LABOUR",
+            });
+          }
 
           const finalCosting = await prisma.estimate.create({
             data: {
@@ -253,8 +302,11 @@ router.post(
               profitPct: roughEstimate.profitPct,
               gstPct: roughEstimate.gstPct,
               createdById: req.user!.id,
+              lines: { create: finalLinesData }
             }
           });
+          
+          await recalculateEstimateTotals(finalCosting.id);
           
           await prisma.jobCard.updateMany({
             where: { estimateId: roughEstimate.id },
@@ -323,6 +375,57 @@ router.patch(
     });
 
     res.json(stage);
+  })
+);
+
+// --- Pull Labour (Incremental, per-stage) (FR-6.07) -------------------------
+router.post(
+  "/stages/:stageId/pull-labour",
+  requireRole("SUPER_ADMIN", "MANAGER", "PRODUCTION"),
+  asyncHandler(async (req, res) => {
+    const stage = await prisma.jobStage.findUnique({
+      where: { id: req.params.stageId },
+      include: { 
+        jobCard: { include: { estimate: true } }, 
+        processStage: { include: { labourRule: true } }
+      }
+    });
+    if (!stage) throw notFound("Job stage not found");
+    if (!stage.karigarId) throw badRequest("No karigar assigned to this stage");
+
+    // Idempotency: Prevent double pull for the same job+stage+karigar
+    const existing = await prisma.labourEntry.findFirst({
+      where: { jobStageId: stage.id, karigarId: stage.karigarId, status: "PULLED" }
+    });
+    if (existing) {
+      throw badRequest("Labour already pulled for this karigar on this stage.");
+    }
+
+    const rule = stage.processStage.labourRule;
+    if (!rule) {
+      throw badRequest("No Labour Rule configured for this stage. Please add a manual entry instead.");
+    }
+
+    const goldValue = stage.jobCard.estimate ? Number(stage.jobCard.estimate.materialCost) : 0;
+    const baseAmount = goldValue; // Tweak base if needed
+
+    const pct = Number(rule.pct);
+    const amount = (baseAmount * pct) / 100;
+
+    const entry = await prisma.labourEntry.create({
+      data: {
+        jobStageId: stage.id,
+        karigarId: stage.karigarId,
+        rateBasis: rule.calcBase.includes("MAKING") ? "PERCENT_GOLD_MAKING" : (rule.calcBase.includes("STONE") ? "PERCENT_GOLD_STONE" : "LUMPSUM"),
+        quantity: baseAmount,
+        rate: pct,
+        amount: amount,
+        status: "PULLED",
+        enteredById: req.user!.id,
+      }
+    });
+
+    res.json(entry);
   })
 );
 

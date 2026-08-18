@@ -11,6 +11,7 @@ import { ActivityTimeline } from "@/components/ActivityTimeline";
 
 interface JobCardDetail {
   id: string;
+  jobNo: string | null;
   status: string;
   createdAt: string;
   productId: string;
@@ -66,7 +67,7 @@ export default function JobCardDetailPage({ params }: { params: Promise<{ id: st
             <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500 mb-1.5">
               <Link href="/job-cards" className="hover:text-blue-800">Job Cards</Link>
               <span className="text-slate-300">/</span>
-              <span className="text-slate-900">{jobCard.id.split("-").pop()}</span>
+              <span className="text-slate-900">{jobCard.jobNo ?? jobCard.id}</span>
             </div>
             <h1 className="text-[20px] font-semibold flex items-center gap-3 text-slate-900">
               <Link href={`/products/${jobCard.product.serialNo}`} className="mono text-blue-800 hover:underline">

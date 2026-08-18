@@ -511,6 +511,7 @@ router.get(
         return {
           jobStageId: s.id,
           jobCardId: s.jobCard.id,
+          jobNo: s.jobCard.jobNo,
           serialNo: s.jobCard.product.serialNo,
           designName: s.jobCard.product.designName,
           processStageName: s.processStage.name,

@@ -23,6 +23,7 @@ import {
   History,
   UserCog,
   Receipt,
+  KanbanSquare,
 } from "lucide-react";
 import type { Role } from "@jms/shared";
 import { useAuth } from "@/lib/auth-context";
@@ -49,6 +50,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/costing", label: "Estimates", icon: Calculator, roles: ["SUPER_ADMIN", "MANAGER", "COSTING", "AUDITOR"] },
       { href: "/job-cards", label: "Job Cards", icon: ClipboardList },
+      { href: "/tracking", label: "Production Tracking", icon: KanbanSquare },
       { href: "/material-vouchers", label: "Issue Material", icon: Send, roles: ["SUPER_ADMIN", "MANAGER", "STORE", "COSTING", "AUDITOR"] },
       { href: "/reconciliation", label: "Receive & Reconcile", icon: Scale, roles: ["SUPER_ADMIN", "MANAGER", "STORE", "COSTING", "AUDITOR"] },
       { href: "/invoices", label: "Dispatch & Invoicing", icon: Package, roles: ["SUPER_ADMIN", "MANAGER", "COSTING", "SALES", "AUDITOR"] },

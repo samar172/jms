@@ -12,13 +12,10 @@ import { useAuth } from "@/lib/auth-context";
 
 export interface WastageRecord {
   id: string;
-  grossWeightG: string;
-  pureGoldInPieceG: string;
-  goldScrapWeightG: string;
-  goldDustWeightG: string;
-  approvedLossWeightG: string;
-  chizzatWeightG: string;
-  stoneReturnedWeightG: string;
+  fineIssuedG: string;
+  finePieceG: string;
+  fineDustG: string;
+  fineReturnedG: string;
   netWastageG: string;
   wastagePct: string;
   tolerancePct: string;
@@ -238,6 +235,10 @@ export function JobStageCard({
                 />
               </div>
             )}
+
+            <div className="mt-3 pt-3 border-t border-slate-100">
+              <LabourSection stage={stage} onChange={onChange} />
+            </div>
           </div>
         </div>
       ) : (
@@ -766,7 +767,7 @@ function WastageDisplay({
 
   return (
     <div className={`text-[10px] border rounded px-2 py-1.5 ${wastage.exceptionStatus === 'PENDING' ? 'text-rose-700 bg-rose-50 border-rose-200' : (!wastage.withinTolerance ? 'text-amber-700 bg-amber-50 border-amber-200' : 'text-emerald-700 bg-emerald-50 border-emerald-200')}`}>
-      Reconciled: {formatWeight(wastage.pureGoldInPieceG)} g actual gold · {formatWeight(wastage.goldDustWeightG)} g dust · {formatWeight(wastage.stoneReturnedWeightG)} g stone rtn · <b>{formatWeight(wastage.chizzatWeightG)} g chizzat ({formatPct(wastage.wastagePct)})</b>
+      Reconciled: {formatWeight(Number(wastage.finePieceG))} g actual gold · {formatWeight(Number(wastage.fineDustG))} g dust · {formatWeight(Number(wastage.fineReturnedG))} g rtn · <b>{formatWeight(Number(wastage.netWastageG))} g chizzat ({formatPct(Number(wastage.wastagePct))})</b>
       
       {showForm ? (
         <div className="mt-1.5 bg-white border border-rose-200 rounded p-1.5 space-y-1">
@@ -813,7 +814,21 @@ function LabourSection({ stage, onChange }: { stage: JobStage; onChange: () => v
   const [rate, setRate] = useState("");
   const [rateBasis, setRateBasis] = useState("PER_GRAM");
   const [submitting, setSubmitting] = useState(false);
+  const [pulling, setPulling] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  async function pullFormula() {
+    setPulling(true);
+    setError(null);
+    try {
+      await apiFetch(`/api/job-cards/stages/${stage.id}/pull-labour`, { method: "POST" });
+      onChange();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed");
+    } finally {
+      setPulling(false);
+    }
+  }
 
   async function addEntry(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -890,6 +905,9 @@ function LabourSection({ stage, onChange }: { stage: JobStage; onChange: () => v
           />
           <button className="console-btn" disabled={submitting}>
             Add
+          </button>
+          <button type="button" className="console-btn primary" onClick={pullFormula} disabled={pulling}>
+            {pulling ? "Pulling..." : "Pull Formula"}
           </button>
         </form>
       )}

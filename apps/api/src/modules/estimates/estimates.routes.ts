@@ -424,72 +424,6 @@ router.post(
   })
 );
 
-// --- Auto-populate Making Charges from approved labour (FR-6.07, FR-7.09) ---
-router.post(
-  "/:id/pull-labour",
-  asyncHandler(async (req, res) => {
-    const estimate = await prisma.estimate.findUnique({
-      where: { id: req.params.id },
-      include: { lines: true, jobCards: { include: { stages: true } } },
-    });
-    if (!estimate) throw notFound("Estimate not found");
-    assertEditable(estimate.status);
-
-    // Job cards are scoped to this specific estimate — the same design can be
-    // in production for several customers at once, and only this customer's
-    // job card's labour should ever land on this quote.
-    const stageIds = estimate.jobCards.flatMap((jc) => jc.stages.map((s) => s.id));
-    const alreadyPulled = new Set(
-      estimate.lines.filter((l) => l.sourceLabourEntryId).map((l) => l.sourceLabourEntryId)
-    );
-
-    const labourEntries = await prisma.labourEntry.findMany({
-      where: { jobStageId: { in: stageIds }, status: "APPROVED" },
-      include: { karigar: true, jobStage: { include: { processStage: true } } },
-    });
-
-    const newLines = labourEntries.filter((e) => !alreadyPulled.has(e.id));
-    if (newLines.length === 0) return res.json(await recalculateEstimateTotals(estimate.id));
-
-    // Fix: Delete existing MANUAL making charge lines before appending pulled labour
-    await prisma.estimateLine.deleteMany({
-      where: {
-        estimateId: estimate.id,
-        head: "MAKING",
-        sourceType: "MANUAL",
-      },
-    });
-
-    await prisma.estimateLine.createMany({
-      data: newLines.map((e) => ({
-        estimateId: estimate.id,
-        head: "MAKING" as const,
-        description: `${e.jobStage.processStage.name} — from job card`,
-        karigarName: e.karigar.name,
-        quantity: e.quantity,
-        rate: e.rate,
-        amount: e.amount,
-        sourceType: "FROM_LABOUR" as const,
-        sourceLabourEntryId: e.id,
-      })),
-    });
-
-    const withTotals = await recalculateEstimateTotals(estimate.id);
-
-    await recordAudit(prisma, {
-      userId: req.user!.id,
-      action: "UPDATE",
-      entityType: "Estimate",
-      entityId: estimate.id,
-      before: estimate,
-      after: withTotals,
-      ipAddress: req.ip ?? null,
-    });
-
-    res.json(withTotals);
-  })
-);
-
 // --- Pull wastage cost from recorded wastage on the job (FR-8.7.1) ----------
 router.post(
   "/:id/pull-wastage",
@@ -637,6 +571,7 @@ router.post(
         if (processStages.length > 0) {
           const jobCard = await prisma.jobCard.create({
             data: {
+              jobNo: await nextVoucherNumber("JOB"),
               productId: estimate.productId,
               estimateId: estimate.id,
               customerId: estimate.customerId,
@@ -783,6 +718,7 @@ router.post(
 
     const jobCard = await prisma.jobCard.create({
       data: {
+        jobNo: await nextVoucherNumber("JOB"),
         productId: estimate.productId,
         estimateId: estimate.id,
         customerId: estimate.customerId,

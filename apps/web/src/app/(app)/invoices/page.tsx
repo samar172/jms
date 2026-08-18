@@ -7,22 +7,24 @@ import { useApi } from "@/lib/hooks";
 import { openAuthenticated } from "@/lib/api";
 import { formatINR, formatDate } from "@/lib/format";
 
-interface OrderRow {
+interface EstimateRow {
   id: string;
-  orderNo: string;
+  estimateNo: string | null;
   status: string;
-  approvedAmount: string;
-  advanceReceived: string;
+  netAmount: string;
   createdAt: string;
   product: { serialNo: string; designName: string };
-  customer: { id: string; name: string };
+  customer?: { id: string; name: string } | null;
 }
 
 export default function InvoicesPage() {
   const [search, setSearch] = useState("");
   const params = new URLSearchParams();
   if (search) params.set("search", search);
-  const { data: orders } = useApi<OrderRow[]>(`/api/orders${params.toString() ? `?${params}` : ""}`);
+  params.set("type", "FINAL_COSTING");
+  params.set("status", "APPROVED");
+  
+  const { data: invoices } = useApi<EstimateRow[]>(`/api/estimates?${params.toString()}`);
 
   return (
     <div>
@@ -30,14 +32,14 @@ export default function InvoicesPage() {
         <div className="text-[11px] text-mute mb-1">Sales</div>
         <h1 className="text-[19px] font-semibold flex items-center gap-2.5 text-ink">
           Invoicing
-          <span className="text-xs text-mute font-medium">{orders ? `${orders.length} records` : ""}</span>
+          <span className="text-xs text-mute font-medium">{invoices ? `${invoices.length} records` : ""}</span>
         </h1>
       </div>
 
       <div className="flex items-center gap-2 py-2.5 border-t border-b border-line -mx-3.5 px-3.5 sm:-mx-[18px] sm:px-[18px] mb-3.5">
         <div className="console-search w-[260px]">
           <Search size={13} />
-          <input placeholder="Search order, customer, design…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <input placeholder="Search invoice, customer, design…" value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
       </div>
 
@@ -46,43 +48,36 @@ export default function InvoicesPage() {
           <table className="console-table">
             <thead>
               <tr>
-                <th>Invoice # (Order)</th>
+                <th>Invoice #</th>
                 <th>Customer</th>
                 <th>Design</th>
                 <th className="num">Invoice Amount</th>
-                <th className="num">Advance Received</th>
-                <th className="num">Balance Due</th>
                 <th>Date</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {orders?.map((o) => {
-                const balance = Number(o.approvedAmount) - Number(o.advanceReceived);
+              {invoices?.map((inv) => {
                 return (
-                  <tr key={o.id}>
+                  <tr key={inv.id}>
                     <td>
-                      <Link href={`/orders/${o.id}`} className="rid">
-                        {o.orderNo}
+                      <Link href={`/costing/${inv.id}`} className="rid">
+                        {inv.estimateNo ?? "Draft"}
                       </Link>
                     </td>
-                    <td className="text-ink2">{o.customer.name}</td>
+                    <td className="text-ink2">{inv.customer?.name ?? "—"}</td>
                     <td>
-                      {o.product.designName}
-                      <div className="text-[11px] text-mute mono">{o.product.serialNo}</div>
+                      {inv.product.designName}
+                      <div className="text-[11px] text-mute mono">{inv.product.serialNo}</div>
                     </td>
-                    <td className="num mono">{formatINR(Number(o.approvedAmount))}</td>
-                    <td className="num mono">{formatINR(Number(o.advanceReceived))}</td>
-                    <td className="num mono" style={{ color: balance > 0 ? "var(--color-err-tx)" : "var(--color-ok-tx)" }}>
-                      {formatINR(balance)}
-                    </td>
-                    <td className="text-ink2">{formatDate(o.createdAt)}</td>
+                    <td className="num mono font-semibold text-accent">{formatINR(Number(inv.netAmount))}</td>
+                    <td className="text-ink2">{formatDate(inv.createdAt)}</td>
                     <td>
                       <button
                         className="console-btn"
                         onClick={(e) => {
                           e.stopPropagation();
-                          openAuthenticated(`/api/orders/${o.id}/invoice`);
+                          openAuthenticated(`/api/estimates/${inv.id}/pdf`);
                         }}
                       >
                         Export Invoice
@@ -91,15 +86,16 @@ export default function InvoicesPage() {
                   </tr>
                 );
               })}
-              {orders?.length === 0 && (
+              {invoices?.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-mute">
-                    No orders yet — an invoice is generated for every booked order.
+                  <td colSpan={6} className="py-8 text-center text-mute">
+                    No invoices yet — approve a Final Costing to generate an invoice.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
+
         </div>
       </div>
     </div>

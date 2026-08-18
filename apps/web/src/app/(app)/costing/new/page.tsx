@@ -7,6 +7,7 @@ import { useApi, useKarigars, useCustomers, useKarats, useStoneTypes } from "@/l
 import { apiFetch, ApiError } from "@/lib/api";
 import { formatINR } from "@/lib/format";
 import { deriveRate } from "@jms/shared";
+import { AddCustomerForm } from "@/components/AddCustomerForm";
 
 interface ProductOption {
   id: string;
@@ -36,10 +37,11 @@ export default function NewEstimateForm() {
   const [gstPct, setGstPct] = useState("3");
   const [pieces, setPieces] = useState("1");
   const [grossWeightG, setGrossWeightG] = useState("");
+  const [showAddCustomer, setShowAddCustomer] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const { data: customers } = useCustomers();
+  const { data: customers, mutate: mutateCustomers } = useCustomers();
   const { data: karigars } = useKarigars();
   const { data: karats } = useKarats();
   const { data: stoneTypes } = useStoneTypes();
@@ -235,13 +237,33 @@ export default function NewEstimateForm() {
                 </div>
                 
                 <div className="md:col-span-1">
-                  <label className="text-[11px] text-slate-500">Party / Customer</label>
-                  <select className="mt-0.5 w-full h-8 px-2 rounded border border-slate-200 text-[12px]" value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
-                    <option value="">Select a customer…</option>
-                    {customers?.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
+                  <div className="flex justify-between items-baseline">
+                    <label className="text-[11px] text-slate-500">Party / Customer</label>
+                    {!showAddCustomer && (
+                      <button type="button" onClick={() => setShowAddCustomer(true)} className="text-[10px] text-accent font-medium hover:underline">
+                        + New
+                      </button>
+                    )}
+                  </div>
+                  {!showAddCustomer ? (
+                    <select className="mt-0.5 w-full h-8 px-2 rounded border border-slate-200 text-[12px]" value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
+                      <option value="">Select a customer…</option>
+                      {customers?.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="mt-1 p-2 bg-slate-50 border border-slate-200 rounded">
+                      <AddCustomerForm 
+                        onCreated={async (customer) => {
+                          setShowAddCustomer(false);
+                          await mutateCustomers();
+                          if (customer?.id) setCustomerId(customer.id);
+                        }} 
+                        onCancel={() => setShowAddCustomer(false)} 
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div className="md:col-span-1">

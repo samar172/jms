@@ -15,6 +15,7 @@ interface JobStage {
 }
 interface JobCardRow {
   id: string;
+  jobNo: string | null;
   createdAt: string;
   targetDeliveryDate: string | null;
   product: { serialNo: string; designName: string };
@@ -85,7 +86,7 @@ export default function JobCardsPage() {
                 <tr key={j.id} className="border-b border-slate-100 h-9 hover:bg-slate-50 cursor-pointer" onClick={() => window.location.href = `/job-cards/${j.id}`}>
                   <td className="px-3 text-center">{overdue ? <span className="w-2 h-2 rounded-full bg-rose-500 inline-block"></span> : ""}</td>
                   <td className="px-3 text-[12px] mono text-blue-800 font-medium">
-                    <Link href={`/job-cards/${j.id}`} className="hover:underline" onClick={(e) => e.stopPropagation()}>{j.id.split("-").pop()}</Link>
+                    <Link href={`/job-cards/${j.id}`} className="hover:underline" onClick={(e) => e.stopPropagation()}>{j.jobNo ?? j.id}</Link>
                   </td>
                   <td className="px-3 text-[12px] text-slate-900">{j.product.designName}</td>
                   <td className="px-3 text-[12px] text-slate-600">{j.customer?.name ?? "—"}</td>

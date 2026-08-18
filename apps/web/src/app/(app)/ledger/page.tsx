@@ -7,6 +7,7 @@ import { apiFetch, ApiError } from "@/lib/api";
 import { formatINR, formatWeight, formatDateTime } from "@/lib/format";
 import { useAuth } from "@/lib/auth-context";
 import { AddKarigarForm } from "@/components/AddKarigarForm";
+import { AddCustomerForm } from "@/components/AddCustomerForm";
 
 type Tab = "karigars" | "customers" | "stock";
 
@@ -207,60 +208,6 @@ function CustomersTab() {
         {customers?.length === 0 && <p className="text-center text-mute py-8 text-sm">No customers yet.</p>}
       </div>
     </div>
-  );
-}
-
-function AddCustomerForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: () => void }) {
-  const [name, setName] = useState("");
-  const [contact, setContact] = useState("");
-  const [address, setAddress] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function submit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setSubmitting(true);
-    setError(null);
-    try {
-      await apiFetch("/api/masters/customers", {
-        method: "POST",
-        body: { name, contact: contact || undefined, address: address || undefined },
-      });
-      setName("");
-      setContact("");
-      setAddress("");
-      onCreated();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to add customer");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <form onSubmit={submit} className="flex flex-wrap items-end gap-2">
-      <div>
-        <label className="console-field-label">Name</label>
-        <input required className="console-field w-40" value={name} onChange={(e) => setName(e.target.value)} />
-      </div>
-      <div>
-        <label className="console-field-label">Contact (optional)</label>
-        <input className="console-field w-36" value={contact} onChange={(e) => setContact(e.target.value)} />
-      </div>
-      <div>
-        <label className="console-field-label">Address (optional)</label>
-        <input className="console-field w-48" value={address} onChange={(e) => setAddress(e.target.value)} />
-      </div>
-      <button className="console-btn primary" disabled={submitting}>
-        {submitting ? "Adding…" : "+ Add Customer"}
-      </button>
-      {onCancel && (
-        <button type="button" className="console-btn" onClick={onCancel}>
-          Cancel
-        </button>
-      )}
-      {error && <p className="text-sm text-err-tx w-full">{error}</p>}
-    </form>
   );
 }
 
