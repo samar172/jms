@@ -357,6 +357,10 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
   const [stoneCarat, setStoneCarat] = useState("");
   const [stoneRate, setStoneRate] = useState("");
   const [stonePieces, setStonePieces] = useState("");
+  // multi-row inputs (Jadai stones, Fitting findings + other items)
+  const [stoneRows, setStoneRows] = useState<{ name: string; pieces: string; carat: string; rate: string }[]>([{ name: "Polki", pieces: "", carat: "", rate: "" }]);
+  const [findingRows, setFindingRows] = useState<{ type: string; weight: string }[]>([{ type: "Wire", weight: "" }]);
+  const [itemRows, setItemRows] = useState<{ type: string; amount: string; carat: string }[]>([]);
   const [busy, setBusy] = useState(false);
 
   const issue = modal.issue;
@@ -394,21 +398,52 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
             <F label={`Kundan gold weight (g) @ ${pure} *`}><I value={weight} onChange={setWeight} /></F>
             <F label="Labour (₹) — manual"><I value={labourAmount} onChange={setLabourAmount} step="1" /></F>
             <div className="border-t border-slate-100 pt-2">
-              <div className="text-[11px] font-medium text-slate-600 mb-1">Polki / Diamond (optional)</div>
-              <div className="grid grid-cols-4 gap-1.5">
-                <input placeholder="Name" className="h-8 px-1.5 border border-slate-200 rounded text-[11px]" value={stoneType} onChange={(e) => setStoneType(e.target.value)} />
-                <input placeholder="Pcs" className="h-8 px-1.5 border border-slate-200 rounded text-[11px]" value={stonePieces} onChange={(e) => setStonePieces(e.target.value)} />
-                <input placeholder="Carat" className="h-8 px-1.5 border border-slate-200 rounded text-[11px]" value={stoneCarat} onChange={(e) => setStoneCarat(e.target.value)} />
-                <input placeholder="₹/ct" className="h-8 px-1.5 border border-slate-200 rounded text-[11px]" value={stoneRate} onChange={(e) => setStoneRate(e.target.value)} />
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[11px] font-medium text-slate-600">Polki / Diamond</span>
+                <button type="button" onClick={() => setStoneRows((r) => [...r, { name: "", pieces: "", carat: "", rate: "" }])} className="h-6 px-2 rounded border border-slate-200 text-[11px] hover:bg-slate-50">+ Add Stone</button>
               </div>
+              {stoneRows.map((row, idx) => (
+                <div key={idx} className="grid grid-cols-[1fr_1fr_1fr_1fr_auto] gap-1.5 mb-1.5 items-center">
+                  <input placeholder="Name" className="h-8 px-1.5 border border-slate-200 rounded text-[11px]" value={row.name} onChange={(e) => setStoneRows((r) => r.map((x, i) => i === idx ? { ...x, name: e.target.value } : x))} />
+                  <input placeholder="Pcs" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono" value={row.pieces} onChange={(e) => setStoneRows((r) => r.map((x, i) => i === idx ? { ...x, pieces: e.target.value } : x))} />
+                  <input placeholder="Carat" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono" value={row.carat} onChange={(e) => setStoneRows((r) => r.map((x, i) => i === idx ? { ...x, carat: e.target.value } : x))} />
+                  <input placeholder="₹/ct" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono" value={row.rate} onChange={(e) => setStoneRows((r) => r.map((x, i) => i === idx ? { ...x, rate: e.target.value } : x))} />
+                  <button type="button" onClick={() => setStoneRows((r) => r.filter((_, i) => i !== idx))} className="text-rose-500 text-[13px] w-5">✕</button>
+                </div>
+              ))}
             </div>
           </>)}
 
           {modal.kind === "finding" && (<>
             <F label="Number of pieces *"><I value={pieces} onChange={setPieces} step="1" /></F>
-            <F label={`Silver finding weight (g) @ ${pure}`}><I value={weight} onChange={setWeight} /></F>
-            <F label="Finding type"><input className="w-full h-9 px-2 border border-slate-200 rounded text-[12px]" value={stoneType} onChange={(e) => setStoneType(e.target.value)} placeholder="Wire / Push Cap / Clip Cap" /></F>
             <F label="Labour (₹) — flat"><I value={labourAmount} onChange={setLabourAmount} step="1" /></F>
+            <div className="border-t border-slate-100 pt-2">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[11px] font-medium text-slate-600">Silver Findings @ {pure}</span>
+                <button type="button" onClick={() => setFindingRows((r) => [...r, { type: "Wire", weight: "" }])} className="h-6 px-2 rounded border border-slate-200 text-[11px] hover:bg-slate-50">+ Add Finding</button>
+              </div>
+              {findingRows.map((row, idx) => (
+                <div key={idx} className="grid grid-cols-[1fr_1fr_auto] gap-1.5 mb-1.5 items-center">
+                  <input placeholder="Wire / Push Cap / Clip Cap" className="h-8 px-1.5 border border-slate-200 rounded text-[11px]" value={row.type} onChange={(e) => setFindingRows((r) => r.map((x, i) => i === idx ? { ...x, type: e.target.value } : x))} />
+                  <input placeholder="Weight g" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono" value={row.weight} onChange={(e) => setFindingRows((r) => r.map((x, i) => i === idx ? { ...x, weight: e.target.value } : x))} />
+                  <button type="button" onClick={() => setFindingRows((r) => r.filter((_, i) => i !== idx))} className="text-rose-500 text-[13px] w-5">✕</button>
+                </div>
+              ))}
+            </div>
+            <div className="border-t border-slate-100 pt-2">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[11px] font-medium text-slate-600">Other Flat Items</span>
+                <button type="button" onClick={() => setItemRows((r) => [...r, { type: "Stone", amount: "", carat: "" }])} className="h-6 px-2 rounded border border-slate-200 text-[11px] hover:bg-slate-50">+ Add Item</button>
+              </div>
+              {itemRows.map((row, idx) => (
+                <div key={idx} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-1.5 mb-1.5 items-center">
+                  <input placeholder="Type" className="h-8 px-1.5 border border-slate-200 rounded text-[11px]" value={row.type} onChange={(e) => setItemRows((r) => r.map((x, i) => i === idx ? { ...x, type: e.target.value } : x))} />
+                  <input placeholder="Amount ₹" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono" value={row.amount} onChange={(e) => setItemRows((r) => r.map((x, i) => i === idx ? { ...x, amount: e.target.value } : x))} />
+                  <input placeholder="Carat (opt)" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono" value={row.carat} onChange={(e) => setItemRows((r) => r.map((x, i) => i === idx ? { ...x, carat: e.target.value } : x))} />
+                  <button type="button" onClick={() => setItemRows((r) => r.filter((_, i) => i !== idx))} className="text-rose-500 text-[13px] w-5">✕</button>
+                </div>
+              ))}
+            </div>
           </>)}
 
           {modal.kind === "issue" && (<>
@@ -442,12 +477,13 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
               const A = modal.assignment.id;
               if (modal.kind === "cast") return castOutput(jobNo, { assignmentId: A, returnedWeight: Number(returnedWeight), wastagePercent: Number(wastagePercent) || 0, pieceCount: Number(pieces) });
               if (modal.kind === "jadai") {
-                const stones = stoneType && Number(stoneCarat) > 0 ? [{ name: stoneType, pieces: Number(stonePieces) || 0, carat: Number(stoneCarat), rate: Number(stoneRate) || 0 }] : [];
+                const stones = stoneRows.filter((r) => r.name.trim() && Number(r.carat) > 0).map((r) => ({ name: r.name.trim(), pieces: Number(r.pieces) || 0, carat: Number(r.carat), rate: Number(r.rate) || 0 }));
                 return jadaiOutput(jobNo, { assignmentId: A, weight: Number(weight), labourAmount: Number(labourAmount) || 0, pieceCount: Number(pieces), stones });
               }
               if (modal.kind === "finding") {
-                const findings = Number(weight) > 0 ? [{ type: stoneType || "Wire", weight: Number(weight), karat: pure }] : [];
-                return findingOutput(jobNo, { assignmentId: A, pieceCount: Number(pieces), labourAmount: Number(labourAmount) || 0, findings, items: [] });
+                const findings = findingRows.filter((r) => Number(r.weight) > 0).map((r) => ({ type: r.type || "Finding", weight: Number(r.weight), karat: pure }));
+                const items = itemRows.filter((r) => Number(r.amount) > 0).map((r) => ({ type: r.type || "Item", amount: Number(r.amount), carat: Number(r.carat) || 0 }));
+                return findingOutput(jobNo, { assignmentId: A, pieceCount: Number(pieces), labourAmount: Number(labourAmount) || 0, findings, items });
               }
               if (modal.kind === "issue") return issueMaterial(A, { purity: targetPurity, issuedWeight: Number(weight), pieceCount: Number(pieces) || undefined });
               if (modal.kind === "reconcile" || isEdit) {
