@@ -1,0 +1,133 @@
+# Chowker JMS — Simplification Plan (V3)
+
+**Branch:** `new`
+**Decision:** Simplify **in place** (no new directory / no rewrite). Git branch is our "separate copy."
+**Goal:** Roll the app back from a full **gold ERP** to the **silver costing core** described in the source-of-truth spec and the client-approved `Jewellery_Manufacturing_ERP_Mock (3).html`.
+**Client mandate:** "Too complicated, don't need some features." Confirmed cuts: **Invoicing / Sales / Customer / Orders** and **Gold / multi-metal**.
+
+> Nothing is deleted until this doc is signed off. Items marked **CONFIRM** are my proposals, not yet approved.
+
+---
+
+## 1. Why it feels complicated (the root cause)
+
+The build drifted far past the spec. The spec + Mock (3) describe **6 screens** of silver costing. What exists is **~23 screens / ~40 DB models** of gold-jewellery ERP: orders, customers, vendors, invoicing, cash/bank ledgers, assembly, QC, dust-lots, wastage exceptions, multi-line estimates with GST.
+
+Two structural facts drive the whole plan:
+
+1. **The data model is gold-native.** `GoldRate`, `Karat`, `PERCENT_GOLD_MAKING`, "18K/22K/24K Gold Weight" costing bases, `MaterialReceipt.goldScrapWeightG` / `chizzatWeightG` / `dustLotId`. The spec wants **configurable silver purity tiers** (24K=100%, 22K=92.5%, 18K=76%, 14K=59%) off one base ₹/gram rate.
+2. **The spec's core already exists underneath** and is worth keeping: `Product` (Item Master), `JobCard`, `JobStage`, `MaterialIssue`, `MaterialReceipt`, `Karigar`, `KarigarLedgerEntry`, `Karat`/purity, `AppSetting`.
+
+So this is a **rollback to the spec core**, not a light trim and not a from-scratch rebuild.
+
+---
+
+## 2. Screen map (`apps/web/src/app/(app)/`)
+
+### KEEP (in Mock (3) + your explicit keeps)
+| Screen | Route | Spec role |
+|---|---|---|
+| Dashboard | `/dashboard` | KPI tiles + queues (§8) |
+| Item Master | `/products` | Product catalogue (§2.3) |
+| Job Cards | `/job-cards` | The costing core (§2.4, §8) |
+| Karigars + Karigar Ledger | `/karigars` | Artisan master + silver ledger (§2.2, §6) |
+| Settings | `/settings` | Purity tiers, base rate, defaults (§8) |
+| Users & Roles | `/users` | Kept per your instruction |
+| Visual Search | `/visual-search` | Kept per your instruction |
+
+### CUT — client-confirmed (invoicing/sales/customer/orders + gold)
+| Screen | Route | Reason |
+|---|---|---|
+| Estimates | `/costing` | Quotation/sales — spec is costing-only, inside the job card |
+| Final Costing | `/costing/final` | Costing summary lives on the job card page (§7) |
+| Dispatch & Invoicing | `/invoices` | Invoicing — out |
+| Party / Customer Ledger | `/ledger` | Customer concept — out |
+| Cash & Bank Ledger | `/cash-bank-ledger` | Financial/AR — out |
+| Gold Ledger | `/materials` | Metal-trading stock ledger — silver tracked per-karigar instead |
+
+### FOLD INTO JOB CARD (delete as standalone nav; keep the action inside the stage card)
+Per spec §8.1, these are **actions within a job-card stage**, never top-level screens:
+| Screen | Route | Becomes |
+|---|---|---|
+| Issue Material | `/material-vouchers` | "+ Issue Material" button on Meenakari/Setting stage cards |
+| Receive & Reconcile | `/reconciliation` | "Receive & Reconcile" button on the same stage cards |
+| Production Tracking | `/tracking` | The stage cards on the job-card page already show status |
+
+### CONFIRM — not in Mock (3), client didn't name them (proposed: CUT unless you say keep)
+| Screen | Route | Note |
+|---|---|---|
+| Stone Ledger | `/stone-ledger` | Spec tracks stones **inside** job cards, grouped by type in costing (§7) — no standalone ledger |
+| Reports | `/reports` | Not in mock |
+| Audit Log (global) | `/audit-log` | Spec has per-job-card activity + reversal logs; this is an extra global admin view |
+| QC / Assembly | `/qc`, `/assembly` | Beyond the 5-stage karigar route (Casting→Meenakari→Jadai→Setting→Fitting) |
+
+---
+
+## 3. API module map (`apps/api/src/modules/`)
+
+- **KEEP:** `auth`, `users`, `dashboard`, `products`, `masters`, `jobcards`, `labour`, `ledger` (karigar side), `settings`, `search`, `notifications`, `audit` (service-level, even if the global screen is cut)
+- **CUT (confirmed):** `orders`, `estimates`, `dispatch`, `materials` (gold stock trading side)
+- **CONFIRM (proposed cut):** `assembly`, `qc`, `stones` (standalone) — stone tracking that must remain moves under `jobcards`/`labour`
+- **Rework, don't delete:** `jobcards` + `MaterialReceipt` logic — strip gold-specific reconcile fields (chizzat, dustLot, goldScrap, approvedLoss, wax/wire) down to the spec's **dust + piece count + labour**
+
+---
+
+## 4. Data model changes (`apps/api/prisma/schema.prisma`, 1180 lines → target ~500)
+
+### 4a. Gold → Silver rename (you approved: rename now)
+| Now | Becomes | Notes |
+|---|---|---|
+| `GoldRate.ratePerGram24k` | `MetalRate.ratePerGramPure` | One base rate for the 100% tier |
+| `Karat` (`code`, `purityFactor`) | `PurityTier` (`label`, `percent`) | Model is already generic; rename + make tiers fully editable (§2.1). Exactly one tier at 100%. |
+| `MaterialType.GOLD` | `MaterialType.SILVER` | Enum value |
+| `EstimateLineHead.GOLD` | *(removed with Estimates)* | — |
+| `PERCENT_GOLD_MAKING`, `PERCENT_GOLD_STONE` | *(removed with LabourRule gold bases)* | Spec labour is per-gram / flat, not gold-% |
+| `MaterialReceipt.goldScrapWeightG`, `dustLotId`, `chizzat*`, `approvedLoss*`, `waxWire*`, `nonGoldInPiece*`, `pieceWeightIsFine`, `overAccounted` | *(dropped)* | Spec reconcile = `dustWeight` + `pieceCount` + labour; finished weight = `issued − dust` (§3.2/§3.4) |
+
+### 4b. Models to DROP (with their routes/modules)
+`Customer`, `Vendor`, `Order`, `Estimate`, `EstimateLine`, `Assembly`, `AssemblyComponent`, `QCInspection`, `CashBankLedgerEntry`, `CustomerLedgerEntry`, `StockLedgerEntry`, `DustLot`, `WastageRecord` (fold wastage into Casting per §4.1), `ChargeType`, `CostingEditLog`, `GoldRate` (replaced), plus enums for the above.
+Remove the now-dangling FKs on `JobCard` (`customerId`, `estimateId`, `orderId`, `dispatch*`).
+
+### 4c. Bulk-stock model (spec §2.10, §6) — verify/add
+Spec requires a per-karigar running silver float (`BulkStockIssue`) for Casting/Jadai/Fitting, seeded before output. Confirm the current schema expresses this (via `KarigarLedgerEntry`) or add a `BulkStockIssue` model.
+
+### 4d. Migration
+Rename is destructive on a live DB. Since this is pre-production (mockup-stage data), plan is: **one squashed migration** that renames `Karat`→`PurityTier`, `GoldRate`→`MetalRate`, drops cut models, and reseeds default silver tiers. Confirm there's no production data to preserve.
+
+---
+
+## 5. Shared package (`packages/shared/src/`)
+- `types.ts` (39 lines), `calculations.ts` (160), `roles.ts` (19) — rename gold types, strip estimate/GST/order types, and make sure `calculations.ts` matches spec §4 (weight accumulation: REPLACE vs ADD stages) and §4.1 (wastage valued at the 100% tier). **This file is the highest-risk item** — it's where the spec's documented float/purity bugs live or die.
+
+---
+
+## 6. Frontend cleanup
+- `Sidebar.tsx`: collapse from 5 nav groups to the spec's structure — **Overview / Production / Ledgers / Configuration** (§8). Drop Workflow's Estimates/Tracking/Invoicing rows.
+- Delete components tied to cut features: `AddCustomerForm.tsx`, `EstimateLines.tsx`, and estimate/invoice-specific bits of `ProductionPanel.tsx` / `JobStageCard.tsx`.
+- Keep bilingual Hindi (`lib/hi.ts`) — you're keeping it.
+
+---
+
+## 7. Execution phases (each phase = its own commit, app stays runnable)
+
+1. **Phase 0 — Safety:** tag current state (`git tag pre-simplify-v3`), branch already `new`. ✅ nothing lost.
+2. **Phase 1 — Nav + routes (visible win):** remove CUT + FOLD screens from `Sidebar.tsx`, delete their `app/(app)/…` route folders. App instantly looks like Mock (3).
+3. **Phase 2 — API modules:** delete CUT modules + their route registrations; fix imports.
+4. **Phase 3 — Schema rename + drops:** Karat→PurityTier, GoldRate→MetalRate, drop cut models, one migration + reseed.
+5. **Phase 4 — Reconcile simplification:** strip `MaterialReceipt` to spec fields; update `jobcards` service + `calculations.ts`.
+6. **Phase 5 — Verify:** re-run the hand-computed worked example from spec §4 (Casting 220 → … → final 206.780g) against the app. Update `TESTING.md`.
+
+---
+
+## 8. Open questions before I start cutting
+1. **CONFIRM screens** (§2): cut Stone Ledger, Reports, Audit Log, QC/Assembly — or keep any?
+2. **Production data:** is there any real DB data to preserve, or is a clean reseed fine? (Decides migration strategy, §4d.)
+3. **Vendors/purchasing:** confirm fully out (not named by client but sales-adjacent).
+4. Want Phase 1 (nav/routes visible win) done first for a quick client demo, or the whole thing before showing?
+
+---
+
+## 9. Risks
+- **`calculations.ts` / reconcile rework** is the one place a bug hurts — it's the client-verified costing engine. Change it last, test against the spec's worked example.
+- Schema rename touches many files; do it as one mechanical pass with `prisma migrate` + a full typecheck.
+- Cutting `estimateId`/`orderId`/`customerId` off `JobCard` may reveal code paths that assumed a customer — expect a round of compile-error fixing in `jobcards`.

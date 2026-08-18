@@ -38,17 +38,18 @@ export default function JobCardsPage() {
       <div className="mb-3.5 flex items-center justify-between">
         <div>
           <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500 mb-1.5">
-            <span>Sales</span>
+            <span>Production</span>
             <span className="text-slate-300">/</span>
             <span className="text-slate-900">Job Cards</span>
           </div>
           <h1 className="text-[19px] font-semibold flex items-center gap-2.5 text-slate-900">
-            Job Cards / Orders
+            Job Cards
             <span className="text-[11px] text-slate-500 font-normal">{jobCards?.length ?? 0} jobs · {overdueJobs.length} overdue against due date</span>
           </h1>
         </div>
         <div className="flex items-center gap-2">
-          <Link href="/costing" className="h-7 px-3 rounded bg-blue-800 text-white text-[12px] font-medium flex items-center gap-1.5 hover:bg-blue-900">
+          {/* TODO(v3 Phase 4): wire to the new "create job card from Item Master" flow (replaces the removed Estimates route) */}
+          <Link href="/products" className="h-7 px-3 rounded bg-blue-800 text-white text-[12px] font-medium flex items-center gap-1.5 hover:bg-blue-900">
             <span className="font-bold">+</span> New Job Card
           </Link>
         </div>

@@ -8,22 +8,9 @@ import {
   Gem,
   Camera,
   ClipboardList,
-  Boxes,
-  Calculator,
-  Users,
-  BarChart3,
   Settings,
   BookOpen,
-  Package,
-  Wrench,
-  ShieldCheck,
-  Send,
-  Scale,
-  Diamond,
-  History,
   UserCog,
-  Receipt,
-  KanbanSquare,
 } from "lucide-react";
 import type { Role } from "@jms/shared";
 import { useAuth } from "@/lib/auth-context";
@@ -46,42 +33,22 @@ const NAV_GROUPS: NavGroup[] = [
     items: [{ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard }],
   },
   {
-    label: "Workflow",
+    label: "Production",
     items: [
-      { href: "/costing", label: "Estimates", icon: Calculator, roles: ["SUPER_ADMIN", "MANAGER", "COSTING", "AUDITOR"] },
       { href: "/job-cards", label: "Job Cards", icon: ClipboardList },
-      { href: "/tracking", label: "Production Tracking", icon: KanbanSquare },
-      { href: "/material-vouchers", label: "Issue Material", icon: Send, roles: ["SUPER_ADMIN", "MANAGER", "STORE", "COSTING", "AUDITOR"] },
-      { href: "/reconciliation", label: "Receive & Reconcile", icon: Scale, roles: ["SUPER_ADMIN", "MANAGER", "STORE", "COSTING", "AUDITOR"] },
-      { href: "/invoices", label: "Dispatch & Invoicing", icon: Package, roles: ["SUPER_ADMIN", "MANAGER", "COSTING", "SALES", "AUDITOR"] },
-      { href: "/costing/final", label: "Final Costing", icon: Receipt, roles: ["SUPER_ADMIN", "MANAGER", "COSTING", "AUDITOR"] },
-    ],
-  },
-  {
-    label: "Ledgers",
-    items: [
-      { href: "/materials", label: "Gold Ledger", icon: Diamond, roles: ["SUPER_ADMIN", "MANAGER", "STORE", "COSTING", "AUDITOR"] },
-      { href: "/stone-ledger", label: "Stone Ledger", icon: Diamond, roles: ["SUPER_ADMIN", "MANAGER", "STORE", "COSTING", "AUDITOR"] },
-      { href: "/karigars", label: "Karigar Ledger", icon: BookOpen },
-      { href: "/ledger", label: "Party / Customer Ledger", icon: BookOpen, roles: ["SUPER_ADMIN", "MANAGER", "COSTING", "SALES", "AUDITOR"] },
-      { href: "/cash-bank-ledger", label: "Cash & Bank Ledger", icon: BookOpen, roles: ["SUPER_ADMIN", "MANAGER", "COSTING", "AUDITOR"] },
-    ],
-  },
-  {
-    label: "Masters & Reports",
-    items: [
-      { href: "/reports", label: "Reports", icon: BarChart3 },
-      { href: "/karigars", label: "Karigars", icon: Users },
       { href: "/products", label: "Item Master", icon: Gem },
       { href: "/visual-search", label: "Visual Search", icon: Camera },
     ],
   },
   {
-    label: "Admin",
+    label: "Ledgers",
+    items: [{ href: "/karigars", label: "Karigar Ledger", icon: BookOpen }],
+  },
+  {
+    label: "Configuration",
     items: [
       { href: "/settings", label: "Settings", icon: Settings, roles: ["SUPER_ADMIN"] },
       { href: "/users", label: "Users & Roles", icon: UserCog, roles: ["SUPER_ADMIN"] },
-      { href: "/audit-log", label: "Audit Log", icon: History, roles: ["SUPER_ADMIN", "MANAGER", "AUDITOR"] },
     ],
   },
 ];

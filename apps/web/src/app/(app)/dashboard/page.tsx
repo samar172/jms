@@ -2,10 +2,9 @@
 
 import Link from "next/link";
 import { useApi, useKarigars, useProcessStages } from "@/lib/hooks";
-import { formatWeight, formatINR, formatDate } from "@/lib/format";
-import { FileText, Briefcase, Package, BadgeCheck, Truck } from "lucide-react";
+import { formatWeight, formatDate } from "@/lib/format";
+import { Briefcase, Package } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { EstimateStatusPill } from "@/components/StatusPill";
 
 interface JobStage {
   id: string;
@@ -21,12 +20,6 @@ interface JobCardRow {
   createdAt: string;
   product: { serialNo: string; designName: string; images: { thumbnailUrl: string }[] };
   stages: JobStage[];
-}
-
-interface EstimateRow {
-  id: string;
-  status: string;
-  netAmount: string;
 }
 
 interface OwnerStats {
@@ -51,17 +44,11 @@ export default function DashboardPage() {
   const router = useRouter();
   const { data: ownerStats } = useApi<OwnerStats>("/api/dashboard/owner");
   const { data: jobCards } = useApi<JobCardRow[]>("/api/job-cards");
-  const { data: estimates } = useApi<EstimateRow[]>("/api/estimates");
   const { data: processStages } = useProcessStages();
   const { data: karigars } = useKarigars();
 
-  const pendingEst = estimates?.filter((e) => e.status === "DRAFT" || e.status === "SUBMITTED") ?? [];
-  const pendingEstValue = pendingEst.reduce((s, e) => s + Number(e.netAmount), 0);
-  
   const activeJobs = jobCards?.filter((j) => j.status !== "CLOSED") ?? [];
   const overdueJobs = activeJobs.filter((j) => j.targetDeliveryDate && new Date(j.targetDeliveryDate) < new Date());
-  
-  const dispatchedThisMonth = 0; // Placeholder
 
   return (
     <div className="flex flex-col h-full">
@@ -75,7 +62,7 @@ export default function DashboardPage() {
           <div>
             <h1 className="text-[19px] font-semibold text-slate-900 leading-tight">Production Dashboard</h1>
             <div className="text-[12px] text-slate-500 mt-0.5">
-              {activeJobs.length} live jobs across the floor · {pendingEst.length} estimates awaiting decision
+              {activeJobs.length} live jobs across the floor · {overdueJobs.length} overdue
             </div>
           </div>
         </div>
@@ -93,16 +80,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
-          <button onClick={() => router.push("/costing")} className="text-left bg-white border border-slate-200 rounded-md p-3 hover:border-slate-300 transition-colors shadow-sm">
-            <div className="flex items-center justify-between text-slate-400">
-              <span className="text-[10px] uppercase tracking-wider font-semibold">Pending Estimates</span>
-              <FileText size={14} />
-            </div>
-            <div className="text-[20px] font-semibold text-slate-900 mt-1 tabular-nums">{pendingEst.length}</div>
-            <div className="text-[11px] text-slate-500 mt-0.5">{formatINR(pendingEstValue)} value</div>
-          </button>
-
+        <div className="grid grid-cols-2 lg:grid-cols-2 gap-3 mb-4">
           <button onClick={() => router.push("/job-cards")} className="text-left bg-white border border-slate-200 rounded-md p-3 hover:border-slate-300 transition-colors shadow-sm">
             <div className="flex items-center justify-between text-slate-400">
               <span className="text-[10px] uppercase tracking-wider font-semibold">Jobs In Production</span>
@@ -112,31 +90,13 @@ export default function DashboardPage() {
             <div className="text-[11px] text-slate-500 mt-0.5">{overdueJobs.length} overdue</div>
           </button>
 
-          <button onClick={() => router.push("/ledger/gold")} className="text-left bg-white border border-slate-200 rounded-md p-3 hover:border-slate-300 transition-colors shadow-sm">
+          <button onClick={() => router.push("/karigars")} className="text-left bg-white border border-slate-200 rounded-md p-3 hover:border-slate-300 transition-colors shadow-sm">
             <div className="flex items-center justify-between text-amber-600">
-              <span className="text-[10px] uppercase tracking-wider font-semibold">Gold Out w/ Karigars</span>
+              <span className="text-[10px] uppercase tracking-wider font-semibold">Silver Out w/ Karigars</span>
               <Package size={14} />
             </div>
             <div className="text-[20px] font-semibold text-slate-900 mt-1 tabular-nums">{formatWeight(ownerStats?.goldWithKarigarsG ?? 0)} g</div>
             <div className="text-[11px] text-slate-500 mt-0.5">across floor</div>
-          </button>
-
-          <button onClick={() => router.push("/qc")} className="text-left bg-white border border-slate-200 rounded-md p-3 hover:border-slate-300 transition-colors shadow-sm">
-            <div className="flex items-center justify-between text-blue-600">
-              <span className="text-[10px] uppercase tracking-wider font-semibold">Hallmark In Queue</span>
-              <BadgeCheck size={14} />
-            </div>
-            <div className="text-[20px] font-semibold text-slate-900 mt-1 tabular-nums">0</div>
-            <div className="text-[11px] text-slate-500 mt-0.5">Pending QC</div>
-          </button>
-
-          <button onClick={() => router.push("/dispatch")} className="text-left bg-white border border-slate-200 rounded-md p-3 hover:border-slate-300 transition-colors shadow-sm">
-            <div className="flex items-center justify-between text-emerald-600">
-              <span className="text-[10px] uppercase tracking-wider font-semibold">Dispatched (MTD)</span>
-              <Truck size={14} />
-            </div>
-            <div className="text-[20px] font-semibold text-slate-900 mt-1 tabular-nums">{formatINR(dispatchedThisMonth)}</div>
-            <div className="text-[11px] text-slate-500 mt-0.5">value delivered</div>
           </button>
         </div>
 

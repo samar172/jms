@@ -20,8 +20,8 @@ interface NotificationRow {
 }
 
 const ENTITY_HREF: Record<string, (id: string) => string> = {
-  JobStage: () => "/reconciliation",
-  Order: (id) => `/orders/${id}`,
+  // Reconcile is now an action inside the job-card page; notifications land on the job list.
+  JobStage: () => "/job-cards",
 };
 
 export function Topbar({ onMenuClick }: { title?: string; onMenuClick?: () => void }) {

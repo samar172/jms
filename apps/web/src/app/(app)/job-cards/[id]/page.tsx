@@ -271,8 +271,8 @@ function MaterialAccountabilityPanel({ jobCard }: { jobCard: JobCardDetail }) {
           ))}
         </div>
         <div className="flex items-center gap-2 mt-3">
-          <Link href="/materials" className="h-7 px-2.5 rounded border border-slate-200 text-[11px] text-slate-700 hover:bg-slate-50 flex items-center gap-1">
-            <span className="w-3 h-3 flex items-center justify-center">📦</span> View Ledger
+          <Link href="/karigars" className="h-7 px-2.5 rounded border border-slate-200 text-[11px] text-slate-700 hover:bg-slate-50 flex items-center gap-1">
+            <span className="w-3 h-3 flex items-center justify-center">📦</span> Karigar Ledger
           </Link>
         </div>
       </div>

@@ -6,12 +6,9 @@ import { Search } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 
 interface SearchResults {
-  customers: { id: string; name: string; contact: string | null }[];
   products: { id: string; serialNo: string; designName: string; status: string }[];
   jobCards: { id: string; status: string; product: { serialNo: string; designName: string } }[];
   karigars: { id: string; name: string; code: string }[];
-  orders: { id: string; orderNo: string; status: string; product: { serialNo: string; designName: string } }[];
-  estimates: { id: string; type: string; version: number; status: string; product: { serialNo: string; designName: string } }[];
 }
 
 interface FlatResult {
@@ -25,9 +22,6 @@ interface FlatResult {
 function flatten(results: SearchResults | null): FlatResult[] {
   if (!results) return [];
   return [
-    ...results.customers.map((c) => ({ key: `c-${c.id}`, group: "Customers", label: c.name, sub: c.contact ?? "", href: `/customers/${c.id}` })),
-    ...results.orders.map((o) => ({ key: `o-${o.id}`, group: "Orders", label: o.orderNo, sub: `${o.product.designName} · ${o.status.replace(/_/g, " ")}`, href: `/orders/${o.id}` })),
-    ...results.estimates.map((e) => ({ key: `e-${e.id}`, group: "Estimates", label: `${e.product.serialNo} · v${e.version}`, sub: `${e.type.replace(/_/g, " ")} · ${e.status}`, href: `/costing/${e.id}` })),
     ...results.jobCards.map((j) => ({ key: `j-${j.id}`, group: "Job Cards", label: j.product.serialNo, sub: `${j.product.designName} · ${j.status}`, href: `/job-cards/${j.id}` })),
     ...results.karigars.map((k) => ({ key: `k-${k.id}`, group: "Karigars", label: k.name, sub: k.code, href: `/karigars/${k.id}` })),
     ...results.products.map((p) => ({ key: `p-${p.id}`, group: "Products", label: p.serialNo, sub: `${p.designName} · ${p.status.replace(/_/g, " ")}`, href: `/products/${p.serialNo}` })),
@@ -108,7 +102,7 @@ export function CommandPalette() {
           <input
             ref={inputRef}
             className="flex-1 outline-none text-[13px] bg-transparent text-ink"
-            placeholder="Search customer, estimate, job, design, karigar, order…"
+            placeholder="Search job, design, karigar…"
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
