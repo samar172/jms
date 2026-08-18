@@ -110,20 +110,20 @@ Rename is destructive on a live DB. Since this is pre-production (mockup-stage d
 
 ## 7. Execution phases (each phase = its own commit, app stays runnable)
 
-1. **Phase 0 — Safety:** tag current state (`git tag pre-simplify-v3`), branch already `new`. ✅ nothing lost.
-2. **Phase 1 — Nav + routes (visible win):** remove CUT + FOLD screens from `Sidebar.tsx`, delete their `app/(app)/…` route folders. App instantly looks like Mock (3).
+1. **Phase 0 — Safety:** tag current state (`git tag pre-simplify-v3`), branch already `new`. ✅ **DONE** (tag `pre-simplify-v3`).
+2. **Phase 1 — Nav + routes (visible win):** remove CUT + FOLD screens from `Sidebar.tsx`, delete their `app/(app)/…` route folders. App instantly looks like Mock (3). ✅ **DONE** (commit `d995f12`) — nav → 4 groups; 28 route files deleted; dashboard cut-feature tiles removed; CommandPalette + dead links neutralized; tsc clean. (The 2 `Date.now` lint errors + `useAuth` warning in `job-cards` are pre-existing, not from this phase.)
 3. **Phase 2 — API modules:** delete CUT modules + their route registrations; fix imports.
 4. **Phase 3 — Schema rename + drops:** Karat→PurityTier, GoldRate→MetalRate, drop cut models, one migration + reseed.
-5. **Phase 4 — Reconcile simplification:** strip `MaterialReceipt` to spec fields; update `jobcards` service + `calculations.ts`.
-6. **Phase 5 — Verify:** re-run the hand-computed worked example from spec §4 (Casting 220 → … → final 206.780g) against the app. Update `TESTING.md`.
+5. **Phase 4 — Reconcile simplification + new "create job card from Item Master" flow** (replaces the removed Estimates entry point; see TODO in `job-cards/page.tsx`): strip `MaterialReceipt` to spec fields; update `jobcards` service + `calculations.ts`.
+6. **Phase 5 — Verify:** re-run the hand-computed worked example from spec §4 (Casting 220 → … → final 206.780g) against the app — **mandatory, do not skip** (guards the REPLACE-vs-ADD weight-accumulation logic). Update `TESTING.md`.
 
 ---
 
-## 8. Open questions before I start cutting
-1. **CONFIRM screens** (§2): cut Stone Ledger, Reports, Audit Log, QC/Assembly — or keep any?
-2. **Production data:** is there any real DB data to preserve, or is a clean reseed fine? (Decides migration strategy, §4d.)
-3. **Vendors/purchasing:** confirm fully out (not named by client but sales-adjacent).
-4. Want Phase 1 (nav/routes visible win) done first for a quick client demo, or the whole thing before showing?
+## 8. Open questions — RESOLVED (client sign-off)
+1. **CONFIRM screens** (§2): ✅ **Cut all** — Stone Ledger, Reports, Audit Log (global), QC/Assembly. Stone tracking stays inside the job card (`stonesByType()`); per-job activity/reversal log covers audit; production route is the fixed 5 stages (Fitting = final/assembly).
+2. **Production data:** ✅ **Clean reseed** — mockup/spec stage, no real DB data to preserve (spec §12). Destructive rename migration is fine.
+3. **Vendors/purchasing:** ✅ **Fully out** — same bucket as Invoicing/Sales/Customer/Orders.
+4. **Phasing:** ✅ **Phase 1 first** — quick visible win + defers the risky `calculations.ts`/reconcile rework to last (Phases 4–5).
 
 ---
 
