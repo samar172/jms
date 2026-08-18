@@ -30,24 +30,24 @@ interface NavGroup {
 const NAV_GROUPS: NavGroup[] = [
   {
     label: "Overview",
-    items: [{ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard }],
+    items: [{ href: "/dashboard", label: "Dashboard (डैशबोर्ड)", icon: LayoutDashboard }],
   },
   {
-    label: "Production",
+    label: "Production (उत्पादन)",
     items: [
-      { href: "/job-cards", label: "Job Cards", icon: ClipboardList },
-      { href: "/products", label: "Item Master", icon: Gem },
+      { href: "/job-cards", label: "Job Cards (जॉब कार्ड)", icon: ClipboardList },
+      { href: "/products", label: "Item Master (आइटम)", icon: Gem },
       { href: "/visual-search", label: "Visual Search", icon: Camera },
     ],
   },
   {
-    label: "Ledgers",
-    items: [{ href: "/karigars", label: "Karigar Ledger", icon: BookOpen }],
+    label: "Ledgers (बही)",
+    items: [{ href: "/karigars", label: "Karigar Ledger (कारीगर)", icon: BookOpen }],
   },
   {
     label: "Configuration",
     items: [
-      { href: "/settings", label: "Settings", icon: Settings, roles: ["SUPER_ADMIN"] },
+      { href: "/settings", label: "Settings (सेटिंग)", icon: Settings, roles: ["SUPER_ADMIN"] },
       { href: "/users", label: "Users & Roles", icon: UserCog, roles: ["SUPER_ADMIN"] },
     ],
   },
