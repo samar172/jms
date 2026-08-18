@@ -27,10 +27,10 @@ async function main() {
 
   const karats = await Promise.all(
     [
-      { code: "24K", purityFactor: 1.0 },
-      { code: "22K", purityFactor: 0.9166 },
-      { code: "18K", purityFactor: 0.75 },
-      { code: "14K", purityFactor: 0.585 },
+      { code: "24K", purityFactor: 1.0, percent: 100 },
+      { code: "22K", purityFactor: 0.9166, percent: 92.5 },
+      { code: "18K", purityFactor: 0.75, percent: 76 },
+      { code: "14K", purityFactor: 0.585, percent: 59 },
     ].map((k) => prisma.purityTier.upsert({ where: { code: k.code }, create: k, update: k }))
   );
   const karat18k = karats.find((k) => k.code === "18K")!;
@@ -244,6 +244,54 @@ async function main() {
 
     console.log(`Seeded demo product ${serialNo} with job card ${jobCard.id}`);
   }
+
+  // ===========================================================================
+  // Chowker silver-domain seed (spec §2/§8) — tiers %, settings, specialized
+  // karigars with default rates, bulk stock, and a few silver Item Masters.
+  // ===========================================================================
+  const adminUser = await prisma.user.findFirst({ where: { role: "SUPER_ADMIN" } });
+  const allTiers = await prisma.purityTier.findMany();
+  const t24 = allTiers.find((t) => t.code === "24K")!;
+  const t22 = allTiers.find((t) => t.code === "22K")!;
+  const t18 = allTiers.find((t) => t.code === "18K")!;
+
+  await prisma.appSetting.upsert({ where: { key: "chowker.baseRate" }, create: { key: "chowker.baseRate", value: "98" }, update: { value: "98" } });
+  await prisma.appSetting.upsert({
+    where: { key: "chowker.defaultRates" },
+    create: { key: "chowker.defaultRates", value: JSON.stringify({ castingWastagePct: 6, fittingWastagePct: 2.2, meenakariRatePerGm: 20, jadaiRatePerStone: 8, settingRatePerStone: 12 }) },
+    update: {},
+  });
+
+  const chowkerKarigars = [
+    { code: "KR-C1", name: "Ganpat Soni", specialization: "Casting", contactNumber: "+91 98290 11234", defaultWastagePct: 6, defaultRatePerGm: null, defaultFlatLabour: null },
+    { code: "KR-M1", name: "Iqbal Meena", specialization: "Meenakari", contactNumber: "+91 94140 22345", defaultWastagePct: null, defaultRatePerGm: 20, defaultFlatLabour: null },
+    { code: "KR-J1", name: "Rafiq Jadiya", specialization: "Jadai", contactNumber: "+91 97831 33456", defaultWastagePct: null, defaultRatePerGm: null, defaultFlatLabour: 350 },
+    { code: "KR-S1", name: "Salim Qureshi", specialization: "Setting", contactNumber: "+91 90243 44567", defaultWastagePct: null, defaultRatePerGm: null, defaultFlatLabour: 800 },
+    { code: "KR-F1", name: "Deepak Prajapat", specialization: "Fitting", contactNumber: "+91 96721 55678", defaultWastagePct: null, defaultRatePerGm: null, defaultFlatLabour: 500 },
+  ] as const;
+  const kBySpec: Record<string, { id: string }> = {};
+  for (const k of chowkerKarigars) {
+    const existing = await prisma.karigar.findFirst({ where: { code: k.code } });
+    kBySpec[k.specialization] = existing ?? (await prisma.karigar.create({ data: { ...k, employmentType: "EXTERNAL" } }));
+  }
+
+  for (const [spec, weight] of [["Casting", 1000], ["Jadai", 60], ["Fitting", 20]] as const) {
+    const kk = kBySpec[spec];
+    const has = await prisma.bulkStockIssue.findFirst({ where: { karigarId: kk.id } });
+    if (!has) await prisma.bulkStockIssue.create({ data: { karigarId: kk.id, purityId: t24.id, weightGrams: weight, issueDate: new Date(), note: "Bulk stock replenishment" } });
+  }
+
+  const cat = (await prisma.category.findFirst()) ?? (await prisma.category.create({ data: { name: "Necklace Set", code: "NK" } }));
+  const silverItems = [
+    { serialNo: "SLV-NK-142", designName: "Silver Oxidised Kundan Necklace Set", designCode: "SLV-NK-142", purityId: t22.id, grossWeightG: 210 },
+    { serialNo: "SLV-RG-143", designName: "Silver CZ Stone Ring", designCode: "SLV-RG-143", purityId: t18.id, grossWeightG: 12 },
+    { serialNo: "SLV-ER-144", designName: "Silver Temple Jhumka Earrings", designCode: "SLV-ER-144", purityId: t22.id, grossWeightG: 63 },
+  ];
+  for (const it of silverItems) {
+    const existing = await prisma.product.findUnique({ where: { serialNo: it.serialNo } });
+    if (!existing) await prisma.product.create({ data: { ...it, netWeightG: it.grossWeightG, categoryId: cat.id, createdById: adminUser!.id } });
+  }
+  console.log(`Chowker seed: ${chowkerKarigars.length} karigars, ${silverItems.length} item masters, tiers % + settings.`);
 
   console.log("Seed complete. Demo login: admin@jms.local / Password@123 (all seeded users share this password).");
 }
