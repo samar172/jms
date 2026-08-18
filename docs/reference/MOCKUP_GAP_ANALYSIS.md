@@ -9,9 +9,10 @@ Goal: wire the app up to match the mockup **exactly** (UI + backend). This doc l
 - ✅ **Phase A** — shared engine (`packages/shared/src/production.ts`): all §10 functions + §2 types. **Verified against spec §4 worked example: 220 → 206.780g.**
 - ✅ **Phase B** — schema: added Chowker silver models (BulkStockIssue, ProdJobCard/Stage/Assignment/MaterialIssue/StoneEntry/LabourEntry, ProdActivity/Reversal) + PurityTier.percent, Karigar default rates, Product.designCode. Migrated, no data loss.
 - ✅ **Phase C1** — `/api/production` read/create API (settings, item-masters, karigars+ledger balance, bulk-stock, job-cards list/create/detail with full §7 costing). Verified end-to-end.
-- ⏭️ **Phase C2** — stage write flows: assign karigar, issue material, per-stage reconcile, Cast/Jadai/Finding output, stones, approve stage, close, reopen, hold/resume.
-- ⏭️ **Phase D** — web UI: JobCardPage + StageCards + all modals, Ledger, Settings, Item Master, Dashboard (port mockup components, API-backed).
-- ⏭️ **Phase E** — cutover: point nav/routes at the silver domain, retire the gold modules/models, rename Prod*→clean spec names.
+- ✅ **Phase C2** — stage write flows (assign/issue/reconcile/cast/jadai/finding/stones/labour/approve/close/reopen/hold). Verified end-to-end: full 5-stage run reproduces 220 → 206.780g, labour ₹5554, gross 210.46g, closes.
+- ✅ **Phase D1** — Job Cards list + detail (5 stage cards, all action modals, §7 costing summary, activity, reopen), wired to /api/production.
+- ✅ **Phase D2** — Karigar Ledger, Settings (purity tiers + rates), Item Master grid, Dashboard — all wired to /api/production (+ config write endpoints). Nav now points at the silver screens; bilingual Hindi labels. **Full `next build` passes on all routes.**
+- ⏭️ **Phase E (remaining, optional cutover cleanup)** — retire the now-unused gold API modules + orphaned gold pages (`/products/new`, `/karigars/[id]`, gold `products/[id]` detail); port ItemMaster *detail* to the mockup layout; rename Prod*→clean spec names; update seed.ts so a reseed reproduces the Chowker tiers/settings.
 
 ---
 
