@@ -101,6 +101,19 @@ router.get(
       loadAllEngineJobCards(),
     ]);
     const ledger = buildLedger(jobCards, tiers, bulkRows.map(mapBulkIssue));
+    // "Currently Holding" — per-karigar list of material still issued (not yet reconciled).
+    const holdingByName: Record<string, { jobId: string; stage: string; weight: number; purity: string | null }[]> = {};
+    for (const jc of jobCards) {
+      for (const st of jc.stages) {
+        for (const a of st.assignments) {
+          for (const i of a.issues) {
+            if (i.status === "Issued" && i.issuedWeight != null) {
+              (holdingByName[a.karigar] ??= []).push({ jobId: jc.id, stage: st.stage, weight: i.issuedWeight, purity: i.purity });
+            }
+          }
+        }
+      }
+    }
     res.json(
       karigars.map((k) => ({
         id: k.id,
@@ -112,6 +125,7 @@ router.get(
         defaultFlatLabour: k.defaultFlatLabour == null ? null : Number(k.defaultFlatLabour),
         balance: +karigarBalance(k.name, ledger).toFixed(3),
         labourEarned: karigarLabourEarned(k.name, jobCards),
+        holding: holdingByName[k.name] ?? [],
       }))
     );
   })

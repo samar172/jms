@@ -47,6 +47,7 @@ export interface ProdKarigar {
   defaultFlatLabour: number | null;
   balance: number;
   labourEarned: number;
+  holding: { jobId: string; stage: string; weight: number; purity: string | null }[];
 }
 
 export interface JobCardListRow {

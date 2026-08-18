@@ -1,7 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useProdKarigars, useLedger, useProdSettings, issueBulkStock, type ProdKarigar } from "@/lib/production";
+import Link from "next/link";
+import { useProdKarigars, useLedger, useProdSettings, issueBulkStock, createKarigar, updateKarigar, type ProdKarigar } from "@/lib/production";
+
+const SPEC_OPTS = ["Casting", "Meenakari", "Jadai", "Setting", "Fitting"];
 
 const money = (v: number) => `₹ ${Math.round(v).toLocaleString("en-IN")}`;
 const gm = (v: number) => `${v.toFixed(3)} g`;
@@ -15,13 +18,14 @@ function defaultRateLabel(k: ProdKarigar): string | null {
 }
 
 export default function KarigarLedgerPage() {
-  const { data: karigars } = useProdKarigars();
+  const { data: karigars, mutate: mutateKarigars } = useProdKarigars();
   const { data: ledger, mutate: mutateLedger } = useLedger();
   const { data: settings } = useProdSettings();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [spec, setSpec] = useState("all");
   const [showBulk, setShowBulk] = useState(false);
+  const [karigarForm, setKarigarForm] = useState<null | { mode: "new" | "edit"; k?: ProdKarigar }>(null);
 
   if (!karigars || !ledger || !settings) return <div className="text-slate-400 p-4 text-sm">Loading…</div>;
   const active = karigars.find((k) => k.id === selectedId) ?? karigars[0];
@@ -77,11 +81,30 @@ export default function KarigarLedgerPage() {
           <div className="flex-1 bg-white border border-slate-200 rounded-md overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
               <div>
-                <h1 className="text-[16px] font-semibold text-slate-900">{active.name} — {active.specialization}</h1>
+                <h1 className="text-[16px] font-semibold text-slate-900 flex items-center gap-2">
+                  {active.name} — {active.specialization}
+                  <button onClick={() => setKarigarForm({ mode: "edit", k: active })} className="text-[11px] text-blue-700 hover:underline font-normal">Edit</button>
+                </h1>
                 <p className="text-[11px] text-slate-500 mt-0.5">{active.contact ? `${active.contact} · ` : ""}Running pure-silver-equivalent account · labour earned {money(active.labourEarned)}</p>
               </div>
-              <button onClick={() => setShowBulk(true)} className="h-7 px-2.5 rounded bg-blue-800 text-white text-[11px] font-medium hover:bg-blue-900">+ Issue Bulk Stock</button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setKarigarForm({ mode: "new" })} className="h-7 px-2.5 rounded border border-slate-200 text-[11px] text-slate-700 hover:bg-slate-50">+ New Karigar</button>
+                <button onClick={() => setShowBulk(true)} className="h-7 px-2.5 rounded bg-blue-800 text-white text-[11px] font-medium hover:bg-blue-900">+ Issue Bulk Stock</button>
+              </div>
             </div>
+            {active.holding.length > 0 && (
+              <div className="bg-amber-50/60 border-b border-amber-200 px-4 py-2.5">
+                <div className="text-[10px] uppercase tracking-wider text-amber-700 font-semibold mb-1.5">Currently Holding (पास में)</div>
+                <div className="flex flex-wrap gap-2">
+                  {active.holding.map((h, i) => (
+                    <Link key={i} href={`/job-cards/${h.jobId}`} className="bg-white border border-amber-200 rounded px-2.5 py-1.5 text-[11px] hover:border-amber-300">
+                      <span className="mono text-blue-800">{h.jobId}</span>
+                      <span className="text-amber-700 ml-1.5 mono">{h.weight.toFixed(3)} @ {h.purity} ({h.stage})</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="overflow-auto max-h-[520px]">
               <table className="w-full border-collapse">
                 <thead className="sticky top-0 bg-slate-50">
@@ -116,8 +139,65 @@ export default function KarigarLedgerPage() {
         <BulkStockModal karigar={active} tiers={settings.tiers} onClose={() => setShowBulk(false)}
           onDone={async (purityId, weight, note) => { await issueBulkStock({ karigarId: active.id, purityId, weightGrams: weight, note }); setShowBulk(false); mutateLedger(); }} />
       )}
+      {karigarForm && (
+        <KarigarForm mode={karigarForm.mode} karigar={karigarForm.k} onClose={() => setKarigarForm(null)}
+          onDone={() => { setKarigarForm(null); mutateKarigars(); }} />
+      )}
     </div>
   );
+}
+
+function KarigarForm({ mode, karigar, onClose, onDone }: { mode: "new" | "edit"; karigar?: ProdKarigar; onClose: () => void; onDone: () => void }) {
+  const [name, setName] = useState(karigar?.name ?? "");
+  const [spec, setSpec] = useState(karigar?.specialization ?? "Casting");
+  const [contact, setContact] = useState(karigar?.contact ?? "");
+  const [wastage, setWastage] = useState(karigar?.defaultWastagePct == null ? "" : String(karigar.defaultWastagePct));
+  const [ratePerGm, setRatePerGm] = useState(karigar?.defaultRatePerGm == null ? "" : String(karigar.defaultRatePerGm));
+  const [flat, setFlat] = useState(karigar?.defaultFlatLabour == null ? "" : String(karigar.defaultFlatLabour));
+  const [busy, setBusy] = useState(false);
+
+  async function save() {
+    if (!name) return;
+    setBusy(true);
+    const body = {
+      name, specialization: spec, contact: contact || undefined,
+      defaultWastagePct: wastage === "" ? null : Number(wastage),
+      defaultRatePerGm: ratePerGm === "" ? null : Number(ratePerGm),
+      defaultFlatLabour: flat === "" ? null : Number(flat),
+    };
+    try {
+      if (mode === "new") await createKarigar(body);
+      else await updateKarigar(karigar!.id, body);
+      onDone();
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={onClose}>
+      <div className="bg-white rounded-md shadow-xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+        <div className="px-4 py-3 border-b border-slate-100"><h2 className="text-[14px] font-semibold">{mode === "new" ? "New Karigar" : `Edit ${karigar?.name}`}</h2></div>
+        <div className="p-4 space-y-3">
+          <L label="Name *"><input className="w-full h-9 px-2 border border-slate-200 rounded text-[12px]" value={name} onChange={(e) => setName(e.target.value)} /></L>
+          <div className="grid grid-cols-2 gap-3">
+            <L label="Specialization"><select className="w-full h-9 px-2 border border-slate-200 rounded text-[12px]" value={spec} onChange={(e) => setSpec(e.target.value)}>{SPEC_OPTS.map((s) => <option key={s}>{s}</option>)}</select></L>
+            <L label="Contact"><input className="w-full h-9 px-2 border border-slate-200 rounded text-[12px]" value={contact} onChange={(e) => setContact(e.target.value)} /></L>
+          </div>
+          <div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold pt-1">Default rates (specialization-dependent)</div>
+          {spec === "Casting" && <L label="Default wastage %"><input type="number" className="w-full h-9 px-2 border border-slate-200 rounded text-[12px] mono" value={wastage} onChange={(e) => setWastage(e.target.value)} /></L>}
+          {spec === "Meenakari" && <L label="Default ₹/gram"><input type="number" className="w-full h-9 px-2 border border-slate-200 rounded text-[12px] mono" value={ratePerGm} onChange={(e) => setRatePerGm(e.target.value)} /></L>}
+          {(spec === "Jadai" || spec === "Setting" || spec === "Fitting") && <L label="Default flat labour ₹"><input type="number" className="w-full h-9 px-2 border border-slate-200 rounded text-[12px] mono" value={flat} onChange={(e) => setFlat(e.target.value)} /></L>}
+        </div>
+        <div className="px-4 py-3 border-t border-slate-100 flex justify-end gap-2">
+          <button onClick={onClose} className="h-8 px-3 rounded border border-slate-200 text-[12px]">Cancel</button>
+          <button disabled={!name || busy} onClick={save} className="h-8 px-3 rounded bg-blue-800 text-white text-[12px] font-medium disabled:opacity-50">{busy ? "Saving…" : "Save"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function L({ label, children }: { label: string; children: React.ReactNode }) {
+  return <div><label className="block text-[11px] font-medium text-slate-600 mb-1">{label}</label>{children}</div>;
 }
 
 function Stat({ label, value, tone }: { label: string; value: string; tone?: "amber" }) {
