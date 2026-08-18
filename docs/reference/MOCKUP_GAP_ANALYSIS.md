@@ -5,6 +5,14 @@ Goal: wire the app up to match the mockup **exactly** (UI + backend). This doc l
 
 **Legend:** ✅ matches · 🟡 exists but differs · ❌ missing (build UI + backend).
 
+## Build progress (fresh-domain approach, additive — app stays runnable)
+- ✅ **Phase A** — shared engine (`packages/shared/src/production.ts`): all §10 functions + §2 types. **Verified against spec §4 worked example: 220 → 206.780g.**
+- ✅ **Phase B** — schema: added Chowker silver models (BulkStockIssue, ProdJobCard/Stage/Assignment/MaterialIssue/StoneEntry/LabourEntry, ProdActivity/Reversal) + PurityTier.percent, Karigar default rates, Product.designCode. Migrated, no data loss.
+- ✅ **Phase C1** — `/api/production` read/create API (settings, item-masters, karigars+ledger balance, bulk-stock, job-cards list/create/detail with full §7 costing). Verified end-to-end.
+- ⏭️ **Phase C2** — stage write flows: assign karigar, issue material, per-stage reconcile, Cast/Jadai/Finding output, stones, approve stage, close, reopen, hold/resume.
+- ⏭️ **Phase D** — web UI: JobCardPage + StageCards + all modals, Ledger, Settings, Item Master, Dashboard (port mockup components, API-backed).
+- ⏭️ **Phase E** — cutover: point nav/routes at the silver domain, retire the gold modules/models, rename Prod*→clean spec names.
+
 ---
 
 ## A. Data model & engine (the foundation — biggest gap)
