@@ -105,6 +105,10 @@ export const issueMaterial = (assignmentId: string, body: { purity: string; issu
   post(`/assignments/${assignmentId}/issue`, body);
 export const reconcile = (issueId: string, body: Record<string, unknown>) =>
   post(`/issues/${issueId}/reconcile`, body);
+export const editReconcile = (issueId: string, body: Record<string, unknown>) =>
+  post(`/issues/${issueId}/edit-reconcile`, body);
+export const cancelReconcile = (issueId: string) =>
+  post(`/issues/${issueId}/cancel-reconcile`);
 export const castOutput = (jobNo: string, body: { assignmentId: string; returnedWeight: number; wastagePercent: number; pieceCount: number }) =>
   post(`/job-cards/${jobNo}/cast-output`, body);
 export const jadaiOutput = (jobNo: string, body: Record<string, unknown>) =>

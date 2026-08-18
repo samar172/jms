@@ -180,6 +180,80 @@ router.post(
   })
 );
 
+/* --------------------------- Edit / Cancel a reconcile -------------------- */
+// Mockup editReconcile: update the issue's returned figures + its linked labour
+// entry in place (or create one if missing).
+router.post(
+  "/issues/:issueId/edit-reconcile",
+  requireRole(...MANAGER),
+  asyncHandler(async (req, res) => {
+    const body = z
+      .object({
+        returnedWeight: z.number(),
+        returnedPurity: z.string(),
+        dustWeight: z.number().default(0),
+        ratePerGm: z.number().nullable().optional(),
+        flatLabourAmount: z.number().nullable().optional(),
+        pieceCount: z.number().int().nullable().optional(),
+      })
+      .parse(req.body);
+    const issue = await prisma.prodMaterialIssue.findUnique({
+      where: { id: req.params.issueId },
+      include: { assignment: { include: { stage: true } } },
+    });
+    if (!issue) throw notFound("Issue not found");
+
+    let labourId = issue.labourEntryId;
+    if (body.ratePerGm != null) {
+      const amount = +(body.returnedWeight * body.ratePerGm).toFixed(2);
+      const note = `₹${body.ratePerGm}/gm × ${body.returnedWeight.toFixed(3)}g finished weight (edited)`;
+      const existing = labourId ? await prisma.prodLabourEntry.findUnique({ where: { id: labourId } }) : null;
+      if (existing) await prisma.prodLabourEntry.update({ where: { id: labourId! }, data: { basis: "PerGram", qty: body.returnedWeight, rate: body.ratePerGm, amount, note } });
+      else labourId = (await prisma.prodLabourEntry.create({ data: { assignmentId: issue.assignmentId, basis: "PerGram", qty: body.returnedWeight, rate: body.ratePerGm, amount, note } })).id;
+    } else if (body.flatLabourAmount != null) {
+      const amount = body.flatLabourAmount;
+      const existing = labourId ? await prisma.prodLabourEntry.findUnique({ where: { id: labourId } }) : null;
+      if (existing) await prisma.prodLabourEntry.update({ where: { id: labourId! }, data: { basis: "Flat", qty: 1, rate: amount, amount, note: "Flat labour (edited)" } });
+      else labourId = (await prisma.prodLabourEntry.create({ data: { assignmentId: issue.assignmentId, basis: "Flat", qty: 1, rate: amount, amount, note: "Flat labour (edited)" } })).id;
+    }
+
+    await prisma.prodMaterialIssue.update({
+      where: { id: issue.id },
+      data: {
+        returnedWeight: body.returnedWeight,
+        returnedPurityId: await purityIdFor(body.returnedPurity),
+        dustWeight: body.dustWeight,
+        pieceCount: body.pieceCount ?? issue.pieceCount,
+        labourEntryId: labourId,
+      },
+    });
+    await logActivity(issue.assignment.stage.jobCardId, `${issue.assignment.stage.stageName} output corrected — ${gm(body.returnedWeight)} @ ${body.returnedPurity}`);
+    res.json({ ok: true });
+  })
+);
+
+// Mockup cancelReconcile: revert the issue to "Issued" and remove its labour.
+router.post(
+  "/issues/:issueId/cancel-reconcile",
+  requireRole(...MANAGER),
+  asyncHandler(async (req, res) => {
+    const issue = await prisma.prodMaterialIssue.findUnique({
+      where: { id: req.params.issueId },
+      include: { assignment: { include: { stage: true } } },
+    });
+    if (!issue) throw notFound("Issue not found");
+    if (issue.labourEntryId) {
+      await prisma.prodLabourEntry.delete({ where: { id: issue.labourEntryId } }).catch(() => {});
+    }
+    await prisma.prodMaterialIssue.update({
+      where: { id: issue.id },
+      data: { status: "Issued", returnedWeight: null, returnedPurityId: null, dustWeight: null, returnDate: null, pieceCount: null, labourEntryId: null },
+    });
+    await logActivity(issue.assignment.stage.jobCardId, `${issue.assignment.stage.stageName} reconciliation cancelled — reverted to pending`);
+    res.json({ ok: true });
+  })
+);
+
 /* ----------------------------- Cast Output (Casting) ---------------------- */
 router.post(
   "/job-cards/:jobNo/cast-output",

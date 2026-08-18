@@ -4,7 +4,7 @@ import { use, useState } from "react";
 import Link from "next/link";
 import {
   useJobCard, useProdKarigars, useProdSettings,
-  assignKarigar, castOutput, issueMaterial, reconcile, jadaiOutput, findingOutput,
+  assignKarigar, castOutput, issueMaterial, reconcile, editReconcile, cancelReconcile, jadaiOutput, findingOutput,
   issueStones, approveStage, closeJobCard, reopenJobCard, toggleHold,
   STAGE_HI, type JobCardDetail,
 } from "@/lib/production";
@@ -136,9 +136,15 @@ function StageCard({ jobNo, stage, pieceCount, targetPurity, karigars, settings,
   jobNo: string; stage: Stage; pieceCount: number | null; targetPurity: string;
   karigars: Karigar[]; settings: Settings; onChange: () => void;
 }) {
-  const [modal, setModal] = useState<null | { kind: string; assignment: Assignment; issue?: MaterialIssue }>(null);
+  const [modal, setModal] = useState<null | { kind: string; assignment: Assignment; issue?: MaterialIssue; labourRate?: number }>(null);
   const [adding, setAdding] = useState(false);
   const [newKarigar, setNewKarigar] = useState("");
+
+  async function cancelReconcileIssue(issueId: string) {
+    if (!confirm("Cancel this reconciliation? It reverts to pending and removes the auto-labour.")) return;
+    await cancelReconcile(issueId);
+    onChange();
+  }
 
   const isMeenakari = stage.stage === "Meenakari";
   const isSetting = stage.stage === "Setting";
@@ -198,6 +204,12 @@ function StageCard({ jobNo, stage, pieceCount, targetPurity, karigars, settings,
                 {i.status === "Issued" && stage.status !== "Approved" && (
                   <ActBtn onClick={() => setModal({ kind: "reconcile", assignment: a, issue: i })}>Receive &amp; Reconcile</ActBtn>
                 )}
+                {i.status === "Reconciled" && !i.fromBulkStock && stage.status !== "Approved" && (
+                  <span className="flex gap-1">
+                    <ActBtn onClick={() => setModal({ kind: "editReconcile", assignment: a, issue: i, labourRate: a.labour.find((l) => l.id === i.labourEntryId)?.rate })}>Edit</ActBtn>
+                    <button onClick={() => cancelReconcileIssue(i.id)} className="h-6 px-2 rounded border border-rose-200 text-[11px] text-rose-600 hover:bg-rose-50">Cancel</button>
+                  </span>
+                )}
               </div>
             ))}
             {/* Stones */}
@@ -240,20 +252,21 @@ function ActBtn({ children, onClick }: { children: React.ReactNode; onClick: () 
 /* ------------------------------- Stage modals ----------------------------- */
 function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, onClose, onDone }: {
   jobNo: string; stage: Stage; pieceCount: number | null; targetPurity: string; settings: Settings;
-  modal: { kind: string; assignment: Assignment; issue?: MaterialIssue }; onClose: () => void; onDone: () => void;
+  modal: { kind: string; assignment: Assignment; issue?: MaterialIssue; labourRate?: number }; onClose: () => void; onDone: () => void;
 }) {
   const dr = settings.defaultRates;
   const pure = settings.tiers.find((x) => x.percent === 100)?.label ?? "24K";
-  const pc0 = String(pieceCount ?? 1);
+  const isEdit = modal.kind === "editReconcile";
+  const pc0 = String(modal.issue?.pieceCount ?? pieceCount ?? 1);
 
   // shared fields
   const [returnedWeight, setReturnedWeight] = useState("");
   const [wastagePercent, setWastagePercent] = useState(String(stage.stage === "Casting" ? dr.castingWastagePct : ""));
   const [pieces, setPieces] = useState(pc0);
   const [weight, setWeight] = useState("");
-  const [dust, setDust] = useState("0");
-  const [ratePerGm, setRatePerGm] = useState(String(dr.meenakariRatePerGm));
-  const [flat, setFlat] = useState("");
+  const [dust, setDust] = useState(isEdit ? String(modal.issue?.dustWeight ?? 0) : "0");
+  const [ratePerGm, setRatePerGm] = useState(isEdit && modal.labourRate != null ? String(modal.labourRate) : String(dr.meenakariRatePerGm));
+  const [flat, setFlat] = useState(isEdit && modal.labourRate != null ? String(modal.labourRate) : "");
   const [labourAmount, setLabourAmount] = useState("");
   const [stoneType, setStoneType] = useState("Polki");
   const [stoneCarat, setStoneCarat] = useState("");
@@ -272,7 +285,8 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
 
   const title: Record<string, string> = {
     cast: "Record Cast Output", jadai: "Record Jadai Output", finding: "Record Finding Output",
-    issue: `Issue Material — ${stage.stage}`, reconcile: `Receive & Reconcile — ${stage.stage}`, stones: "Issue Stones",
+    issue: `Issue Material — ${stage.stage}`, reconcile: `Receive & Reconcile — ${stage.stage}`,
+    editReconcile: `Edit Output — ${stage.stage}`, stones: "Issue Stones",
   };
 
   return (
@@ -318,7 +332,7 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
             {stage.stage === "Setting" && <F label="Number of pieces *"><I value={pieces} onChange={setPieces} step="1" /></F>}
           </>)}
 
-          {modal.kind === "reconcile" && (<>
+          {(modal.kind === "reconcile" || isEdit) && (<>
             <p className="text-[11px] text-slate-500">Issued {gm(issuedW)} @ {issue?.purity}. Finished = issued − dust = <b>{gm(finished)}</b></p>
             <F label="Number of pieces *"><I value={pieces} onChange={setPieces} step="1" /></F>
             <F label="Dust recovered (g) *"><I value={dust} onChange={setDust} /></F>
@@ -351,11 +365,11 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
                 return findingOutput(jobNo, { assignmentId: A, pieceCount: Number(pieces), labourAmount: Number(labourAmount) || 0, findings, items: [] });
               }
               if (modal.kind === "issue") return issueMaterial(A, { purity: targetPurity, issuedWeight: Number(weight), pieceCount: Number(pieces) || undefined });
-              if (modal.kind === "reconcile") {
+              if (modal.kind === "reconcile" || isEdit) {
                 const body: Record<string, unknown> = { returnedWeight: finished, returnedPurity: issue?.purity ?? targetPurity, dustWeight: Number(dust) || 0, pieceCount: Number(pieces) };
                 if (stage.stage === "Meenakari") body.ratePerGm = Number(ratePerGm) || 0;
                 else body.flatLabourAmount = Number(flat) || 0;
-                return reconcile(issue!.id, body);
+                return isEdit ? editReconcile(issue!.id, body) : reconcile(issue!.id, body);
               }
               if (modal.kind === "stones") {
                 const carat = Number(stoneCarat) || 0; const rate = Number(stoneRate) || 0;
