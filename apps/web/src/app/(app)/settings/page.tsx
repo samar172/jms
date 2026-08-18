@@ -47,6 +47,37 @@ export default function SettingsPage() {
       </div>
 
       <BaseRatesForm settings={data} onSaved={mutate} />
+      <PureEqCalculator tiers={data.tiers} baseRate={data.baseRate} />
+    </div>
+  );
+}
+
+function PureEqCalculator({ tiers, baseRate }: { tiers: { id: string; label: string; percent: number }[]; baseRate: number }) {
+  const [weight, setWeight] = useState("");
+  const [purityId, setPurityId] = useState(tiers[0]?.id ?? "");
+  const tier = tiers.find((t) => t.id === purityId);
+  const w = Number(weight) || 0;
+  const factor = tier ? tier.percent / 100 : 0;
+  const pureEq = +(w * factor).toFixed(3);
+  const value = Math.round(pureEq * baseRate);
+  return (
+    <div className="bg-white border border-slate-200 rounded-md mt-4">
+      <div className="px-4 py-2.5 text-[11px] uppercase tracking-wider text-slate-500 font-semibold border-b border-slate-100">Pure-Equivalent Calculator</div>
+      <div className="p-4 flex flex-wrap items-end gap-3">
+        <div>
+          <label className="block text-[11px] font-medium text-slate-600 mb-1">Weight (g)</label>
+          <input type="number" step="0.001" className="h-9 w-32 px-2 border border-slate-200 rounded text-[12px] mono" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="0.000" />
+        </div>
+        <div>
+          <label className="block text-[11px] font-medium text-slate-600 mb-1">Purity</label>
+          <select className="h-9 px-2 border border-slate-200 rounded text-[12px]" value={purityId} onChange={(e) => setPurityId(e.target.value)}>
+            {tiers.map((t) => <option key={t.id} value={t.id}>{t.label} ({t.percent}%)</option>)}
+          </select>
+        </div>
+        <div className="text-[12px] text-slate-700">
+          = <span className="font-semibold mono">{pureEq.toFixed(3)} g</span> pure-eq · <span className="font-semibold mono">₹{value.toLocaleString("en-IN")}</span> @ ₹{baseRate}/g
+        </div>
+      </div>
     </div>
   );
 }

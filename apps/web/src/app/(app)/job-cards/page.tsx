@@ -104,9 +104,17 @@ const JC_STYLE: Record<string, string> = {
   "On Hold": "bg-amber-50 text-amber-800 border-amber-200",
   Reconciliation: "bg-violet-50 text-violet-800 border-violet-200",
   Closed: "bg-emerald-50 text-emerald-800 border-emerald-200",
+  Pending: "bg-slate-100 text-slate-600 border-slate-200",
+  "In Progress": "bg-amber-50 text-amber-800 border-amber-200",
+  Approved: "bg-emerald-50 text-emerald-800 border-emerald-200",
+};
+export const STATUS_HI: Record<string, string> = {
+  Draft: "ड्राफ्ट", "In Production": "उत्पादन में", "On Hold": "होल्ड पर", Reconciliation: "मिलान",
+  Closed: "बंद", Pending: "लंबित", "In Progress": "चालू", Approved: "स्वीकृत", Issued: "जारी", Reconciled: "मिलान हुआ",
 };
 export function StatusPill({ status }: { status: string }) {
-  return <span className={`inline-flex items-center h-5 px-1.5 rounded border text-[11px] font-medium whitespace-nowrap ${JC_STYLE[status] || JC_STYLE.Draft}`}>{status}</span>;
+  const hi = STATUS_HI[status];
+  return <span className={`inline-flex items-center h-5 px-1.5 rounded border text-[11px] font-medium whitespace-nowrap ${JC_STYLE[status] || JC_STYLE.Draft}`}>{status}{hi ? ` · ${hi}` : ""}</span>;
 }
 
 function NewJobCardModal({ onClose, onCreated }: { onClose: () => void; onCreated: (jobNo: string) => void }) {

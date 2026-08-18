@@ -250,15 +250,15 @@ function StageCard({ jobNo, stage, pieceCount, targetPurity, karigars, settings,
       <div className="flex items-center justify-between px-3 py-2 bg-slate-50/60 border-b border-slate-100">
         <div className="flex items-center gap-2">
           <span className="font-semibold text-[13px] text-slate-900">{stage.stage} ({STAGE_HI[stage.stage]})</span>
-          <span className={`inline-flex items-center h-5 px-1.5 rounded border text-[11px] font-medium ${stage.status === "Approved" ? "bg-emerald-50 text-emerald-800 border-emerald-200" : stage.status === "In Progress" ? "bg-amber-50 text-amber-800 border-amber-200" : "bg-slate-100 text-slate-600 border-slate-200"}`}>{stage.status}</span>
+          <StatusPill status={stage.status} />
           {labourTotal > 0 && <span className="text-[11px] mono text-slate-500">{money(labourTotal)}</span>}
         </div>
         <div className="flex items-center gap-2">
           {stage.status !== "Approved" && (
-            <button onClick={() => setAdding(true)} className="h-7 px-2.5 rounded border border-slate-200 text-[11px] text-slate-700 hover:bg-slate-50">+ Add Karigar</button>
+            <button onClick={() => setAdding(true)} className="h-7 px-2.5 rounded border border-slate-200 text-[11px] text-slate-700 hover:bg-slate-50">+ Add Karigar (जोड़ें)</button>
           )}
           {allReconciled && stage.status !== "Approved" && (
-            <button onClick={async () => { await approveStage(jobNo, stage.stage); onChange(); }} className="h-7 px-2.5 rounded bg-emerald-600 text-white text-[11px] font-medium hover:bg-emerald-700">Approve Stage</button>
+            <button onClick={async () => { await approveStage(jobNo, stage.stage); onChange(); }} className="h-7 px-2.5 rounded bg-emerald-600 text-white text-[11px] font-medium hover:bg-emerald-700">Approve Stage (स्वीकृत)</button>
           )}
         </div>
       </div>
