@@ -129,6 +129,8 @@ export const reopenJobCard = (jobNo: string, body: { reason: string; approvedBy:
   post(`/job-cards/${jobNo}/reopen`, body);
 export const toggleHold = (jobNo: string, holdReason?: string) =>
   post(`/job-cards/${jobNo}/hold`, { holdReason });
+export const updateJobCardMeta = (jobNo: string, body: Record<string, unknown>) =>
+  apiFetch(`/api/production/job-cards/${jobNo}`, { method: "PATCH", body });
 
 // config / masters
 const patch = (path: string, body?: unknown) => apiFetch(`/api/production${path}`, { method: "PATCH", body });

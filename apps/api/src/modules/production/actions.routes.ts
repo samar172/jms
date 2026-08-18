@@ -180,6 +180,36 @@ router.post(
   })
 );
 
+/* ------------------------- Update job-card meta (§7/§8) ------------------- */
+router.patch(
+  "/job-cards/:jobNo",
+  requireRole(...MANAGER),
+  asyncHandler(async (req, res) => {
+    const body = z
+      .object({
+        dueDate: z.coerce.date().nullable().optional(),
+        notes: z.string().optional(),
+        pieceCount: z.number().int().nullable().optional(),
+        manualSilverValue: z.number().nullable().optional(),
+        todaysSilverRate: z.number().nullable().optional(),
+      })
+      .parse(req.body);
+    const jc = await prisma.prodJobCard.findUnique({ where: { jobNo: req.params.jobNo } });
+    if (!jc) throw notFound("Job card not found");
+    await prisma.prodJobCard.update({
+      where: { id: jc.id },
+      data: {
+        ...(body.dueDate !== undefined ? { dueDate: body.dueDate } : {}),
+        ...(body.notes !== undefined ? { notes: body.notes } : {}),
+        ...(body.pieceCount !== undefined ? { pieceCount: body.pieceCount } : {}),
+        ...(body.manualSilverValue !== undefined ? { manualSilverValue: body.manualSilverValue } : {}),
+        ...(body.todaysSilverRate !== undefined ? { todaysSilverRate: body.todaysSilverRate } : {}),
+      },
+    });
+    res.json({ ok: true });
+  })
+);
+
 /* --------------------------- Edit / Cancel a reconcile -------------------- */
 // Mockup editReconcile: update the issue's returned figures + its linked labour
 // entry in place (or create one if missing).

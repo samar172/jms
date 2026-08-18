@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   useJobCard, useProdKarigars, useProdSettings,
   assignKarigar, castOutput, issueMaterial, reconcile, editReconcile, cancelReconcile, jadaiOutput, findingOutput,
-  issueStones, approveStage, closeJobCard, reopenJobCard, toggleHold,
+  issueStones, approveStage, closeJobCard, reopenJobCard, toggleHold, updateJobCardMeta,
   STAGE_HI, type JobCardDetail,
 } from "@/lib/production";
 import type { Stage, Assignment, MaterialIssue } from "@jms/shared";
@@ -66,7 +66,14 @@ export default function JobCardDetailPage({ params }: { params: Promise<{ id: st
         </div>
 
         <div className="lg:col-span-1 space-y-4 sticky top-4">
-          <CostingSummary data={data} />
+          {data.item.images[0]?.url && (
+            <div className="bg-white border border-slate-200 rounded-md overflow-hidden">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={data.item.images[0].url} alt={data.item.name} className="w-full aspect-square object-cover" />
+            </div>
+          )}
+          <JobDetailsPanel jobNo={jc.id} dueDate={jc.dueDate} pieceCount={jc.pieceCount} notes={jc.notes} onSaved={refresh} />
+          <CostingSummary data={data} onSaved={refresh} />
           <div className="bg-white border border-slate-200 rounded-md">
             <div className="px-4 py-2.5 text-[11px] uppercase tracking-wider text-slate-500 font-semibold border-b border-slate-100">Activity</div>
             <ol className="p-3 space-y-2 max-h-[360px] overflow-auto">
@@ -100,9 +107,10 @@ function SumRow({ label, value, strong }: { label: string; value: string; strong
     </div>
   );
 }
-function CostingSummary({ data }: { data: JobCardDetail }) {
+function CostingSummary({ data, onSaved }: { data: JobCardDetail; onSaved: () => void }) {
   const t = data.totals;
   const Row = SumRow;
+  const [open, setOpen] = useState(false);
   return (
     <div className="bg-white border border-slate-200 rounded-md">
       <div className="px-4 py-2.5 text-[11px] uppercase tracking-wider text-slate-500 font-semibold border-b border-slate-100">Costing Summary</div>
@@ -116,14 +124,91 @@ function CostingSummary({ data }: { data: JobCardDetail }) {
         <Row label="Est. cost to date" value={money(t.estimatedCostToDate)} strong />
         <Row label="Today's sale value" value={money(t.todaysSaleValue)} />
       </div>
+      <button onClick={() => setOpen((v) => !v)} className="w-full px-3 py-1.5 text-[11px] text-blue-700 hover:bg-slate-50 text-left border-t border-slate-100">
+        {open ? "▾" : "▸"} Material Breakdown
+      </button>
+      {open && (
+        <MaterialBreakdown data={data} onSaved={onSaved} />
+      )}
+    </div>
+  );
+}
+
+function MaterialBreakdown({ data, onSaved }: { data: JobCardDetail; onSaved: () => void }) {
+  const t = data.totals;
+  const jc = data.jobCard;
+  const [manual, setManual] = useState(jc.manualSilverValue == null ? "" : String(jc.manualSilverValue));
+  const [todayRate, setTodayRate] = useState(jc.todaysSilverRate == null ? "" : String(jc.todaysSilverRate));
+  async function save() {
+    await updateJobCardMeta(jc.id, {
+      manualSilverValue: manual === "" ? null : Number(manual),
+      todaysSilverRate: todayRate === "" ? null : Number(todayRate),
+    });
+    onSaved();
+  }
+  return (
+    <div className="border-t border-slate-100 px-3 py-2.5 space-y-2.5">
+      <div>
+        <div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Net Metal</div>
+        <div className="text-[11px] text-slate-600">{gm(t.currentWeight)} @ {t.currentPurity} · value @ production rate ₹{t.productionRate.toFixed(2)}/g = {money(t.silverValue)}</div>
+        <div className="flex items-center gap-2 mt-1.5">
+          <label className="text-[11px] text-slate-500 w-32">Manual silver value ₹</label>
+          <input type="number" placeholder="(auto)" className="h-7 w-24 px-1.5 border border-slate-200 rounded text-[11px] mono" value={manual} onChange={(e) => setManual(e.target.value)} />
+        </div>
+        <div className="flex items-center gap-2 mt-1">
+          <label className="text-[11px] text-slate-500 w-32">Today&apos;s silver rate ₹/g</label>
+          <input type="number" placeholder={`(${data.baseRate})`} className="h-7 w-24 px-1.5 border border-slate-200 rounded text-[11px] mono" value={todayRate} onChange={(e) => setTodayRate(e.target.value)} />
+        </div>
+        <div className="text-[11px] text-emerald-700 font-medium mt-1">Today&apos;s sale value: {money(t.todaysSaleValue)}</div>
+        <button onClick={save} className="mt-1.5 h-6 px-2 rounded bg-blue-800 text-white text-[11px]">Save overrides</button>
+      </div>
       {data.stonesByType.length > 0 && (
-        <div className="border-t border-slate-100 px-3 py-2">
+        <div>
           <div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Stones by type</div>
           {data.stonesByType.map((s) => (
             <div key={s.type} className="flex justify-between text-[11px] text-slate-600"><span>{s.type} ({s.carat.toFixed(2)}ct)</span><span className="mono">{money(s.value)}</span></div>
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function JobDetailsPanel({ jobNo, dueDate, pieceCount, notes, onSaved }: { jobNo: string; dueDate: string; pieceCount: number | null; notes: string; onSaved: () => void }) {
+  const [edit, setEdit] = useState(false);
+  const [due, setDue] = useState(dueDate || "");
+  const [pcs, setPcs] = useState(pieceCount == null ? "" : String(pieceCount));
+  const [note, setNote] = useState(notes || "");
+  const overdue = dueDate && dueDate < new Date().toISOString().slice(0, 10);
+  async function save() {
+    await updateJobCardMeta(jobNo, { dueDate: due || null, pieceCount: pcs === "" ? null : Number(pcs), notes: note });
+    setEdit(false); onSaved();
+  }
+  return (
+    <div className="bg-white border border-slate-200 rounded-md">
+      <div className="px-4 py-2.5 flex items-center justify-between border-b border-slate-100">
+        <span className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">Job Details</span>
+        <button onClick={() => setEdit((v) => !v)} className="text-[11px] text-blue-700 hover:underline">{edit ? "Cancel" : "Edit"}</button>
+      </div>
+      <div className="p-4 space-y-2 text-[12px]">
+        {edit ? (
+          <>
+            <label className="block text-[11px] text-slate-500">Delivery Target</label>
+            <input type="date" className="h-8 w-full px-2 border border-slate-200 rounded text-[12px]" value={due} onChange={(e) => setDue(e.target.value)} />
+            <label className="block text-[11px] text-slate-500">Pieces</label>
+            <input type="number" className="h-8 w-full px-2 border border-slate-200 rounded text-[12px] mono" value={pcs} onChange={(e) => setPcs(e.target.value)} />
+            <label className="block text-[11px] text-slate-500">Notes</label>
+            <textarea className="w-full px-2 py-1 border border-slate-200 rounded text-[12px]" rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
+            <button onClick={save} className="h-7 px-3 rounded bg-blue-800 text-white text-[11px]">Save</button>
+          </>
+        ) : (
+          <>
+            <div className="flex justify-between"><span className="text-slate-500">Delivery Target</span><span className={`mono ${overdue ? "text-rose-600 font-medium" : "text-slate-900"}`}>{dueDate || "Not set"}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Pieces</span><span className="mono text-slate-900">{pieceCount ?? "—"}</span></div>
+            {notes && <div className="text-slate-600 pt-1 border-t border-slate-50">{notes}</div>}
+          </>
+        )}
+      </div>
     </div>
   );
 }
