@@ -63,12 +63,15 @@ Per spec §8.1, these are **actions within a job-card stage**, never top-level s
 
 ---
 
-## 3. API module map (`apps/api/src/modules/`)
+## 3. API module map (`apps/api/src/modules/`) — updated after Phase-2 usage tracing
 
-- **KEEP:** `auth`, `users`, `dashboard`, `products`, `masters`, `jobcards`, `labour`, `ledger` (karigar side), `settings`, `search`, `notifications`, `audit` (service-level, even if the global screen is cut)
-- **CUT (confirmed):** `orders`, `estimates`, `dispatch`, `materials` (gold stock trading side)
-- **CONFIRM (proposed cut):** `assembly`, `qc`, `stones` (standalone) — stone tracking that must remain moves under `jobcards`/`labour`
-- **Rework, don't delete:** `jobcards` + `MaterialReceipt` logic — strip gold-specific reconcile fields (chizzat, dustLot, goldScrap, approvedLoss, wax/wire) down to the spec's **dust + piece count + labour**
+- **KEEP:** `auth`, `users`, `dashboard`, `products`, `masters` (karigar ledger lives here at `/api/masters/karigars`), `jobcards`, `labour`, `settings`, `search`, `notifications`
+- **KEEP — reclassified from "cut" once real callers were traced:**
+  - `materials` — **core**, backs the job-card Issue/Reconcile actions (`/api/materials/issues|receipts|dust-lots|wastage`, called by `JobStageCard`). Gold→silver rename + dust-lot/wastage-exception simplification happens in Phase 3/4, but the module stays.
+  - `audit` — **core**, backs the job-card Activity Timeline (`ActivityTimeline` → `/api/audit-logs`). Only the standalone Audit-Log *screen* was cut.
+  - `estimates` — deferred to Phase 4: `jobcards` create requires an `estimateId` and approval spins up a "Final Costing" estimate. Deleting it means reworking the jobcards create/approve flow (the risky work), so it goes last.
+- **CUT (done, Phase 2):** `orders` (+invoice.service), `dispatch`, `reports`, `assembly`, `qc`, `stones` (standalone), the whole `ledger/` folder (stock, customer, cash-bank), and `masters/customersVendorsCharges` (customers/vendors/charge-types). Global search trimmed to products/jobCards/karigars.
+- **Rework, don't delete (Phase 4):** `jobcards` + `MaterialReceipt` logic — strip gold-specific reconcile fields (chizzat, dustLot, goldScrap, approvedLoss, wax/wire) down to the spec's **dust + piece count + labour**.
 
 ---
 
@@ -112,7 +115,7 @@ Rename is destructive on a live DB. Since this is pre-production (mockup-stage d
 
 1. **Phase 0 — Safety:** tag current state (`git tag pre-simplify-v3`), branch already `new`. ✅ **DONE** (tag `pre-simplify-v3`).
 2. **Phase 1 — Nav + routes (visible win):** remove CUT + FOLD screens from `Sidebar.tsx`, delete their `app/(app)/…` route folders. App instantly looks like Mock (3). ✅ **DONE** (commit `d995f12`) — nav → 4 groups; 28 route files deleted; dashboard cut-feature tiles removed; CommandPalette + dead links neutralized; tsc clean. (The 2 `Date.now` lint errors + `useAuth` warning in `job-cards` are pre-existing, not from this phase.)
-3. **Phase 2 — API modules:** delete CUT modules + their route registrations; fix imports.
+3. **Phase 2 — API modules:** delete CUT modules + their route registrations; fix imports. ✅ **DONE** (commit `0c04b96`) — deleted orders/dispatch/reports/assembly/qc/stones/ledger + customersVendorsCharges; trimmed global search; removed Customer field from Item Master pages + orphaned components/hooks. **Reclassified materials/audit/estimates as KEEP** (see §3). Both apps typecheck clean.
 4. **Phase 3 — Schema rename + drops:** Karat→PurityTier, GoldRate→MetalRate, drop cut models, one migration + reseed.
 5. **Phase 4 — Reconcile simplification + new "create job card from Item Master" flow** (replaces the removed Estimates entry point; see TODO in `job-cards/page.tsx`): strip `MaterialReceipt` to spec fields; update `jobcards` service + `calculations.ts`.
 6. **Phase 5 — Verify:** re-run the hand-computed worked example from spec §4 (Casting 220 → … → final 206.780g) against the app — **mandatory, do not skip** (guards the REPLACE-vs-ADD weight-accumulation logic). Update `TESTING.md`.
