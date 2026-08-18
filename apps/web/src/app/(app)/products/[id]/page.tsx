@@ -3,362 +3,115 @@
 import { use, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Copy } from "lucide-react";
-import { useApi } from "@/lib/hooks";
-import { apiFetch, ApiError, resolveMediaUrl } from "@/lib/api";
-import { ProductStatusPill, JobStageStatusPill } from "@/components/StatusPill";
-import { formatWeight, formatCarat, formatDate } from "@/lib/format";
-import { useAuth } from "@/lib/auth-context";
+import { useItemMaster, useProdSettings, createJobCard, updateItemMaster } from "@/lib/production";
+import { StatusPill } from "../../job-cards/page";
 
-const PRODUCT_STATUSES = ["DESIGN", "ESTIMATED", "IN_PRODUCTION", "FINISHED", "SOLD", "MELTED"] as const;
-
-interface ProductImage {
-  id: string;
-  type: string;
-  url: string;
-  thumbnailUrl?: string;
-}
-interface JobStage {
-  id: string;
-  status: string;
-  processStage: { name: string; sequenceOrder: number };
-  karigar?: { name: string } | null;
-}
-interface JobCard {
-  id: string;
-  jobNo?: string | null;
-  status?: string;
-  stages: JobStage[];
-}
-interface ProductDetail {
-  id: string;
-  serialNo: string;
-  designName: string;
-  description: string | null;
-  status: string;
-  grossWeightG: string;
-  netWeightG: string;
-  stoneWeightCt: string | null;
-  size: string | null;
-  createdAt: string;
-  category: { name: string };
-  subcategory?: { name: string } | null;
-  purity: { code: string };
-  images: ProductImage[];
-  jobCards: JobCard[];
-}
-interface TimelineEntry {
-  type: string;
-  timestamp: string;
-  description: string;
-}
-
-export default function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default function ItemMasterDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
-  const { user } = useAuth();
-  const { data: product, mutate } = useApi<ProductDetail>(`/api/products/${id}`);
-  const { data: timeline } = useApi<TimelineEntry[]>(product ? `/api/products/${product.id}/timeline` : null);
-  const [activeImage, setActiveImage] = useState<ProductImage | null>(null);
-  const [cloning, setCloning] = useState(false);
-  const [creatingJob, setCreatingJob] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const { data: item, mutate } = useItemMaster(id);
+  const { data: settings } = useProdSettings();
+  const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState(false);
 
-  if (!product) return <div className="text-text-muted">Loading…</div>;
+  if (!item) return <div className="text-slate-400 p-4 text-sm">Loading…</div>;
 
-  const canEdit = user?.role === "SUPER_ADMIN" || user?.role === "MANAGER";
-  const primaryImage = activeImage ?? product.images[0];
-  const allStages = product.jobCards.flatMap((jc) => jc.stages).sort((a, b) => a.processStage.sequenceOrder - b.processStage.sequenceOrder);
+  const open = item.jobCards.filter((j) => j.status !== "Closed").length;
 
-  async function clone() {
-    setCloning(true);
+  async function createJC() {
+    setCreating(true);
     try {
-      const created = await apiFetch<{ serialNo: string }>(`/api/products/${product!.id}/clone`, { method: "POST" });
-      router.push(`/products/${created.serialNo}`);
-    } finally {
-      setCloning(false);
-    }
-  }
-
-  // Create a job card directly against this design (spec §2.4 — no estimate),
-  // via the Chowker silver production API.
-  async function createJobCard() {
-    setCreatingJob(true);
-    try {
-      const created = await apiFetch<{ jobNo: string }>(`/api/production/job-cards`, {
-        method: "POST",
-        body: { itemMasterId: product!.id },
-      });
-      router.push(`/job-cards/${created.jobNo}`);
-    } finally {
-      setCreatingJob(false);
-    }
+      const jc = await createJobCard({ itemMasterId: item!.id });
+      router.push(`/job-cards/${jc.jobNo}`);
+    } finally { setCreating(false); }
   }
 
   return (
     <div>
-      <div className="mb-2">
-        <div className="text-[11px] text-mute mb-1">
-          <Link href="/products" className="hover:text-accent">
-            Product
-          </Link>{" "}
-          / {product.category.name} {product.subcategory ? `/ ${product.subcategory.name}` : ""} /{" "}
-          <span className="mono">{product.serialNo}</span>
+      <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500 mb-1">
+        <Link href="/products" className="hover:text-blue-800">Item Master</Link>
+        <span className="text-slate-300">/</span><span className="text-slate-900">{item.name}</span>
+      </div>
+      <div className="flex items-start justify-between flex-wrap gap-3 mb-4">
+        <div>
+          <h1 className="text-[20px] font-semibold text-slate-900 flex items-center gap-2">
+            <span className="mono text-blue-800">{item.serialNo}</span> {item.name}
+          </h1>
+          <p className="text-[12px] text-slate-500">{item.category}{item.designCode ? ` · ${item.designCode}` : ""} · {item.targetPurity} · est. {item.estGrossWeight}g</p>
         </div>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-[19px] font-semibold flex items-center gap-2.5 text-ink">
-              <span className="mono text-accent">{product.serialNo}</span>
-              <ProductStatusPill status={product.status} />
-            </h1>
-            <p className="text-ink2 text-xs mt-0.5">{product.designName}</p>
-          </div>
-          <div className="flex gap-2">
-            {canEdit && (
-              <button className="console-btn console-btn-primary no-print" onClick={createJobCard} disabled={creatingJob}>
-                <span className="font-bold">+</span> {creatingJob ? "Creating…" : "Create Job Card"}
-              </button>
-            )}
-            {canEdit && (
-              <button className="console-btn no-print" onClick={() => setEditing((v) => !v)}>
-                {editing ? "Cancel Edit" : "Edit Product"}
-              </button>
-            )}
-            <button className="console-btn" onClick={clone} disabled={cloning}>
-              <Copy size={14} /> {cloning ? "Cloning…" : "Clone Design"}
-            </button>
-            <button className="console-btn no-print" onClick={() => window.print()}>
-              Print Job Card
-            </button>
-          </div>
+        <div className="flex gap-2">
+          <button onClick={createJC} disabled={creating} className="h-8 px-3 rounded bg-blue-800 text-white text-[12px] font-medium hover:bg-blue-900 disabled:opacity-50">
+            <span className="font-bold">+</span> {creating ? "Creating…" : "Create Job Card"}
+          </button>
+          <button onClick={() => setEditing((v) => !v)} className="h-8 px-3 rounded border border-slate-200 text-[12px] text-slate-700 hover:bg-slate-50">{editing ? "Cancel" : "Edit"}</button>
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-5 gap-3.5 mt-3.5">
-        <div className="lg:col-span-3 space-y-3">
-          <div className="console-panel aspect-square flex items-center justify-center overflow-hidden bg-neu-bg">
-            {primaryImage ? (
+      <div className="grid lg:grid-cols-3 gap-4 items-start">
+        <div className="lg:col-span-1 space-y-3">
+          <div className="bg-white border border-slate-200 rounded-md overflow-hidden aspect-square flex items-center justify-center">
+            {item.images[0]?.url ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={resolveMediaUrl(primaryImage.url)}
-                alt={product.designName}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <span className="text-mute text-sm">No image yet</span>
-            )}
+              <img src={item.images[0].url} alt={item.name} className="w-full h-full object-cover" />
+            ) : <span className="text-slate-300 text-[12px]">No image</span>}
           </div>
-          {product.images.length > 0 && (
-            <div className="flex gap-2 overflow-x-auto">
-              {product.images.map((img) => (
-                <button
-                  key={img.id}
-                  onClick={() => setActiveImage(img)}
-                  className={`shrink-0 w-16 h-16 rounded-md overflow-hidden border-2 ${
-                    primaryImage?.id === img.id ? "border-accent" : "border-transparent"
-                  }`}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={resolveMediaUrl(img.thumbnailUrl ?? img.url)} alt="" className="w-full h-full object-cover" />
-                </button>
-              ))}
-            </div>
-          )}
-          <label className="console-btn w-full justify-center cursor-pointer no-print">
-            {uploading ? "Uploading…" : "Upload Sketch / Photo"}
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/heic"
-              className="hidden"
-              disabled={uploading}
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                setUploading(true);
-                try {
-                  const form = new FormData();
-                  form.append("file", file);
-                  form.append("type", "FINAL_PRODUCT");
-                  form.append("isPrimary", product.images.length === 0 ? "true" : "false");
-                  await apiFetch(`/api/products/${product.id}/images`, { method: "POST", body: form, isForm: true });
-                  await mutate();
-                } finally {
-                  setUploading(false);
-                  e.target.value = "";
-                }
-              }}
-            />
-          </label>
+          <div className="bg-white border border-slate-200 rounded-md p-3 grid grid-cols-2 gap-2 text-center">
+            <div><div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Job Cards</div><div className="text-[18px] font-semibold text-slate-900">{item.jobCards.length}</div></div>
+            <div><div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Open</div><div className="text-[18px] font-semibold text-blue-800">{open}</div></div>
+          </div>
         </div>
 
-        <div className="lg:col-span-2 space-y-3">
+        <div className="lg:col-span-2 space-y-4">
           {editing ? (
-            <EditProductForm
-              product={product}
-              onDone={() => {
-                setEditing(false);
-                mutate();
-              }}
-              onCancel={() => setEditing(false)}
-            />
-          ) : (
-            <div className="console-panel p-3.5">
-              <div className="text-[11px] font-bold uppercase text-ink2 tracking-wide mb-2">Specifications</div>
-              <dl className="grid grid-cols-2 gap-y-1.5 text-[12.5px]">
-                <dt className="text-mute">Category</dt>
-                <dd className="text-ink">{product.category.name}</dd>
-                <dt className="text-mute">Subcategory</dt>
-                <dd className="text-ink">{product.subcategory?.name ?? "—"}</dd>
-                <dt className="text-mute">Purity</dt>
-                <dd className="text-ink">{product.purity.code}</dd>
-                <dt className="text-mute">Gross Weight</dt>
-                <dd className="mono text-ink">{formatWeight(product.grossWeightG)}</dd>
-                <dt className="text-mute">Net Weight</dt>
-                <dd className="mono text-ink">{formatWeight(product.netWeightG)}</dd>
-                <dt className="text-mute">Stone Weight</dt>
-                <dd className="mono text-ink">{formatCarat(product.stoneWeightCt)}</dd>
-                <dt className="text-mute">Size</dt>
-                <dd className="text-ink">{product.size ?? "—"}</dd>
-                <dt className="text-mute">Created</dt>
-                <dd className="text-ink">{formatDate(product.createdAt)}</dd>
-                {product.description && (
-                  <>
-                    <dt className="text-mute">Description</dt>
-                    <dd className="text-ink">{product.description}</dd>
-                  </>
-                )}
-              </dl>
-            </div>
-          )}
+            <EditItemForm item={item} tiers={settings?.tiers ?? []} onDone={() => { setEditing(false); mutate(); }} />
+          ) : item.notes ? (
+            <div className="bg-white border border-slate-200 rounded-md p-4 text-[12px] text-slate-700">{item.notes}</div>
+          ) : null}
 
-          <div className="console-panel p-3.5">
-            <div className="text-[11px] font-bold uppercase text-ink2 tracking-wide mb-2">Job Cards</div>
-            {product.jobCards.length > 0 ? (
-              <ul className="space-y-1.5">
-                {product.jobCards.map((jc) => (
-                  <li key={jc.id}>
-                    <Link href={`/job-cards/${jc.id}`} className="flex items-center justify-between text-[12.5px] hover:text-accent">
-                      <span className="mono">{jc.jobNo ?? jc.id}</span>
-                      {jc.status && <JobStageStatusPill status={jc.status} />}
-                    </Link>
-                  </li>
+          <div className="bg-white border border-slate-200 rounded-md">
+            <div className="px-4 py-2.5 text-[11px] uppercase tracking-wider text-slate-500 font-semibold border-b border-slate-100">Job Cards (batches)</div>
+            <table className="w-full border-collapse">
+              <tbody>
+                {item.jobCards.length === 0 && <tr><td className="px-4 py-6 text-center text-[12px] text-slate-400">No job cards yet — use “Create Job Card”.</td></tr>}
+                {item.jobCards.map((jc) => (
+                  <tr key={jc.id} onClick={() => router.push(`/job-cards/${jc.id}`)} className="border-b border-slate-50 h-10 cursor-pointer hover:bg-slate-50">
+                    <td className="px-4 text-[12px] mono text-blue-800">{jc.id}</td>
+                    <td className="px-3 text-[12px] text-slate-600">{jc.pieceCount ?? "—"} pcs</td>
+                    <td className="px-3 text-[12px] mono text-slate-500">{jc.dueDate || "—"}</td>
+                    <td className="px-3"><StatusPill status={jc.status} /></td>
+                  </tr>
                 ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-mute">No job cards yet. Use “Create Job Card” above.</p>
-            )}
+              </tbody>
+            </table>
           </div>
-
-          {allStages.length > 0 && (
-            <div className="console-panel p-3.5">
-              <div className="text-[11px] font-bold uppercase text-ink2 tracking-wide mb-2">Current Status</div>
-              <ol className="space-y-1.5">
-                {allStages.map((s) => (
-                  <li key={s.id} className="flex items-center justify-between text-[12.5px]">
-                    <span className="text-ink2">{s.processStage.name}</span>
-                    <JobStageStatusPill status={s.status} />
-                  </li>
-                ))}
-              </ol>
-            </div>
-          )}
         </div>
-      </div>
-
-      <div className="console-panel p-3.5 mt-3.5">
-        <div className="text-[11px] font-bold uppercase text-ink2 tracking-wide mb-3">Product History</div>
-        <ol className="relative border-l border-line ml-2 space-y-3">
-          {timeline?.map((e, i) => (
-            <li key={i} className="ml-4">
-              <div className="absolute w-2 h-2 rounded-full bg-accent -ml-[21px] mt-1.5" />
-              <time className="text-xs text-mute">{formatDate(e.timestamp)}</time>
-              <p className="text-[12.5px] text-ink">{e.description}</p>
-            </li>
-          ))}
-          {(!timeline || timeline.length === 0) && (
-            <p className="text-sm text-mute ml-2">No history yet.</p>
-          )}
-        </ol>
       </div>
     </div>
   );
 }
 
-function EditProductForm({
-  product,
-  onDone,
-  onCancel,
-}: {
-  product: ProductDetail;
-  onDone: () => void;
-  onCancel: () => void;
-}) {
-  const [designName, setDesignName] = useState(product.designName);
-  const [description, setDescription] = useState(product.description ?? "");
-  const [size, setSize] = useState(product.size ?? "");
-  const [status, setStatus] = useState(product.status);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function submit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setSubmitting(true);
-    setError(null);
-    try {
-      await apiFetch(`/api/products/${product.id}`, {
-        method: "PATCH",
-        body: {
-          designName,
-          description: description || undefined,
-          size: size || undefined,
-          status,
-        },
-      });
-      onDone();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to update product");
-    } finally {
-      setSubmitting(false);
-    }
+function EditItemForm({ item, tiers, onDone }: { item: NonNullable<ReturnType<typeof useItemMaster>["data"]>; tiers: { id: string; label: string }[]; onDone: () => void }) {
+  const [name, setName] = useState(item.name);
+  const [designCode, setDesignCode] = useState(item.designCode ?? "");
+  const [targetPurity, setTargetPurity] = useState(item.targetPurity);
+  const [est, setEst] = useState(String(item.estGrossWeight));
+  const [notes, setNotes] = useState(item.notes);
+  const [busy, setBusy] = useState(false);
+  async function save() {
+    setBusy(true);
+    try { await updateItemMaster(item.id, { name, designCode: designCode || null, targetPurity, estGrossWeight: Number(est) || 0, notes }); onDone(); }
+    finally { setBusy(false); }
   }
-
   return (
-    <form onSubmit={submit} className="console-panel p-3.5 space-y-2.5">
-      <div className="text-[11px] font-bold uppercase text-ink2 tracking-wide mb-1">Edit Product</div>
-      <div>
-        <label className="console-field-label">Design Name</label>
-        <input required className="console-field" value={designName} onChange={(e) => setDesignName(e.target.value)} />
-      </div>
-      <div>
-        <label className="console-field-label">Description</label>
-        <textarea className="console-field" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
-      </div>
+    <div className="bg-white border border-slate-200 rounded-md p-4 space-y-3">
+      <div><label className="block text-[11px] font-medium text-slate-600 mb-1">Design name</label><input className="w-full h-9 px-2 border border-slate-200 rounded text-[12px]" value={name} onChange={(e) => setName(e.target.value)} /></div>
       <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="console-field-label">Size</label>
-          <input className="console-field" value={size} onChange={(e) => setSize(e.target.value)} />
-        </div>
-        <div>
-          <label className="console-field-label">Status</label>
-          <select className="console-field" value={status} onChange={(e) => setStatus(e.target.value)}>
-            {PRODUCT_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </div>
+        <div><label className="block text-[11px] font-medium text-slate-600 mb-1">Design code</label><input className="w-full h-9 px-2 border border-slate-200 rounded text-[12px]" value={designCode} onChange={(e) => setDesignCode(e.target.value)} /></div>
+        <div><label className="block text-[11px] font-medium text-slate-600 mb-1">Target purity</label><select className="w-full h-9 px-2 border border-slate-200 rounded text-[12px]" value={targetPurity} onChange={(e) => setTargetPurity(e.target.value)}>{tiers.map((t) => <option key={t.id} value={t.label}>{t.label}</option>)}</select></div>
       </div>
-      {error && <p className="text-sm text-err-tx">{error}</p>}
-      <div className="flex justify-end gap-2 pt-2 border-t border-line">
-        <button type="button" className="console-btn" onClick={onCancel}>
-          Cancel
-        </button>
-        <button className="console-btn primary" disabled={submitting}>
-          {submitting ? "Saving…" : "Save Changes"}
-        </button>
-      </div>
-    </form>
+      <div><label className="block text-[11px] font-medium text-slate-600 mb-1">Est. gross weight (g)</label><input type="number" className="w-full h-9 px-2 border border-slate-200 rounded text-[12px] mono" value={est} onChange={(e) => setEst(e.target.value)} /></div>
+      <div><label className="block text-[11px] font-medium text-slate-600 mb-1">Notes</label><textarea rows={2} className="w-full px-2 py-1 border border-slate-200 rounded text-[12px]" value={notes} onChange={(e) => setNotes(e.target.value)} /></div>
+      <button onClick={save} disabled={busy} className="h-8 px-4 rounded bg-blue-800 text-white text-[12px] font-medium disabled:opacity-50">{busy ? "Saving…" : "Save"}</button>
+    </div>
   );
 }

@@ -89,6 +89,41 @@ router.get(
   })
 );
 
+const JOB_STATUS_LABEL: Record<string, string> = {
+  Draft: "Draft", InProduction: "In Production", OnHold: "On Hold", Reconciliation: "Reconciliation", Closed: "Closed",
+};
+router.get(
+  "/item-masters/:key",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const key = req.params.key;
+    const p = await prisma.product.findFirst({
+      where: { OR: [{ id: key }, { serialNo: key }] },
+      include: { category: true, purity: true, images: true, prodJobCards: { orderBy: { createdAt: "desc" } } },
+    });
+    if (!p) throw notFound("Item master not found");
+    const iso = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : "");
+    res.json({
+      id: p.id,
+      serialNo: p.serialNo,
+      name: p.designName,
+      category: p.category.name,
+      designCode: p.designCode,
+      targetPurity: p.purity.code,
+      estGrossWeight: Number(p.grossWeightG),
+      notes: p.description ?? "",
+      images: p.images.map((im) => ({ url: im.thumbnailUrl ?? im.url })),
+      jobCards: p.prodJobCards.map((jc) => ({
+        id: jc.jobNo,
+        status: JOB_STATUS_LABEL[jc.status] ?? jc.status,
+        pieceCount: jc.pieceCount,
+        dueDate: iso(jc.dueDate),
+        createdAt: iso(jc.createdAt),
+      })),
+    });
+  })
+);
+
 /* ------------------------------- Karigars --------------------------------- */
 router.get(
   "/karigars",

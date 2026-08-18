@@ -154,5 +154,37 @@ router.post(
     res.status(201).json({ id: p.id });
   })
 );
+router.patch(
+  "/item-masters/:id",
+  requireRole(...ADMIN),
+  asyncHandler(async (req, res) => {
+    const body = z
+      .object({
+        name: z.string().optional(),
+        designCode: z.string().nullable().optional(),
+        targetPurity: z.string().optional(),
+        estGrossWeight: z.number().nonnegative().optional(),
+        notes: z.string().optional(),
+      })
+      .parse(req.body);
+    let purityId: string | undefined;
+    if (body.targetPurity) {
+      const purity = await prisma.purityTier.findFirst({ where: { code: body.targetPurity } });
+      if (!purity) throw badRequest("Unknown purity tier");
+      purityId = purity.id;
+    }
+    await prisma.product.update({
+      where: { id: req.params.id },
+      data: {
+        ...(body.name != null ? { designName: body.name } : {}),
+        ...(body.designCode !== undefined ? { designCode: body.designCode } : {}),
+        ...(purityId ? { purityId } : {}),
+        ...(body.estGrossWeight != null ? { grossWeightG: body.estGrossWeight, netWeightG: body.estGrossWeight } : {}),
+        ...(body.notes !== undefined ? { description: body.notes } : {}),
+      },
+    });
+    res.json({ ok: true });
+  })
+);
 
 export default router;

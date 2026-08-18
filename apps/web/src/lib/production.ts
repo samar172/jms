@@ -88,6 +88,21 @@ export const useProdSettings = () => useApi<ProdSettings>("/api/production/setti
 export const useItemMasters = () => useApi<ItemMaster[]>("/api/production/item-masters");
 export const useProdKarigars = () => useApi<ProdKarigar[]>("/api/production/karigars");
 export const useJobCards = () => useApi<JobCardListRow[]>("/api/production/job-cards");
+
+export interface ItemMasterDetail {
+  id: string;
+  serialNo: string;
+  name: string;
+  category: string;
+  designCode: string | null;
+  targetPurity: string;
+  estGrossWeight: number;
+  notes: string;
+  images: { url: string }[];
+  jobCards: { id: string; status: string; pieceCount: number | null; dueDate: string; createdAt: string }[];
+}
+export const useItemMaster = (key: string | null) =>
+  useApi<ItemMasterDetail>(key ? `/api/production/item-masters/${key}` : null);
 export const useJobCard = (jobNo: string | null) =>
   useApi<JobCardDetail>(jobNo ? `/api/production/job-cards/${jobNo}` : null);
 export const useLedger = () => useApi<Record<string, LedgerRow[]>>("/api/production/ledger");
@@ -142,6 +157,7 @@ export const deleteTier = (id: string) => del(`/purity-tiers/${id}`);
 export const createKarigar = (body: Record<string, unknown>) => post("/karigars", body);
 export const updateKarigar = (id: string, body: Record<string, unknown>) => patch(`/karigars/${id}`, body);
 export const createItemMaster = (body: Record<string, unknown>) => post("/item-masters", body);
+export const updateItemMaster = (id: string, body: Record<string, unknown>) => patch(`/item-masters/${id}`, body);
 
 export const STAGE_HI: Record<string, string> = {
   Casting: "ढलाई",
