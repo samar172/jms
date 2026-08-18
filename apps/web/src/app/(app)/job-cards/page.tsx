@@ -1,117 +1,171 @@
 "use client";
 
-import Link from "next/link";
-import { useApi } from "@/lib/hooks";
-import { formatDate } from "@/lib/format";
-import { EstimateStatusPill } from "@/components/StatusPill";
+import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useJobCards, useItemMasters, createJobCard, type JobCardListRow } from "@/lib/production";
 
-interface JobStage {
-  id: string;
-  status: string;
-  processStageId: string;
-  processStage: { name: string; sequenceOrder: number };
-  karigar?: { name: string } | null;
-  wastageRecord?: { exceptionStatus: string } | null;
-}
-interface JobCardRow {
-  id: string;
-  jobNo: string | null;
-  createdAt: string;
-  targetDeliveryDate: string | null;
-  product: { serialNo: string; designName: string };
-  customer?: { name: string } | null;
-  estimate?: { grossWeightG: string | null } | null;
-  stages: JobStage[];
-}
-
-function activeStageOf(jc: JobCardRow): JobStage | undefined {
-  return jc.stages.find((s) => s.status !== "APPROVED") ?? jc.stages[jc.stages.length - 1];
-}
+const TABS = ["all", "Draft", "In Production", "On Hold", "Reconciliation", "Closed"];
+const today = () => new Date().toISOString().slice(0, 10);
 
 export default function JobCardsPage() {
-  const { data: jobCards } = useApi<JobCardRow[]>("/api/job-cards");
+  const router = useRouter();
+  const { data: jobCards, mutate } = useJobCards();
+  const [activeTab, setActiveTab] = useState("all");
+  const [query, setQuery] = useState("");
+  const [showNew, setShowNew] = useState(false);
 
-  const overdueJobs = (jobCards ?? []).filter(j => j.targetDeliveryDate && new Date(j.targetDeliveryDate).getTime() < Date.now());
+  const rows = jobCards ?? [];
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { all: rows.length };
+    for (const t of TABS.slice(1)) c[t] = rows.filter((r) => r.status === t).length;
+    return c;
+  }, [rows]);
+  const overdue = rows.filter((r) => r.status !== "Closed" && r.dueDate && r.dueDate < today()).length;
+
+  const visible = rows.filter((r) => {
+    if (activeTab !== "all" && r.status !== activeTab) return false;
+    if (query.trim()) {
+      const q = query.toLowerCase();
+      return r.id.toLowerCase().includes(q) || r.itemName.toLowerCase().includes(q);
+    }
+    return true;
+  });
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="mb-3.5 flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500 mb-1.5">
-            <span>Production</span>
-            <span className="text-slate-300">/</span>
-            <span className="text-slate-900">Job Cards</span>
+    <div className="flex-1 flex flex-col">
+      <div className="mb-3">
+        <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500 mb-1">
+          <span>Production</span><span className="text-slate-300">/</span><span className="text-slate-900">Job Cards</span>
+        </div>
+        <div className="flex items-end justify-between">
+          <div>
+            <h1 className="text-[21px] font-semibold text-slate-900 leading-tight">Job Cards</h1>
+            <p className="text-[11px] text-slate-500 mt-0.5">{rows.length} jobs · {overdue} overdue against due date</p>
           </div>
-          <h1 className="text-[19px] font-semibold flex items-center gap-2.5 text-slate-900">
-            Job Cards
-            <span className="text-[11px] text-slate-500 font-normal">{jobCards?.length ?? 0} jobs · {overdueJobs.length} overdue against due date</span>
-          </h1>
+          <button onClick={() => setShowNew(true)} className="h-8 px-3 rounded bg-blue-800 text-white text-[12px] font-medium hover:bg-blue-900">
+            <span className="font-bold">+</span> New Job Card (नया)
+          </button>
         </div>
-        <div className="flex items-center gap-2">
-          {/* TODO(v3 Phase 4): wire to the new "create job card from Item Master" flow (replaces the removed Estimates route) */}
-          <Link href="/products" className="h-7 px-3 rounded bg-blue-800 text-white text-[12px] font-medium flex items-center gap-1.5 hover:bg-blue-900">
-            <span className="font-bold">+</span> New Job Card
-          </Link>
+        <div className="flex items-center gap-1 mt-2 border-b border-slate-200">
+          {TABS.map((t) => (
+            <button key={t} onClick={() => setActiveTab(t)}
+              className={`px-2.5 h-8 text-[12px] border-b-2 -mb-px ${activeTab === t ? "border-blue-800 text-blue-900 font-medium" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
+              {t === "all" ? "All" : t} <span className="text-slate-400 ml-1">{counts[t] || 0}</span>
+            </button>
+          ))}
         </div>
-      </div>
-
-      <div className="flex items-center gap-2 mb-3">
-        <div className="relative flex-1 max-w-sm">
-          <input
-            placeholder="Filter by job no., item, party…"
-            className="w-full h-8 px-2 text-[12px] border border-slate-200 rounded outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-          />
+        <div className="mt-2">
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter by job no., item…"
+            className="h-7 w-72 px-2 rounded border border-slate-200 text-[12px] outline-none focus:border-blue-400" />
         </div>
       </div>
 
       <div className="flex-1 overflow-auto bg-white border border-slate-200 rounded-md">
         <table className="w-full border-collapse">
-          <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
-            <tr>
-              <th className="w-9 px-3 py-2"></th>
-              <th className="px-3 py-2 text-left text-[10px] uppercase tracking-wider font-semibold text-slate-500">Job No.</th>
-              <th className="px-3 py-2 text-left text-[10px] uppercase tracking-wider font-semibold text-slate-500">Item</th>
-              <th className="px-3 py-2 text-left text-[10px] uppercase tracking-wider font-semibold text-slate-500">Party</th>
-              <th className="px-3 py-2 text-left text-[10px] uppercase tracking-wider font-semibold text-slate-500">Karigar</th>
-              <th className="px-3 py-2 text-left text-[10px] uppercase tracking-wider font-semibold text-slate-500">Due Date</th>
-              <th className="px-3 py-2 text-right text-[10px] uppercase tracking-wider font-semibold text-slate-500">GW Est</th>
-              <th className="px-3 py-2 text-left text-[10px] uppercase tracking-wider font-semibold text-slate-500">Stage</th>
-              <th className="w-9"></th>
+          <thead className="sticky top-0 bg-slate-50 z-10">
+            <tr className="h-9 border-b border-slate-200 text-left">
+              {["Job No.", "Item", "Stage", "Due Date", "GW Est", "Status"].map((h, i) => (
+                <th key={h} className={`px-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold ${i === 4 ? "text-right" : ""}`}>{h}</th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {(jobCards ?? []).map(j => {
-              const activeStage = activeStageOf(j);
-              const overdue = j.targetDeliveryDate && new Date(j.targetDeliveryDate).getTime() < Date.now();
-              return (
-                <tr key={j.id} className="border-b border-slate-100 h-9 hover:bg-slate-50 cursor-pointer" onClick={() => window.location.href = `/job-cards/${j.id}`}>
-                  <td className="px-3 text-center">{overdue ? <span className="w-2 h-2 rounded-full bg-rose-500 inline-block"></span> : ""}</td>
-                  <td className="px-3 text-[12px] mono text-blue-800 font-medium">
-                    <Link href={`/job-cards/${j.id}`} className="hover:underline" onClick={(e) => e.stopPropagation()}>{j.jobNo ?? j.id}</Link>
-                  </td>
-                  <td className="px-3 text-[12px] text-slate-900">{j.product.designName}</td>
-                  <td className="px-3 text-[12px] text-slate-600">{j.customer?.name ?? "—"}</td>
-                  <td className={`px-3 text-[12px] ${!activeStage?.karigar ? 'text-slate-400 italic' : 'text-slate-600'}`}>{activeStage?.karigar?.name ?? "Unassigned"}</td>
-                  <td className="px-3 text-[12px] text-slate-600 tabular">{j.targetDeliveryDate ? formatDate(j.targetDeliveryDate.toString()).split(',')[0] : "—"}</td>
-                  <td className="px-3 text-[12px] text-right tabular mono">{j.estimate?.grossWeightG ? `${Number(j.estimate.grossWeightG).toFixed(3)} g` : "—"}</td>
-                  <td className="px-3">
-                    <EstimateStatusPill status={activeStage?.processStage?.name ?? "Done"} />
-                  </td>
-                  <td className="px-3 text-right" onClick={(e) => e.stopPropagation()}>
-                    <button className="w-6 h-6 grid place-items-center rounded hover:bg-slate-200">
-                      <span className="w-4 h-4 text-slate-500 font-bold flex items-center justify-center">...</span>
-                    </button>
-                  </td>
-                </tr>
-              )
-            })}
-            {!jobCards?.length && (
-              <tr>
-                <td colSpan={9} className="py-8 text-center text-[12px] text-slate-500">No jobs match these filters</td>
-              </tr>
+            {visible.length === 0 && (
+              <tr><td colSpan={6} className="py-14 text-center text-[13px] text-slate-500">No job cards match these filters</td></tr>
             )}
+            {visible.map((r: JobCardListRow) => {
+              const overdueRow = r.status !== "Closed" && r.dueDate && r.dueDate < today();
+              return (
+                <tr key={r.id} onClick={() => router.push(`/job-cards/${r.id}`)} className="border-b border-slate-100 cursor-pointer h-12 hover:bg-slate-50">
+                  <td className="px-3 text-[12px] mono text-blue-800 font-medium">{r.id}</td>
+                  <td className="px-3 text-[12px]">
+                    <div className="text-slate-900">{r.itemName}</div>
+                    <div className="text-[10px] text-slate-400">{r.category}</div>
+                  </td>
+                  <td className="px-3 text-[12px] text-slate-700">{r.activeStage ?? <span className="text-slate-400">Not issued</span>}</td>
+                  <td className={`px-3 text-[12px] mono ${overdueRow ? "text-rose-600 font-medium" : "text-slate-600"}`}>{r.dueDate || "—"}</td>
+                  <td className="px-3 text-[12px] text-right mono text-slate-700">{r.grossWeightEst}g</td>
+                  <td className="px-3"><StatusPill status={r.status} /></td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
+      </div>
+
+      {showNew && <NewJobCardModal onClose={() => setShowNew(false)} onCreated={(jobNo) => { setShowNew(false); mutate(); router.push(`/job-cards/${jobNo}`); }} />}
+    </div>
+  );
+}
+
+const JC_STYLE: Record<string, string> = {
+  Draft: "bg-slate-100 text-slate-700 border-slate-200",
+  "In Production": "bg-blue-50 text-blue-800 border-blue-200",
+  "On Hold": "bg-amber-50 text-amber-800 border-amber-200",
+  Reconciliation: "bg-violet-50 text-violet-800 border-violet-200",
+  Closed: "bg-emerald-50 text-emerald-800 border-emerald-200",
+};
+export function StatusPill({ status }: { status: string }) {
+  return <span className={`inline-flex items-center h-5 px-1.5 rounded border text-[11px] font-medium whitespace-nowrap ${JC_STYLE[status] || JC_STYLE.Draft}`}>{status}</span>;
+}
+
+function NewJobCardModal({ onClose, onCreated }: { onClose: () => void; onCreated: (jobNo: string) => void }) {
+  const { data: items } = useItemMasters();
+  const [itemMasterId, setItemMasterId] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [pieceCount, setPieceCount] = useState("1");
+  const [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false);
+  const chosen = items?.find((i) => i.id === itemMasterId);
+
+  async function submit() {
+    if (!itemMasterId) return;
+    setBusy(true);
+    try {
+      const jc = await createJobCard({ itemMasterId, dueDate: dueDate || undefined, pieceCount: Number(pieceCount) || undefined, notes: notes || undefined });
+      onCreated(jc.jobNo);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={onClose}>
+      <div className="bg-white rounded-md shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+          <h2 className="text-[14px] font-semibold">New Job Card (नया)</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">✕</button>
+        </div>
+        <div className="p-4 space-y-3">
+          <div>
+            <label className="block text-[11px] font-medium text-slate-600 mb-1">Item Master (design) *</label>
+            <select className="w-full h-9 px-2 border border-slate-200 rounded text-[12px]" value={itemMasterId} onChange={(e) => setItemMasterId(e.target.value)}>
+              <option value="">Select a design…</option>
+              {items?.map((i) => <option key={i.id} value={i.id}>{i.name} · {i.targetPurity}</option>)}
+            </select>
+            {chosen && <p className="text-[11px] text-slate-500 mt-1">Target purity {chosen.targetPurity} · est. {chosen.estGrossWeight}g · locked at creation.</p>}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-medium text-slate-600 mb-1">Pieces</label>
+              <input type="number" min="1" className="w-full h-9 px-2 border border-slate-200 rounded text-[12px]" value={pieceCount} onChange={(e) => setPieceCount(e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-slate-600 mb-1">Due Date</label>
+              <input type="date" className="w-full h-9 px-2 border border-slate-200 rounded text-[12px]" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            </div>
+          </div>
+          <div>
+            <label className="block text-[11px] font-medium text-slate-600 mb-1">Notes</label>
+            <input className="w-full h-9 px-2 border border-slate-200 rounded text-[12px]" value={notes} onChange={(e) => setNotes(e.target.value)} />
+          </div>
+        </div>
+        <div className="px-4 py-3 border-t border-slate-100 flex justify-end gap-2">
+          <button onClick={onClose} className="h-8 px-3 rounded border border-slate-200 text-[12px] text-slate-700 hover:bg-slate-50">Cancel</button>
+          <button disabled={!itemMasterId || busy} onClick={submit} className="h-8 px-3 rounded bg-blue-800 text-white text-[12px] font-medium hover:bg-blue-900 disabled:opacity-50">
+            {busy ? "Creating…" : "Create Job Card"}
+          </button>
+        </div>
       </div>
     </div>
   );

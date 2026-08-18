@@ -81,15 +81,16 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
-  // Create a job card directly against this design (spec §2.4 — no estimate).
+  // Create a job card directly against this design (spec §2.4 — no estimate),
+  // via the Chowker silver production API.
   async function createJobCard() {
     setCreatingJob(true);
     try {
-      const created = await apiFetch<{ id: string }>(`/api/job-cards`, {
+      const created = await apiFetch<{ jobNo: string }>(`/api/production/job-cards`, {
         method: "POST",
-        body: { productId: product!.id },
+        body: { itemMasterId: product!.id },
       });
-      router.push(`/job-cards/${created.id}`);
+      router.push(`/job-cards/${created.jobNo}`);
     } finally {
       setCreatingJob(false);
     }
