@@ -2,14 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useCategories, useKarats, useCustomers } from "@/lib/hooks";
+import { useCategories, useKarats } from "@/lib/hooks";
 import { apiFetch, ApiError } from "@/lib/api";
 
 export default function NewProductPage() {
   const router = useRouter();
   const { data: categories } = useCategories();
   const { data: karats } = useKarats();
-  const { data: customers } = useCustomers();
 
   const [designName, setDesignName] = useState("");
   const [categoryId, setCategoryId] = useState("");
@@ -18,7 +17,6 @@ export default function NewProductPage() {
   const [grossWeightG, setGrossWeightG] = useState("");
   const [stoneWeightCt, setStoneWeightCt] = useState("");
   const [size, setSize] = useState("");
-  const [customerId, setCustomerId] = useState("");
   const [description, setDescription] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -44,7 +42,6 @@ export default function NewProductPage() {
           grossWeightG: Number(grossWeightG),
           stoneWeightCt: stoneWeightCt ? Number(stoneWeightCt) : undefined,
           size: size || undefined,
-          customerId: customerId || undefined,
           description: description || undefined,
         },
       });
@@ -154,17 +151,6 @@ export default function NewProductPage() {
           <div>
             <label className="console-field-label">Size / Dimensions</label>
             <input className="console-field" value={size} onChange={(e) => setSize(e.target.value)} />
-          </div>
-          <div>
-            <label className="console-field-label">Customer (optional)</label>
-            <select className="console-field" value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
-              <option value="">— None —</option>
-              {customers?.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
           </div>
         </div>
 

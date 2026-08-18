@@ -4,7 +4,7 @@ import { use, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Copy } from "lucide-react";
-import { useApi, useCustomers } from "@/lib/hooks";
+import { useApi } from "@/lib/hooks";
 import { apiFetch, ApiError, resolveMediaUrl } from "@/lib/api";
 import { ProductStatusPill, JobStageStatusPill } from "@/components/StatusPill";
 import { formatWeight, formatCarat, formatDate, formatINR } from "@/lib/format";
@@ -56,7 +56,6 @@ interface ProductDetail {
   category: { name: string };
   subcategory?: { name: string } | null;
   purity: { code: string };
-  customer?: { id: string; name: string } | null;
   images: ProductImage[];
   jobCards: JobCard[];
   estimates: Estimate[];
@@ -215,8 +214,6 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
                 <dd className="mono text-ink">{formatCarat(product.stoneWeightCt)}</dd>
                 <dt className="text-mute">Size</dt>
                 <dd className="text-ink">{product.size ?? "—"}</dd>
-                <dt className="text-mute">Customer</dt>
-                <dd className="text-ink">{product.customer?.name ?? "—"}</dd>
                 <dt className="text-mute">Created</dt>
                 <dd className="text-ink">{formatDate(product.createdAt)}</dd>
                 {product.description && (
@@ -302,12 +299,10 @@ function EditProductForm({
   onDone: () => void;
   onCancel: () => void;
 }) {
-  const { data: customers } = useCustomers();
   const [designName, setDesignName] = useState(product.designName);
   const [description, setDescription] = useState(product.description ?? "");
   const [size, setSize] = useState(product.size ?? "");
   const [status, setStatus] = useState(product.status);
-  const [customerId, setCustomerId] = useState(product.customer?.id ?? "");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -323,7 +318,6 @@ function EditProductForm({
           description: description || undefined,
           size: size || undefined,
           status,
-          customerId: customerId || undefined,
         },
       });
       onDone();
@@ -360,17 +354,6 @@ function EditProductForm({
             ))}
           </select>
         </div>
-      </div>
-      <div>
-        <label className="console-field-label">Customer</label>
-        <select className="console-field" value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
-          <option value="">No customer</option>
-          {customers?.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
       </div>
       {error && <p className="text-sm text-err-tx">{error}</p>}
       <div className="flex justify-end gap-2 pt-2 border-t border-line">

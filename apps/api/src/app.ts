@@ -21,17 +21,8 @@ import dashboardRoutes from "./modules/dashboard/dashboard.routes";
 import auditRoutes from "./modules/audit/audit.routes";
 import usersRoutes from "./modules/users/users.routes";
 import settingsRoutes from "./modules/settings/settings.routes";
-import stockLedgerRoutes from "./modules/ledger/stock.routes";
-import customerLedgerRoutes from "./modules/ledger/customer.routes";
-import cashBankLedgerRoutes from "./modules/ledger/cash-bank.routes";
-import reportsRoutes from "./modules/reports/reports.routes";
-import ordersRoutes from "./modules/orders/orders.routes";
 import notificationsRoutes from "./modules/notifications/notifications.routes";
-import assemblyRoutes from "./modules/assembly/assembly.routes";
-import qcRoutes from "./modules/qc/qc.routes";
-import stonesRoutes from "./modules/stones/stones.routes";
 import globalSearchRoutes from "./modules/search/global.routes";
-import dispatchRoutes from "./modules/dispatch/dispatch.routes";
 
 export const app = express();
 
@@ -59,20 +50,11 @@ app.use("/api/job-cards", requireAuth, jobcardsRoutes);
 app.use("/api/materials", requireAuth, materialsRoutes);
 app.use("/api/labour", requireAuth, labourRoutes);
 app.use("/api/estimates", requireAuth, estimatesRoutes);
-app.use("/api/dispatch", requireAuth, dispatchRoutes);
 app.use("/api/dashboard", requireAuth, dashboardRoutes);
 app.use("/api/audit-logs", requireAuth, auditRoutes);
 app.use("/api/users", requireAuth, usersRoutes);
 app.use("/api/settings", requireAuth, settingsRoutes);
-app.use("/api/ledger/stock", requireAuth, stockLedgerRoutes);
-app.use("/api/ledger/customers", requireAuth, customerLedgerRoutes);
-app.use("/api/ledger/cash-bank", requireAuth, cashBankLedgerRoutes);
-app.use("/api/reports", requireAuth, reportsRoutes);
-app.use("/api/orders", requireAuth, ordersRoutes);
 app.use("/api/notifications", requireAuth, notificationsRoutes);
-app.use("/api/assembly", requireAuth, assemblyRoutes);
-app.use("/api/qc", requireAuth, qcRoutes);
-app.use("/api/stones", requireAuth, stonesRoutes);
 app.use("/api/search", requireAuth, globalSearchRoutes);
 
 app.use(errorHandler);
