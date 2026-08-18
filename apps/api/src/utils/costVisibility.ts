@@ -15,7 +15,7 @@ const COST_FIELD_NAMES = new Set([
   "profitPct",
   "netAmount",
   "goldRateSnapshot24k",
-  "ratePerGram24k",
+  "ratePerGramPure",
   "defaultRatePerCarat",
   "recoveryAmount",
 ]);

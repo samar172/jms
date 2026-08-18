@@ -237,11 +237,11 @@ router.post(
           const { nextVoucherNumber } = await import("../../services/voucherNumber");
           const estimateNo = await nextVoucherNumber("EST");
           
-          const goldRateRow = await prisma.goldRate.findFirst({
+          const goldRateRow = await prisma.metalRate.findFirst({
             where: { effectiveFrom: { lte: new Date() } },
             orderBy: { effectiveFrom: "desc" },
           });
-          const goldRate24k = goldRateRow ? Number(goldRateRow.ratePerGram24k) : Number(roughEstimate.goldRateSnapshot24k);
+          const goldRate24k = goldRateRow ? Number(goldRateRow.ratePerGramPure) : Number(roughEstimate.goldRateSnapshot24k);
 
           let totalPulledLabour = 0;
           for (const jc of allJobCardsWithStages) {

@@ -144,7 +144,7 @@ router.post(
 
     const [category, purity] = await Promise.all([
       prisma.category.findUnique({ where: { id: body.categoryId } }),
-      prisma.karat.findUnique({ where: { id: body.purityId } }),
+      prisma.purityTier.findUnique({ where: { id: body.purityId } }),
     ]);
     if (!category) throw badRequest("Unknown category");
     if (!purity) throw badRequest("Unknown purity");

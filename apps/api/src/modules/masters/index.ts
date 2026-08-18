@@ -1,5 +1,5 @@
 import { Router } from "express";
-import goldRates from "./goldRates.routes";
+import metalRates from "./metalRates.routes";
 import karats from "./karats.routes";
 import stoneTypes from "./stoneTypes.routes";
 import categories from "./categories.routes";
@@ -8,7 +8,7 @@ import karigars from "./karigars.routes";
 
 const router = Router();
 
-router.use("/gold-rates", goldRates);
+router.use("/metal-rates", metalRates);
 router.use("/karats", karats);
 router.use("/stone-types", stoneTypes);
 router.use("/categories", categories);

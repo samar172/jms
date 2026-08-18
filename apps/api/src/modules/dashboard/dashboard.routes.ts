@@ -53,7 +53,7 @@ router.get(
       }),
       prisma.karigarLedgerEntry.findMany(),
       prisma.customerLedgerEntry.findMany(),
-      prisma.stockLedgerEntry.findMany({ where: { materialType: "GOLD" } }),
+      prisma.stockLedgerEntry.findMany({ where: { materialType: "SILVER" } }),
       prisma.wastageRecord.findMany({
         where: { exceptionStatus: "PENDING" },
         include: { jobStage: { include: { jobCard: { include: { product: true } } } } },
@@ -219,7 +219,7 @@ router.get(
 
     // Material KPIs
     const totalGoldHeld = materialIssues
-      .filter((m) => m.materialType === "GOLD")
+      .filter((m) => m.materialType === "SILVER")
       .reduce((sum, m) => sum + Number(m._sum.fineWeightG ?? 0), 0);
 
     // Wastage analysis

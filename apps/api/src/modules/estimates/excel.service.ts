@@ -1,11 +1,11 @@
 import ExcelJS from "exceljs";
-import { Estimate, EstimateLine, Product, Karat, StoneType, Customer } from "@prisma/client";
+import { Estimate, EstimateLine, Product, PurityTier, StoneType, Customer } from "@prisma/client";
 import { formatINR } from "@jms/shared";
 
 type EstimateWithRelations = Estimate & {
   product: Product;
   customer?: Customer | null;
-  lines: (EstimateLine & { purity?: Karat | null; stoneType?: StoneType | null })[];
+  lines: (EstimateLine & { purity?: PurityTier | null; stoneType?: StoneType | null })[];
 };
 
 export async function generateEstimateExcel(estimate: EstimateWithRelations): Promise<Buffer> {

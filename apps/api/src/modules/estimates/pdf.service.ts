@@ -1,5 +1,5 @@
 import { TDocumentDefinitions } from "pdfmake/interfaces";
-import { Estimate, EstimateLine, Product, Karat, StoneType, Customer } from "@prisma/client";
+import { Estimate, EstimateLine, Product, PurityTier, StoneType, Customer } from "@prisma/client";
 import { formatINR, round2 } from "@jms/shared";
 
 const fonts = {
@@ -30,7 +30,7 @@ const printer = new PdfPrinter(fonts);
 type EstimateWithRelations = Estimate & {
   product: Product;
   customer?: Customer | null;
-  lines: (EstimateLine & { purity?: Karat | null; stoneType?: StoneType | null })[];
+  lines: (EstimateLine & { purity?: PurityTier | null; stoneType?: StoneType | null })[];
 };
 
 export async function generateEstimatePdf(estimate: EstimateWithRelations): Promise<Buffer> {

@@ -237,7 +237,7 @@ export default function JobCardDetailPage({ params }: { params: Promise<{ id: st
 }
 
 function MaterialAccountabilityPanel({ jobCard }: { jobCard: JobCardDetail }) {
-  const goldIssued = jobCard.stages.reduce((sum, s) => sum + s.materialIssues.filter(i => i.materialType === "GOLD").reduce((acc, i) => acc + Number(i.grossWeightG || 0), 0), 0);
+  const goldIssued = jobCard.stages.reduce((sum, s) => sum + s.materialIssues.filter(i => i.materialType === "SILVER").reduce((acc, i) => acc + Number(i.grossWeightG || 0), 0), 0);
   const returned = jobCard.stages.reduce((sum, s) => sum + s.materialReceipts.reduce((acc, r) => acc + Number(r.unusedReturnedWeightG) + Number(r.stoneReturnedWeightG), 0), 0);
   const consumed = jobCard.stages.reduce((sum, s) => sum + s.materialReceipts.reduce((acc, r) => acc + Number(r.finishedPieceWeightG) - Number(r.nonGoldInPieceWeightG) - Number(r.waxWireWeightG) - Number(r.otherNonGoldWeightG) - Number(r.fillerWeightG), 0), 0);
   const scrap = jobCard.stages.reduce((sum, s) => sum + s.materialReceipts.reduce((acc, r) => acc + Number(r.goldScrapWeightG), 0), 0);

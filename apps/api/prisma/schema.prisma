@@ -91,9 +91,9 @@ model AuditLog {
 // Module 1 — Master Data
 // ---------------------------------------------------------------------------
 
-model GoldRate {
+model MetalRate {
   id            String   @id @default(cuid())
-  ratePerGram24k Decimal @db.Decimal(12, 2)
+  ratePerGramPure Decimal @db.Decimal(12, 2)
   effectiveFrom DateTime
   createdById   String?
   createdAt     DateTime @default(now())
@@ -101,7 +101,7 @@ model GoldRate {
   @@index([effectiveFrom])
 }
 
-model Karat {
+model PurityTier {
   id            String   @id @default(cuid())
   code          String   @unique // "24K", "22K", "18K", "14K"
   purityFactor  Decimal  @db.Decimal(6, 4) // e.g. 0.7500
@@ -294,7 +294,7 @@ model Product {
   subcategoryId  String?
   subcategory    Subcategory?  @relation(fields: [subcategoryId], references: [id])
   purityId       String
-  purity         Karat         @relation(fields: [purityId], references: [id])
+  purity         PurityTier         @relation(fields: [purityId], references: [id])
   grossWeightG   Decimal       @db.Decimal(10, 3)
   netWeightG     Decimal       @db.Decimal(10, 3)
   stoneWeightCt  Decimal?      @db.Decimal(10, 3)
@@ -451,7 +451,7 @@ model JobStage {
 // ---------------------------------------------------------------------------
 
 enum MaterialType {
-  GOLD
+  SILVER
   POLKI
   COLOURED_STONE
   FINDING
@@ -466,7 +466,7 @@ model MaterialIssue {
   karigar       Karigar      @relation(fields: [karigarId], references: [id])
   materialType  MaterialType
   purityId      String?
-  purity        Karat?       @relation(fields: [purityId], references: [id])
+  purity        PurityTier?       @relation(fields: [purityId], references: [id])
   stoneTypeId   String?
   stoneType     StoneType?   @relation(fields: [stoneTypeId], references: [id])
   grossWeightG  Decimal?     @db.Decimal(10, 3)
@@ -767,7 +767,7 @@ model EstimateLine {
   head          EstimateLineHead
   description   String?
   purityId      String?
-  purity        Karat?             @relation(fields: [purityId], references: [id])
+  purity        PurityTier?             @relation(fields: [purityId], references: [id])
   stoneTypeId   String?
   stoneType     StoneType?         @relation(fields: [stoneTypeId], references: [id])
   chargeTypeId  String?
@@ -814,7 +814,7 @@ model StockLedgerEntry {
   id           String         @id @default(cuid())
   materialType MaterialType
   purityId     String?
-  purity       Karat?         @relation(fields: [purityId], references: [id])
+  purity       PurityTier?         @relation(fields: [purityId], references: [id])
   stoneTypeId  String?
   stoneType    StoneType?     @relation(fields: [stoneTypeId], references: [id])
   direction    StockDirection

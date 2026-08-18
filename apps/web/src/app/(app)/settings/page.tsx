@@ -15,16 +15,16 @@ import { apiFetch, ApiError } from "@/lib/api";
 import { formatINR, formatDate } from "@/lib/format";
 import { useAuth } from "@/lib/auth-context";
 
-interface GoldRate {
+interface MetalRate {
   id: string;
-  ratePerGram24k: string;
+  ratePerGramPure: string;
   effectiveFrom: string;
 }
 
 export default function SettingsPage() {
   const { user } = useAuth();
   const canManage = user?.role === "SUPER_ADMIN";
-  const { data: rates, mutate } = useApi<GoldRate[]>("/api/masters/gold-rates");
+  const { data: rates, mutate } = useApi<MetalRate[]>("/api/masters/metal-rates");
   const { data: karats, mutate: mutateKarats } = useKarats();
   const { data: stages, mutate: mutateStages } = useProcessStages();
   const { data: stoneTypes, mutate: mutateStoneTypes } = useStoneTypes();
@@ -50,9 +50,9 @@ export default function SettingsPage() {
     e.preventDefault();
     setError(null);
     try {
-      await apiFetch("/api/masters/gold-rates", {
+      await apiFetch("/api/masters/metal-rates", {
         method: "POST",
-        body: { ratePerGram24k: Number(rate), effectiveFrom: new Date().toISOString() },
+        body: { ratePerGramPure: Number(rate), effectiveFrom: new Date().toISOString() },
       });
       setRate("");
       await mutate();
@@ -75,7 +75,7 @@ export default function SettingsPage() {
 
       <div className="space-y-3.5">
         <section className="console-panel p-3.5">
-          <div className="text-[11px] font-bold uppercase text-ink2 tracking-wide mb-2.5">Gold Rate (24K, ₹/gram)</div>
+          <div className="text-[11px] font-bold uppercase text-ink2 tracking-wide mb-2.5">Silver Rate (24K, ₹/gram)</div>
           <form onSubmit={addRate} className="flex items-end gap-2 mb-3">
             <div>
               <label className="console-field-label">New rate, effective now</label>
@@ -95,7 +95,7 @@ export default function SettingsPage() {
               <tbody>
                 {rates?.slice(0, 8).map((r) => (
                   <tr key={r.id}>
-                    <td className="mono">{formatINR(Number(r.ratePerGram24k))}</td>
+                    <td className="mono">{formatINR(Number(r.ratePerGramPure))}</td>
                     <td className="text-ink2">{formatDate(r.effectiveFrom)}</td>
                   </tr>
                 ))}
@@ -198,7 +198,7 @@ export default function SettingsPage() {
         </section>
 
         <section className="console-panel p-3.5">
-          <div className="text-[11px] font-bold uppercase text-ink2 tracking-wide mb-1">Store Gold/Stone Stock Ledger</div>
+          <div className="text-[11px] font-bold uppercase text-ink2 tracking-wide mb-1">Store Silver/Stone Stock Ledger</div>
           <p className="text-xs text-ink2 mb-3">
             Tracks raw material sitting in the store itself (purchases, issues to karigars, returns),
             separate from what each karigar is holding. Off by default — turn it on only if you want

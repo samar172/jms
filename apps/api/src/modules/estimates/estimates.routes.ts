@@ -47,7 +47,7 @@ async function resolveLineRate(
   if (line.rate !== undefined) return line.rate;
 
   if (line.head === "GOLD" && line.purityId) {
-    const purity = await prisma.karat.findUnique({ where: { id: line.purityId } });
+    const purity = await prisma.purityTier.findUnique({ where: { id: line.purityId } });
     if (!purity) throw badRequest("Unknown purity on gold line");
     return derivedGoldRate(goldRate24k, Number(purity.purityFactor));
   }
@@ -75,12 +75,12 @@ router.post(
   asyncHandler(async (req, res) => {
     const body = createSchema.parse(req.body);
 
-    const goldRateRow = await prisma.goldRate.findFirst({
+    const goldRateRow = await prisma.metalRate.findFirst({
       where: { effectiveFrom: { lte: body.estimateDate } },
       orderBy: { effectiveFrom: "desc" },
     });
     if (!goldRateRow) throw badRequest("No gold rate configured on or before the estimate date");
-    const goldRate24k = Number(goldRateRow.ratePerGram24k);
+    const goldRate24k = Number(goldRateRow.ratePerGramPure);
 
     const latestEstimate = await prisma.estimate.findFirst({
       where: { productId: body.productId, type: body.type, customerId: body.customerId ?? null },
@@ -377,17 +377,17 @@ router.post(
     if (!estimate) throw notFound("Estimate not found");
     assertEditable(estimate.status);
 
-    const goldRateRow = await prisma.goldRate.findFirst({
+    const goldRateRow = await prisma.metalRate.findFirst({
       where: { effectiveFrom: { lte: new Date() } },
       orderBy: { effectiveFrom: "desc" },
     });
     if (!goldRateRow) throw badRequest("No gold rate configured on or before today");
-    const goldRate24k = Number(goldRateRow.ratePerGram24k);
+    const goldRate24k = Number(goldRateRow.ratePerGramPure);
 
     const goldLines = estimate.lines.filter((l) => l.head === "GOLD" && l.purityId);
     const purityIds = [...new Set(goldLines.map((l) => l.purityId!))];
     const purities = purityIds.length
-      ? await prisma.karat.findMany({ where: { id: { in: purityIds } } })
+      ? await prisma.purityTier.findMany({ where: { id: { in: purityIds } } })
       : [];
     const purityFactorById = new Map(purities.map((p) => [p.id, Number(p.purityFactor)]));
 
@@ -856,12 +856,12 @@ router.post(
     if (source.type === "FINAL_COSTING") throw badRequest("This estimate is already a Final Costing");
 
     const estimateDate = new Date();
-    const goldRateRow = await prisma.goldRate.findFirst({
+    const goldRateRow = await prisma.metalRate.findFirst({
       where: { effectiveFrom: { lte: estimateDate } },
       orderBy: { effectiveFrom: "desc" },
     });
     if (!goldRateRow) throw badRequest("No gold rate configured on or before today");
-    const goldRate24k = Number(goldRateRow.ratePerGram24k);
+    const goldRate24k = Number(goldRateRow.ratePerGramPure);
 
     const priorCount = await prisma.estimate.count({
       where: { productId: source.productId, type: "FINAL_COSTING", customerId: source.customerId ?? null },
@@ -872,7 +872,7 @@ router.post(
     // negotiated rate rather than being silently overwritten.
     const purityIds = [...new Set(source.lines.map((l) => l.purityId).filter((id): id is string => !!id))];
     const purities = purityIds.length
-      ? await prisma.karat.findMany({ where: { id: { in: purityIds } } })
+      ? await prisma.purityTier.findMany({ where: { id: { in: purityIds } } })
       : [];
     const purityFactorById = new Map(purities.map((p) => [p.id, Number(p.purityFactor)]));
 

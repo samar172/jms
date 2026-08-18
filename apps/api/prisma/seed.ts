@@ -31,7 +31,7 @@ async function main() {
       { code: "22K", purityFactor: 0.9166 },
       { code: "18K", purityFactor: 0.75 },
       { code: "14K", purityFactor: 0.585 },
-    ].map((k) => prisma.karat.upsert({ where: { code: k.code }, create: k, update: k }))
+    ].map((k) => prisma.purityTier.upsert({ where: { code: k.code }, create: k, update: k }))
   );
   const karat18k = karats.find((k) => k.code === "18K")!;
 
@@ -94,15 +94,15 @@ async function main() {
   );
   const polishingStage = stages.find((s) => s.name === "Polishing")!;
 
-  await prisma.goldRate.upsert({
+  await prisma.metalRate.upsert({
     where: { id: "seed-gold-rate" },
     create: {
       id: "seed-gold-rate",
-      ratePerGram24k: 9200,
+      ratePerGramPure: 9200,
       effectiveFrom: new Date("2026-07-08"),
       createdById: admin.id,
     },
-    update: { ratePerGram24k: 9200 },
+    update: { ratePerGramPure: 9200 },
   });
 
   let suresh = await prisma.karigar.findFirst({ where: { code: "KR-001" } });
@@ -199,7 +199,7 @@ async function main() {
         issueNo: "MI-000001",
         jobStageId: polishStage.id,
         karigarId: suresh.id,
-        materialType: "GOLD",
+        materialType: "SILVER",
         purityId: karat18k.id,
         grossWeightG: 26.0,
         fineWeightG: 26.0 * 0.75,

@@ -33,7 +33,7 @@ export interface LabourEntry {
 }
 export interface MaterialIssue {
   id: string;
-  materialType: "GOLD" | "POLKI" | "COLOURED_STONE" | "FINDING";
+  materialType: "SILVER" | "POLKI" | "COLOURED_STONE" | "FINDING";
   fineWeightG: string;
   grossWeightG: string | null;
   caratWeight: string | null;
@@ -179,10 +179,10 @@ export function JobStageCard({
                 {stage.materialIssues.map((mi) => (
                   <div key={mi.id} className="flex items-center gap-2 text-[11px] bg-slate-50 rounded px-2 py-1">
                     <span className="text-slate-700 flex-1 truncate">
-                      {mi.materialType === "GOLD" ? `Gold · ${mi.purity?.code ?? ""}` : mi.materialType === "FINDING" ? "Finding" : `${mi.materialType} · ${mi.stoneType?.name ?? ""}`}
+                      {mi.materialType === "SILVER" ? `Silver · ${mi.purity?.code ?? ""}` : mi.materialType === "FINDING" ? "Finding" : `${mi.materialType} · ${mi.stoneType?.name ?? ""}`}
                     </span>
                     <span className="mono text-slate-500">
-                      {mi.materialType === "GOLD" ? `${formatWeight(mi.fineWeightG)}g fine` : mi.materialType === "FINDING" ? `${formatWeight(mi.grossWeightG ?? "0")}g` : `${formatCarat(mi.caratWeight ?? "0")} ct`}
+                      {mi.materialType === "SILVER" ? `${formatWeight(mi.fineWeightG)}g fine` : mi.materialType === "FINDING" ? `${formatWeight(mi.grossWeightG ?? "0")}g` : `${formatCarat(mi.caratWeight ?? "0")} ct`}
                     </span>
                   </div>
                 ))}
@@ -249,7 +249,7 @@ export function JobStageCard({
 }
 
 const ISSUE_MATERIAL_TYPES = [
-  { value: "GOLD", label: "Gold / Metal" },
+  { value: "SILVER", label: "Silver / Metal" },
   { value: "POLKI", label: "Polki" },
   { value: "COLOURED_STONE", label: "Coloured Stone / Diamond" },
   { value: "FINDING", label: "Finding (clasp, hook, etc.)" },
@@ -258,7 +258,7 @@ const ISSUE_MATERIAL_TYPES = [
 function IssueForm({ stageId, karigarId, onDone }: { stageId: string; karigarId: string; onDone: () => void }) {
   const { data: karats } = useApi<{ id: string; code: string }[]>("/api/masters/karats");
   const { data: stoneTypes } = useStoneTypes();
-  const [materialType, setMaterialType] = useState<(typeof ISSUE_MATERIAL_TYPES)[number]["value"]>("GOLD");
+  const [materialType, setMaterialType] = useState<(typeof ISSUE_MATERIAL_TYPES)[number]["value"]>("SILVER");
   const [purityId, setPurityId] = useState("");
   const [grossWeightG, setGrossWeightG] = useState("");
   const [stoneTypeId, setStoneTypeId] = useState("");
@@ -285,9 +285,9 @@ function IssueForm({ stageId, karigarId, onDone }: { stageId: string; karigarId:
           jobStageId: stageId,
           karigarId,
           materialType,
-          purityId: materialType === "GOLD" ? purityId : undefined,
+          purityId: materialType === "SILVER" ? purityId : undefined,
           grossWeightG:
-            materialType === "GOLD" || materialType === "FINDING" ? Number(grossWeightG) || undefined : undefined,
+            materialType === "SILVER" || materialType === "FINDING" ? Number(grossWeightG) || undefined : undefined,
           stoneTypeId: materialType === "POLKI" || materialType === "COLOURED_STONE" ? stoneTypeId : undefined,
           caratWeight:
             materialType === "POLKI" || materialType === "COLOURED_STONE" ? Number(caratWeight) || undefined : undefined,
@@ -319,7 +319,7 @@ function IssueForm({ stageId, karigarId, onDone }: { stageId: string; karigarId:
         </select>
       </div>
 
-      {materialType === "GOLD" && (
+      {materialType === "SILVER" && (
         <>
           <div>
             <label className="console-field-label">Purity</label>

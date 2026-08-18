@@ -12,7 +12,7 @@ router.get(
   "/",
   requireRole("SUPER_ADMIN", "MANAGER", "COSTING", "AUDITOR"),
   asyncHandler(async (_req, res) => {
-    res.json(await prisma.karat.findMany({ orderBy: { purityFactor: "desc" } }));
+    res.json(await prisma.purityTier.findMany({ orderBy: { purityFactor: "desc" } }));
   })
 );
 
@@ -26,11 +26,11 @@ router.post(
   requireRole("SUPER_ADMIN"),
   asyncHandler(async (req, res) => {
     const body = upsertSchema.parse(req.body);
-    const karat = await prisma.karat.create({ data: body });
+    const karat = await prisma.purityTier.create({ data: body });
     await recordAudit(prisma, {
       userId: req.user!.id,
       action: "CREATE",
-      entityType: "Karat",
+      entityType: "PurityTier",
       entityId: karat.id,
       after: karat,
       ipAddress: req.ip ?? null,
@@ -43,14 +43,14 @@ router.patch(
   "/:id",
   requireRole("SUPER_ADMIN"),
   asyncHandler(async (req, res) => {
-    const before = await prisma.karat.findUnique({ where: { id: req.params.id } });
-    if (!before) throw notFound("Karat not found");
+    const before = await prisma.purityTier.findUnique({ where: { id: req.params.id } });
+    if (!before) throw notFound("PurityTier not found");
     const body = upsertSchema.partial().extend({ isActive: z.boolean().optional() }).parse(req.body);
-    const karat = await prisma.karat.update({ where: { id: req.params.id }, data: body });
+    const karat = await prisma.purityTier.update({ where: { id: req.params.id }, data: body });
     await recordAudit(prisma, {
       userId: req.user!.id,
       action: "UPDATE",
-      entityType: "Karat",
+      entityType: "PurityTier",
       entityId: karat.id,
       before,
       after: karat,

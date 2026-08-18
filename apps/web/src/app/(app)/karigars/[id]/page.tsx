@@ -103,7 +103,7 @@ export default function KarigarDetailPage({ params }: { params: Promise<{ id: st
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-3.5">
-        <Kpi icon={Gem} label="Gold Held" value={formatWeight(summary?.goldHeldG)} />
+        <Kpi icon={Gem} label="Silver Held" value={formatWeight(summary?.goldHeldG)} />
         {showCost && (
           <>
             <Kpi icon={Wallet} label="Labour Earned (MTD)" value={formatINR(summary?.labourEarnedThisMonth ?? 0)} />
@@ -149,8 +149,8 @@ export default function KarigarDetailPage({ params }: { params: Promise<{ id: st
               <tr>
                 <th>Date</th>
                 <th>Type</th>
-                <th className="num">Gold (g)</th>
-                <th className="num">Gold Bal (g)</th>
+                <th className="num">Silver (g)</th>
+                <th className="num">Silver Bal (g)</th>
                 {showCost && <th className="num">Amount</th>}
                 {showCost && <th className="num">Payable Bal</th>}
                 <th>Note</th>

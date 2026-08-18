@@ -9,7 +9,7 @@ import { badRequest } from "../../utils/httpError";
  * that gold was never melted/alloyed, so the piece's karat doesn't apply. */
 export async function issuedGoldPurityFactor(jobStageId: string, fallbackPurityFactor: number) {
   const goldIssues = await prisma.materialIssue.findMany({
-    where: { jobStageId, materialType: "GOLD", isReversed: false },
+    where: { jobStageId, materialType: "SILVER", isReversed: false },
   });
   const fineIssuedG = goldIssues.reduce((sum, i) => sum + Number(i.fineWeightG), 0);
   const grossIssuedG = goldIssues.reduce((sum, i) => sum + Number(i.grossWeightG ?? 0), 0);
@@ -145,7 +145,7 @@ export async function recomputeStageWastage(jobStageId: string) {
 
   const purityFactor = Number(stage.jobCard.product.purity.purityFactor);
 
-  const goldIssues = stage.materialIssues.filter((i) => i.materialType === "GOLD" && !i.isReversed);
+  const goldIssues = stage.materialIssues.filter((i) => i.materialType === "SILVER" && !i.isReversed);
   const fineIssuedG = round3(goldIssues.reduce((sum, i) => sum + Number(i.fineWeightG), 0));
   const grossIssuedG = round3(goldIssues.reduce((sum, i) => sum + Number(i.grossWeightG ?? 0), 0));
   const issuedPurityFactor = grossIssuedG > 0 ? fineIssuedG / grossIssuedG : purityFactor;

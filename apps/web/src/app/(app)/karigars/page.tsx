@@ -60,7 +60,7 @@ export default function KarigarsPage() {
                 <th>Karigar</th>
                 <th>Type</th>
                 <th>Specialization</th>
-                <th className="num">Gold Held</th>
+                <th className="num">Silver Held</th>
                 {showCost && <th className="num">Labour Earned (MTD)</th>}
                 {showCost && <th className="num">Net Payable</th>}
               </tr>

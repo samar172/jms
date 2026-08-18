@@ -13,7 +13,7 @@ router.get(
   "/",
   requireRole("SUPER_ADMIN", "MANAGER", "COSTING", "AUDITOR"),
   asyncHandler(async (_req, res) => {
-    const rates = await prisma.goldRate.findMany({ orderBy: { effectiveFrom: "desc" } });
+    const rates = await prisma.metalRate.findMany({ orderBy: { effectiveFrom: "desc" } });
     res.json(rates);
   })
 );
@@ -22,7 +22,7 @@ router.get(
   "/current",
   requireRole("SUPER_ADMIN", "MANAGER", "COSTING", "AUDITOR"),
   asyncHandler(async (_req, res) => {
-    const rate = await prisma.goldRate.findFirst({
+    const rate = await prisma.metalRate.findFirst({
       where: { effectiveFrom: { lte: new Date() } },
       orderBy: { effectiveFrom: "desc" },
     });
@@ -31,7 +31,7 @@ router.get(
 );
 
 const createSchema = z.object({
-  ratePerGram24k: z.number().positive(),
+  ratePerGramPure: z.number().positive(),
   effectiveFrom: z.coerce.date(),
 });
 
@@ -40,13 +40,13 @@ router.post(
   requireRole("SUPER_ADMIN"),
   asyncHandler(async (req, res) => {
     const body = createSchema.parse(req.body);
-    const rate = await prisma.goldRate.create({
+    const rate = await prisma.metalRate.create({
       data: { ...body, createdById: req.user!.id },
     });
     await recordAudit(prisma, {
       userId: req.user!.id,
       action: "CREATE",
-      entityType: "GoldRate",
+      entityType: "MetalRate",
       entityId: rate.id,
       after: rate,
       ipAddress: req.ip ?? null,

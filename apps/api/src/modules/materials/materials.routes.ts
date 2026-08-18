@@ -17,7 +17,7 @@ const router = Router();
 const issueSchema = z.object({
   jobStageId: z.string().min(1),
   karigarId: z.string().min(1),
-  materialType: z.enum(["GOLD", "POLKI", "COLOURED_STONE", "FINDING"]),
+  materialType: z.enum(["SILVER", "POLKI", "COLOURED_STONE", "FINDING"]),
   purityId: z.string().optional(),
   stoneTypeId: z.string().optional(),
   grossWeightG: z.number().positive().optional(),
@@ -32,11 +32,11 @@ router.post(
     const body = issueSchema.parse(req.body);
 
     let fineWeightG = 0;
-    if (body.materialType === "GOLD") {
+    if (body.materialType === "SILVER") {
       if (!body.purityId || !body.grossWeightG) {
         throw badRequest("Gold issues require purityId and grossWeightG");
       }
-      const purity = await prisma.karat.findUnique({ where: { id: body.purityId } });
+      const purity = await prisma.purityTier.findUnique({ where: { id: body.purityId } });
       if (!purity) throw badRequest("Unknown purity");
       fineWeightG = fineWeight(body.grossWeightG, Number(purity.purityFactor));
     } else if (body.grossWeightG) {
@@ -67,7 +67,7 @@ router.post(
       }),
     ]);
 
-    if (body.materialType === "GOLD") {
+    if (body.materialType === "SILVER") {
       await prisma.karigarLedgerEntry.create({
         data: {
           karigarId: body.karigarId,
@@ -89,7 +89,7 @@ router.post(
           purityId: body.purityId,
           stoneTypeId: body.stoneTypeId,
           direction: "OUT",
-          quantity: body.materialType === "GOLD" ? Number(body.grossWeightG) : Number(body.caratWeight ?? body.grossWeightG ?? 0),
+          quantity: body.materialType === "SILVER" ? Number(body.grossWeightG) : Number(body.caratWeight ?? body.grossWeightG ?? 0),
           referenceType: "MaterialIssue",
           referenceId: issue.id,
           note: `Issued to karigar — ${issueNo}`,
@@ -222,7 +222,7 @@ router.post(
     const stageData = await prisma.jobStage.findUnique({
       where: { id: body.jobStageId },
       include: {
-        materialIssues: { where: { materialType: "GOLD", isReversed: false } },
+        materialIssues: { where: { materialType: "SILVER", isReversed: false } },
         jobCard: { include: { product: { include: { purity: true } } } },
         processStage: true,
       },
@@ -352,7 +352,7 @@ router.post(
         stockEntries.push(
           prisma.stockLedgerEntry.create({
             data: {
-              materialType: "GOLD", purityId,
+              materialType: "SILVER", purityId,
               direction: "IN", quantity: body.unusedReturnedWeightG,
               referenceType: "MaterialReceipt", referenceId: receipt.id,
               note: `Unused gold returned — ${receiptNo}`, createdById: req.user!.id,
@@ -364,7 +364,7 @@ router.post(
         stockEntries.push(
           prisma.stockLedgerEntry.create({
             data: {
-              materialType: "GOLD", purityId,
+              materialType: "SILVER", purityId,
               direction: "IN", quantity: body.goldScrapWeightG,
               referenceType: "MaterialReceipt", referenceId: receipt.id,
               note: `Gold scrap/sprue recovered — ${receiptNo}`, createdById: req.user!.id,
@@ -376,7 +376,7 @@ router.post(
         stockEntries.push(
           prisma.stockLedgerEntry.create({
             data: {
-              materialType: "GOLD", purityId,
+              materialType: "SILVER", purityId,
               direction: "IN", quantity: body.dustWeightG,
               referenceType: "MaterialReceipt", referenceId: receipt.id,
               note: `Gold dust/sweepings — ${receiptNo}`, createdById: req.user!.id,
@@ -516,7 +516,7 @@ router.get(
           designName: s.jobCard.product.designName,
           processStageName: s.processStage.name,
           karigar: s.karigar,
-          materialType: s.materialIssues[0]?.materialType ?? "GOLD",
+          materialType: s.materialIssues[0]?.materialType ?? "SILVER",
           issuedG: round3(fineIssuedG),
           returnedG: w ? round3(Number(w.finePieceG) + Number(w.fineDustG) + Number(w.fineReturnedG)) : null,
           consumedG: w ? Number(w.netWastageG) : null,
@@ -618,7 +618,7 @@ router.post(
       const stage = await prisma.jobStage.findUnique({
         where: { id: req.params.jobStageId },
         include: {
-          materialIssues: { where: { materialType: "GOLD", isReversed: false } },
+          materialIssues: { where: { materialType: "SILVER", isReversed: false } },
           jobCard: { include: { product: { include: { purity: true } } } },
         },
       });
@@ -733,11 +733,11 @@ router.post(
     });
     // FR-5.08: recovered pure gold is credited back to 24K stock.
     if (await isStockLedgerEnabled()) {
-      const karat24k = await prisma.karat.findFirst({ where: { code: "24K" } });
+      const karat24k = await prisma.purityTier.findFirst({ where: { code: "24K" } });
       if (karat24k) {
         await prisma.stockLedgerEntry.create({
           data: {
-            materialType: "GOLD",
+            materialType: "SILVER",
             purityId: karat24k.id,
             direction: "IN",
             quantity: recoveredPureGoldG,
