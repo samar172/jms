@@ -24,6 +24,7 @@ import settingsRoutes from "./modules/settings/settings.routes";
 import notificationsRoutes from "./modules/notifications/notifications.routes";
 import globalSearchRoutes from "./modules/search/global.routes";
 import productionRoutes from "./modules/production/production.routes";
+import productionActionRoutes from "./modules/production/actions.routes";
 
 export const app = express();
 
@@ -58,5 +59,6 @@ app.use("/api/settings", requireAuth, settingsRoutes);
 app.use("/api/notifications", requireAuth, notificationsRoutes);
 app.use("/api/search", requireAuth, globalSearchRoutes);
 app.use("/api/production", requireAuth, productionRoutes);
+app.use("/api/production", requireAuth, productionActionRoutes);
 
 app.use(errorHandler);
