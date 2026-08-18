@@ -62,6 +62,7 @@ model User {
   notifications    Notification[]
   notificationReads NotificationRead[]
   costingEdits     CostingEditLog[] @relation("CostingEditBy")
+  createdProdJobCards ProdJobCard[] @relation("ProdJobCardCreatedBy")
 }
 
 enum AuditAction {
@@ -104,13 +105,21 @@ model MetalRate {
 model PurityTier {
   id            String   @id @default(cuid())
   code          String   @unique // "24K", "22K", "18K", "14K"
-  purityFactor  Decimal  @db.Decimal(6, 4) // e.g. 0.7500
+  purityFactor  Decimal  @db.Decimal(6, 4) // e.g. 0.7500 (legacy)
+  percent       Decimal  @db.Decimal(6, 3) @default(0) // 0–100 (Chowker spec §2.1)
   isActive      Boolean  @default(true)
 
   products      Product[]
   materialIssues MaterialIssue[]
   estimateLines EstimateLine[]
   stockLedgerEntries StockLedgerEntry[]
+
+  // Chowker (silver) domain relations
+  prodJobCards        ProdJobCard[]
+  prodIssuesPurity    ProdMaterialIssue[] @relation("ProdIssuePurity")
+  prodIssuesReturned  ProdMaterialIssue[] @relation("ProdIssueReturnedPurity")
+  prodLabour          ProdLabourEntry[]
+  bulkStockIssues     BulkStockIssue[]
 }
 
 enum StoneCategory {
@@ -191,6 +200,11 @@ model Karigar {
   isActive        Boolean        @default(true)
   createdAt       DateTime       @default(now())
 
+  // Chowker spec §2.2 — per-karigar default rates (prefill, never lock the form)
+  defaultWastagePct Decimal?     @db.Decimal(6, 3)  // Casting
+  defaultRatePerGm  Decimal?     @db.Decimal(12, 2) // Meenakari
+  defaultFlatLabour Decimal?     @db.Decimal(12, 2) // Jadai / Setting / Fitting
+
   user            User?
   stageRates      KarigarStageRate[]
   jobStages       JobStage[]
@@ -201,6 +215,10 @@ model Karigar {
   assembliesAssembled Assembly[]
   stonesHeld      Stone[]
   stoneMovements  StoneMovement[]
+
+  // Chowker (silver) domain relations
+  prodAssignments ProdAssignment[]
+  bulkStockIssues BulkStockIssue[]
 
   @@index([isActive])
 }
@@ -321,10 +339,13 @@ model Product {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
+  designCode     String?       // Chowker spec §2.3 — freeform SKU, e.g. "SLV-NK-142"
+
   images         ProductImage[]
   jobCards       JobCard[]
   estimates      Estimate[]
   orders         Order[]
+  prodJobCards   ProdJobCard[]
 
   @@index([status])
   @@index([categoryId, purityId])
@@ -1178,3 +1199,185 @@ model CashBankLedgerEntry {
   @@index([entryType, createdAt])
 }
 
+
+// ===========================================================================
+// CHOWKER JMS — Silver costing domain (client-approved mockup, spec §2/§11)
+// Additive to the legacy gold models; the gold domain is retired at cutover,
+// after which these "Prod*" models are renamed to their clean spec names.
+// ===========================================================================
+
+enum ProdStageName {
+  Casting
+  Meenakari
+  Jadai
+  Setting
+  Fitting
+}
+enum ProdJobStatus {
+  Draft
+  InProduction
+  OnHold
+  Reconciliation
+  Closed
+}
+enum ProdStageStatus {
+  Pending
+  InProgress
+  Approved
+}
+enum ProdIssueStatus {
+  Issued
+  Reconciled
+}
+enum ProdLabourBasis {
+  WastagePct
+  PerGram
+  PerStone
+  Flat
+}
+
+// Per-karigar running raw-silver float (spec §2.10) — NOT tied to any job card.
+model BulkStockIssue {
+  id          String   @id @default(cuid())
+  karigarId   String
+  karigar     Karigar  @relation(fields: [karigarId], references: [id])
+  purityId    String
+  purity      PurityTier @relation(fields: [purityId], references: [id])
+  weightGrams Decimal  @db.Decimal(12, 3)
+  issueDate   DateTime
+  note        String   @default("")
+  createdAt   DateTime @default(now())
+
+  @@index([karigarId])
+}
+
+model ProdJobCard {
+  id                String        @id @default(cuid())
+  jobNo             String        @unique // JC-2026-#####
+  itemMasterId      String
+  itemMaster        Product       @relation(fields: [itemMasterId], references: [id])
+  targetPurityId    String
+  targetPurity      PurityTier    @relation(fields: [targetPurityId], references: [id])
+  status            ProdJobStatus @default(InProduction)
+  pieceCount        Int?
+  dueDate           DateTime?
+  closedAt          DateTime?
+  notes             String        @default("")
+  holdReason        String?
+  manualSilverValue Decimal?      @db.Decimal(14, 2)
+  todaysSilverRate  Decimal?      @db.Decimal(12, 2)
+  createdById       String
+  createdBy         User          @relation("ProdJobCardCreatedBy", fields: [createdById], references: [id])
+  createdAt         DateTime      @default(now())
+
+  stages    ProdStage[]
+  activity  ProdActivity[]
+  reversals ProdReversal[]
+
+  @@index([status])
+}
+
+model ProdStage {
+  id           String          @id @default(cuid())
+  jobCardId    String
+  jobCard      ProdJobCard     @relation(fields: [jobCardId], references: [id], onDelete: Cascade)
+  stageName    ProdStageName
+  status       ProdStageStatus @default(Pending)
+  sequenceOrder Int
+  approvedDate DateTime?
+
+  assignments ProdAssignment[]
+
+  @@unique([jobCardId, stageName])
+  @@index([jobCardId])
+}
+
+model ProdAssignment {
+  id       String    @id @default(cuid())
+  stageId  String
+  stage    ProdStage @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  karigarId String
+  karigar  Karigar   @relation(fields: [karigarId], references: [id])
+  createdAt DateTime @default(now())
+
+  issues ProdMaterialIssue[]
+  stones ProdStoneEntry[]
+  labour ProdLabourEntry[]
+
+  @@index([stageId])
+}
+
+model ProdMaterialIssue {
+  id               String          @id @default(cuid())
+  assignmentId     String
+  assignment       ProdAssignment  @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  purityId         String?
+  purity           PurityTier?     @relation("ProdIssuePurity", fields: [purityId], references: [id])
+  issuedWeight     Decimal?        @db.Decimal(12, 3)
+  issueDate        DateTime
+  status           ProdIssueStatus @default(Issued)
+  returnedWeight   Decimal?        @db.Decimal(12, 3)
+  returnedPurityId String?
+  returnedPurity   PurityTier?     @relation("ProdIssueReturnedPurity", fields: [returnedPurityId], references: [id])
+  dustWeight       Decimal?        @db.Decimal(12, 3)
+  returnDate       DateTime?
+  fromBulkStock    Boolean         @default(false)
+  pieceCount       Int?
+  wastagePercent   Decimal?        @db.Decimal(6, 3)
+  wastageWeight    Decimal?        @db.Decimal(12, 3)
+  labourEntryId    String?
+
+  @@index([assignmentId])
+}
+
+model ProdStoneEntry {
+  id            String         @id @default(cuid())
+  assignmentId  String
+  assignment    ProdAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  type          String
+  qtyIssued     String         @default("")
+  valueIssued   Decimal        @db.Decimal(14, 2) @default(0)
+  piecesCount   Int?
+  carat         Decimal?       @db.Decimal(12, 3)
+  ratePerCarat  Decimal?       @db.Decimal(12, 2)
+  qtyReturned   String         @default("")
+  valueReturned Decimal        @db.Decimal(14, 2) @default(0)
+  caratReturned Decimal?       @db.Decimal(12, 3)
+
+  @@index([assignmentId])
+}
+
+model ProdLabourEntry {
+  id           String          @id @default(cuid())
+  assignmentId String
+  assignment   ProdAssignment  @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  basis        ProdLabourBasis
+  qty          Decimal         @db.Decimal(12, 3) @default(0)
+  rate         Decimal         @db.Decimal(12, 2) @default(0)
+  amount       Decimal         @db.Decimal(14, 2) @default(0)
+  note         String          @default("")
+  purityId     String?
+  purity       PurityTier?     @relation(fields: [purityId], references: [id])
+
+  @@index([assignmentId])
+}
+
+model ProdActivity {
+  id        String      @id @default(cuid())
+  jobCardId String
+  jobCard   ProdJobCard @relation(fields: [jobCardId], references: [id], onDelete: Cascade)
+  date      DateTime    @default(now())
+  text      String
+
+  @@index([jobCardId])
+}
+
+model ProdReversal {
+  id                   String      @id @default(cuid())
+  jobCardId            String
+  jobCard              ProdJobCard @relation(fields: [jobCardId], references: [id], onDelete: Cascade)
+  date                 DateTime    @default(now())
+  reason               String
+  approvedBy           String
+  reversedFromClosedAt DateTime?
+}
