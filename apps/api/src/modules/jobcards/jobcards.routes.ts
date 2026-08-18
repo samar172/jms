@@ -6,7 +6,6 @@ import { asyncHandler } from "../../utils/asyncHandler";
 import { recordAudit } from "../../services/audit";
 import { badRequest, notFound } from "../../utils/httpError";
 import { nextVoucherNumber } from "../../services/voucherNumber";
-import { recalculateEstimateTotals } from "../estimates/estimates.service";
 
 const router = Router();
 
@@ -65,12 +64,15 @@ router.get(
 );
 
 // --- Create (FR-3.01, FR-3.02) -----------------------------------------------
+// A job card is created directly against an Item Master design (the product) —
+// there is no customer/estimate/order in the costing flow (spec §2.4). The same
+// design can have many job cards (repeat batches). If no processStageIds are
+// supplied, all active process stages (the fixed production route) are used in
+// sequence order.
 const createSchema = z.object({
   productId: z.string().min(1),
-  estimateId: z.string().min(1),
-  customerId: z.string().optional(),
   targetDeliveryDate: z.coerce.date().optional(),
-  processStageIds: z.array(z.string().min(1)).min(1),
+  processStageIds: z.array(z.string().min(1)).min(1).optional(),
 });
 
 router.post(
@@ -80,31 +82,28 @@ router.post(
     const body = createSchema.parse(req.body);
     const product = await prisma.product.findUnique({ where: { id: body.productId } });
     if (!product) throw badRequest("Unknown product");
-    const estimate = await prisma.estimate.findUnique({ where: { id: body.estimateId } });
-    if (!estimate) throw badRequest("Unknown estimate");
 
-    // Production runs are scoped to the Estimate (the specific customer's
-    // quotation/costing), not the Product (the reusable design) — the same
-    // design can be in production for several customers at once, each with
-    // their own job card, karigars and labour. Only block a duplicate job
-    // card on the SAME estimate.
-    const activeJobCard = await prisma.jobCard.findFirst({
-      where: { estimateId: body.estimateId, status: { not: "CLOSED" } },
-    });
-    if (activeJobCard) {
-      throw badRequest(`This estimate already has an active job card in production.`);
+    // Default to the full production route (all active stages, in order) when
+    // the caller doesn't specify a subset.
+    let stageIds = body.processStageIds;
+    if (!stageIds || stageIds.length === 0) {
+      const stages = await prisma.processStage.findMany({
+        where: { isActive: true },
+        orderBy: { sequenceOrder: "asc" },
+        select: { id: true },
+      });
+      stageIds = stages.map((s) => s.id);
     }
+    if (stageIds.length === 0) throw badRequest("No process stages configured");
 
     const jobCard = await prisma.jobCard.create({
       data: {
         jobNo: await nextVoucherNumber("JOB"),
         productId: body.productId,
-        estimateId: body.estimateId,
-        customerId: body.customerId,
         targetDeliveryDate: body.targetDeliveryDate,
         createdById: req.user!.id,
         stages: {
-          create: body.processStageIds.map((processStageId, index) => ({
+          create: stageIds.map((processStageId, index) => ({
             processStageId,
             sequenceOrder: index,
           })),
@@ -214,107 +213,6 @@ router.post(
       where: { id: jobCard.productId },
       data: { status: "FINISHED" },
     });
-
-    if (jobCard.estimateId) {
-      const roughEstimate = await prisma.estimate.findUnique({
-        where: { id: jobCard.estimateId },
-      });
-      
-      if (roughEstimate && roughEstimate.type === "ROUGH_ESTIMATE") {
-        const allJobCardsWithStages = await prisma.jobCard.findMany({
-          where: { estimateId: roughEstimate.id },
-          include: { stages: { include: { labourEntries: true } } }
-        });
-        const allClosed = allJobCardsWithStages.every((jc) => jc.status === "CLOSED");
-        
-        if (allClosed) {
-          const latestEstimate = await prisma.estimate.findFirst({
-            where: { productId: roughEstimate.productId, type: "FINAL_COSTING", customerId: roughEstimate.customerId ?? null },
-            orderBy: { version: "desc" },
-            select: { version: true }
-          });
-          const version = (latestEstimate?.version ?? 0) + 1;
-          const { nextVoucherNumber } = await import("../../services/voucherNumber");
-          const estimateNo = await nextVoucherNumber("EST");
-          
-          const goldRateRow = await prisma.metalRate.findFirst({
-            where: { effectiveFrom: { lte: new Date() } },
-            orderBy: { effectiveFrom: "desc" },
-          });
-          const goldRate24k = goldRateRow ? Number(goldRateRow.ratePerGramPure) : Number(roughEstimate.goldRateSnapshot24k);
-
-          let totalPulledLabour = 0;
-          for (const jc of allJobCardsWithStages) {
-            for (const stage of jc.stages) {
-              for (const entry of stage.labourEntries) {
-                if (entry.status === "PULLED" || entry.status === "APPROVED") {
-                  totalPulledLabour += Number(entry.amount);
-                }
-              }
-            }
-          }
-
-          const roughLines = await prisma.estimateLine.findMany({ where: { estimateId: roughEstimate.id } });
-          let finalLinesData = roughLines.map(line => ({
-            head: line.head,
-            description: line.description,
-            purityId: line.purityId,
-            stoneTypeId: line.stoneTypeId,
-            chargeTypeId: line.chargeTypeId,
-            karigarName: line.karigarName,
-            quantity: Number(line.quantity),
-            pieces: line.pieces,
-            rateBasis: line.rateBasis,
-            rate: Number(line.rate),
-            amount: Number(line.amount),
-            sourceType: line.sourceType,
-          }));
-
-          if (totalPulledLabour > 0) {
-            finalLinesData = finalLinesData.filter(l => l.head !== "MAKING");
-            finalLinesData.push({
-              head: "MAKING",
-              description: "Actual Labour (Pulled from Job Cards)",
-              purityId: null,
-              stoneTypeId: null,
-              chargeTypeId: null,
-              karigarName: null,
-              quantity: 1,
-              pieces: null,
-              rateBasis: null,
-              rate: totalPulledLabour,
-              amount: totalPulledLabour,
-              sourceType: "FROM_LABOUR",
-            });
-          }
-
-          const finalCosting = await prisma.estimate.create({
-            data: {
-              estimateNo,
-              productId: roughEstimate.productId,
-              customerId: roughEstimate.customerId,
-              type: "FINAL_COSTING",
-              version,
-              estimateDate: new Date(),
-              pieces: roughEstimate.pieces,
-              grossWeightG: roughEstimate.grossWeightG,
-              goldRateSnapshot24k: goldRate24k,
-              profitPct: roughEstimate.profitPct,
-              gstPct: roughEstimate.gstPct,
-              createdById: req.user!.id,
-              lines: { create: finalLinesData }
-            }
-          });
-          
-          await recalculateEstimateTotals(finalCosting.id);
-          
-          await prisma.jobCard.updateMany({
-            where: { estimateId: roughEstimate.id },
-            data: { estimateId: finalCosting.id }
-          });
-        }
-      }
-    }
 
     await recordAudit(prisma, {
       userId: req.user!.id,
@@ -460,52 +358,6 @@ router.post(
     });
 
     res.status(201).json(reworkStage);
-  })
-);
-
-// --- Record Dispatch (mockup flow: popup when moving to Dispatched) ----------
-// Captures dispatch mode/tracking/date directly on the JobCard (1 job = 1 dispatch).
-// This is the final stage action — after this, the job moves to Dispatch & Invoicing.
-const dispatchSchema = z.object({
-  dispatchMode: z.enum(["Insured Courier", "Hand Delivery", "Self Pickup", "Registered Post"]),
-  dispatchTracking: z.string().optional(),
-  dispatchDate: z.coerce.date(),
-});
-
-router.post(
-  "/:id/record-dispatch",
-  requireRole("SUPER_ADMIN", "MANAGER"),
-  asyncHandler(async (req, res) => {
-    const jobCard = await prisma.jobCard.findUnique({
-      where: { id: req.params.id },
-      include: { stages: { include: { processStage: true }, orderBy: { sequenceOrder: "asc" } } },
-    });
-    if (!jobCard) throw notFound("Job card not found");
-    if (jobCard.dispatchedAt) throw badRequest("Dispatch already recorded for this job card");
-
-    const body = dispatchSchema.parse(req.body);
-
-    const updated = await prisma.jobCard.update({
-      where: { id: req.params.id },
-      data: {
-        dispatchMode: body.dispatchMode,
-        dispatchTracking: body.dispatchTracking ?? null,
-        dispatchDate: body.dispatchDate,
-        dispatchedAt: new Date(),
-      },
-    });
-
-    await recordAudit(prisma, {
-      userId: req.user!.id,
-      action: "UPDATE",
-      entityType: "JobCard",
-      entityId: updated.id,
-      before: jobCard,
-      after: updated,
-      ipAddress: req.ip ?? null,
-    });
-
-    res.json(updated);
   })
 );
 

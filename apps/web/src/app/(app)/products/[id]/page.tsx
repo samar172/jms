@@ -7,9 +7,8 @@ import { Copy } from "lucide-react";
 import { useApi } from "@/lib/hooks";
 import { apiFetch, ApiError, resolveMediaUrl } from "@/lib/api";
 import { ProductStatusPill, JobStageStatusPill } from "@/components/StatusPill";
-import { formatWeight, formatCarat, formatDate, formatINR } from "@/lib/format";
+import { formatWeight, formatCarat, formatDate } from "@/lib/format";
 import { useAuth } from "@/lib/auth-context";
-import { canSeeCost } from "@jms/shared";
 
 const PRODUCT_STATUSES = ["DESIGN", "ESTIMATED", "IN_PRODUCTION", "FINISHED", "SOLD", "MELTED"] as const;
 
@@ -19,19 +18,6 @@ interface ProductImage {
   url: string;
   thumbnailUrl?: string;
 }
-interface Estimate {
-  id: string;
-  type: string;
-  version: number;
-  status: string;
-  materialCost: string;
-  makingCharges: string;
-  wastageCost: string;
-  cost: string;
-  profit: string;
-  profitPct: string;
-  netAmount: string;
-}
 interface JobStage {
   id: string;
   status: string;
@@ -40,6 +26,8 @@ interface JobStage {
 }
 interface JobCard {
   id: string;
+  jobNo?: string | null;
+  status?: string;
   stages: JobStage[];
 }
 interface ProductDetail {
@@ -58,7 +46,6 @@ interface ProductDetail {
   purity: { code: string };
   images: ProductImage[];
   jobCards: JobCard[];
-  estimates: Estimate[];
 }
 interface TimelineEntry {
   type: string;
@@ -74,15 +61,14 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
   const { data: timeline } = useApi<TimelineEntry[]>(product ? `/api/products/${product.id}/timeline` : null);
   const [activeImage, setActiveImage] = useState<ProductImage | null>(null);
   const [cloning, setCloning] = useState(false);
+  const [creatingJob, setCreatingJob] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [editing, setEditing] = useState(false);
 
   if (!product) return <div className="text-text-muted">Loading…</div>;
 
-  const showCost = user ? canSeeCost(user.role) : false;
   const canEdit = user?.role === "SUPER_ADMIN" || user?.role === "MANAGER";
   const primaryImage = activeImage ?? product.images[0];
-  const latestEstimate = product.estimates[0];
   const allStages = product.jobCards.flatMap((jc) => jc.stages).sort((a, b) => a.processStage.sequenceOrder - b.processStage.sequenceOrder);
 
   async function clone() {
@@ -92,6 +78,20 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
       router.push(`/products/${created.serialNo}`);
     } finally {
       setCloning(false);
+    }
+  }
+
+  // Create a job card directly against this design (spec §2.4 — no estimate).
+  async function createJobCard() {
+    setCreatingJob(true);
+    try {
+      const created = await apiFetch<{ id: string }>(`/api/job-cards`, {
+        method: "POST",
+        body: { productId: product!.id },
+      });
+      router.push(`/job-cards/${created.id}`);
+    } finally {
+      setCreatingJob(false);
     }
   }
 
@@ -114,6 +114,11 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
             <p className="text-ink2 text-xs mt-0.5">{product.designName}</p>
           </div>
           <div className="flex gap-2">
+            {canEdit && (
+              <button className="console-btn console-btn-primary no-print" onClick={createJobCard} disabled={creatingJob}>
+                <span className="font-bold">+</span> {creatingJob ? "Creating…" : "Create Job Card"}
+              </button>
+            )}
             {canEdit && (
               <button className="console-btn no-print" onClick={() => setEditing((v) => !v)}>
                 {editing ? "Cancel Edit" : "Edit Product"}
@@ -226,34 +231,23 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
             </div>
           )}
 
-          {showCost && (
-            <div className="console-panel p-3.5">
-              <div className="text-[11px] font-bold uppercase text-ink2 tracking-wide mb-2">Costing Summary</div>
-              {latestEstimate ? (
-                <div className="text-[12.5px]">
-                  <Row label="Material Cost" value={formatINR(Number(latestEstimate.materialCost))} />
-                  <Row label="Making Charges" value={formatINR(Number(latestEstimate.makingCharges))} />
-                  <Row label="Wastage Cost" value={formatINR(Number(latestEstimate.wastageCost))} />
-                  <Row label="Cost" value={formatINR(Number(latestEstimate.cost))} bold />
-                  <Row
-                    label={`Profit (${Number(latestEstimate.profitPct)}%)`}
-                    value={formatINR(Number(latestEstimate.profit))}
-                  />
-                  <div style={{ marginTop: 8, padding: "10px 14px", background: "#FFF3DA", border: "1px solid #F3DFAE", borderRadius: 6, display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                    <span className="font-semibold" style={{ color: "#78350F" }}>Net Amount</span>
-                    <span className="mono font-bold" style={{ fontSize: 16, color: "#78350F" }}>
-                      {formatINR(Number(latestEstimate.netAmount))}
-                    </span>
-                  </div>
-                  <Link href={`/costing/${latestEstimate.id}`} className="text-accent text-xs inline-block mt-2 font-semibold">
-                    View Full Estimate →
-                  </Link>
-                </div>
-              ) : (
-                <p className="text-sm text-mute">No estimate created yet.</p>
-              )}
-            </div>
-          )}
+          <div className="console-panel p-3.5">
+            <div className="text-[11px] font-bold uppercase text-ink2 tracking-wide mb-2">Job Cards</div>
+            {product.jobCards.length > 0 ? (
+              <ul className="space-y-1.5">
+                {product.jobCards.map((jc) => (
+                  <li key={jc.id}>
+                    <Link href={`/job-cards/${jc.id}`} className="flex items-center justify-between text-[12.5px] hover:text-accent">
+                      <span className="mono">{jc.jobNo ?? jc.id}</span>
+                      {jc.status && <JobStageStatusPill status={jc.status} />}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-mute">No job cards yet. Use “Create Job Card” above.</p>
+            )}
+          </div>
 
           {allStages.length > 0 && (
             <div className="console-panel p-3.5">
@@ -365,14 +359,5 @@ function EditProductForm({
         </button>
       </div>
     </form>
-  );
-}
-
-function Row({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
-  return (
-    <div className={bold ? "console-sumrow total" : "console-sumrow"}>
-      <span className="l">{label}</span>
-      <span className="v">{value}</span>
-    </div>
   );
 }
