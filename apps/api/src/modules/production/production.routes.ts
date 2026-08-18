@@ -75,6 +75,7 @@ router.get(
     res.json(
       items.map((p) => ({
         id: p.id,
+        serialNo: p.serialNo,
         name: p.designName,
         category: p.category.name,
         designCode: p.designCode,

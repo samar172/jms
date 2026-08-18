@@ -1,182 +1,84 @@
 "use client";
 
-import Link from "next/link";
-import { useApi, useKarigars, useProcessStages } from "@/lib/hooks";
-import { formatWeight, formatDate } from "@/lib/format";
-import { Briefcase, Package } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useProdKarigars, useJobCards } from "@/lib/production";
+import { StatusPill } from "../job-cards/page";
 
-interface JobStage {
-  id: string;
-  status: string;
-  karigar?: { id: string; name: string } | null;
-  processStage: { name: string; sequenceOrder: number };
-}
-
-interface JobCardRow {
-  id: string;
-  status: string;
-  targetDeliveryDate: string | null;
-  createdAt: string;
-  product: { serialNo: string; designName: string; images: { thumbnailUrl: string }[] };
-  stages: JobStage[];
-}
-
-interface OwnerStats {
-  goldInStockG: number;
-  goldWithKarigarsG: number;
-  jobsInProduction: number;
-  overdueJobs: number;
-  receivable: number;
-  payableToKarigars: number;
-  totalChizzatG: number;
-  avgChizzatPct: number;
-  pipeline: Record<string, number>;
-  needsAttention: string[];
-}
-
-function activeStageOf(jc: JobCardRow) {
-  const sorted = [...jc.stages].sort((a, b) => a.processStage.sequenceOrder - b.processStage.sequenceOrder);
-  return sorted.find((s) => s.status !== "APPROVED" && s.status !== "PENDING") ?? sorted[sorted.length - 1];
-}
+const money = (v: number) => `₹ ${Math.round(v).toLocaleString("en-IN")}`;
+const gm = (v: number) => `${v.toFixed(3)} g`;
+const STAGES = ["Casting", "Meenakari", "Jadai", "Setting", "Fitting"];
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { data: ownerStats } = useApi<OwnerStats>("/api/dashboard/owner");
-  const { data: jobCards } = useApi<JobCardRow[]>("/api/job-cards");
-  const { data: processStages } = useProcessStages();
-  const { data: karigars } = useKarigars();
+  const { data: karigars } = useProdKarigars();
+  const { data: jobCards } = useJobCards();
 
-  const activeJobs = jobCards?.filter((j) => j.status !== "CLOSED") ?? [];
-  const overdueJobs = activeJobs.filter((j) => j.targetDeliveryDate && new Date(j.targetDeliveryDate) < new Date());
+  const rows = jobCards ?? [];
+  const open = rows.filter((r) => r.status !== "Closed");
+  const silverHeld = (karigars ?? []).reduce((s, k) => s + Math.max(0, k.balance), 0);
+  const labourAccrued = rows.reduce((s, r) => s + r.labour, 0);
+  const queue: Record<string, number> = {};
+  for (const st of STAGES) queue[st] = open.filter((r) => r.activeStage === st).length;
+  const needsAttention = open.filter((r) => r.status === "On Hold" || r.status === "Reconciliation");
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="mb-3.5">
-        <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500 mb-1.5">
-          <span>Overview</span>
-          <span className="text-slate-300">/</span>
-          <span className="text-slate-900">Production Dashboard</span>
-        </div>
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-[19px] font-semibold text-slate-900 leading-tight">Production Dashboard</h1>
-            <div className="text-[12px] text-slate-500 mt-0.5">
-              {activeJobs.length} live jobs across the floor · {overdueJobs.length} overdue
-            </div>
-          </div>
-        </div>
+    <div className="flex flex-col">
+      <h1 className="text-[20px] font-semibold text-slate-900 mb-4">Dashboard</h1>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+        <Kpi label="Silver held by karigars" value={gm(silverHeld)} tone="amber" onClick={() => router.push("/karigars")} />
+        <Kpi label="Labour accrued" value={money(labourAccrued)} />
+        <Kpi label="Open job cards" value={String(open.length)} onClick={() => router.push("/job-cards")} />
+        <Kpi label="Needs attention" value={String(needsAttention.length)} tone={needsAttention.length ? "rose" : undefined} />
       </div>
 
-      <div className="flex-1 overflow-auto">
-        {ownerStats?.needsAttention && ownerStats.needsAttention.length > 0 && (
-          <div className="bg-err-bg border border-err-bd rounded-md p-3 mb-4 space-y-1">
-            <div className="text-xs font-semibold text-err-tx uppercase tracking-wider mb-2">Needs Attention</div>
-            {ownerStats.needsAttention.map((msg, idx) => (
-              <div key={idx} className="text-sm text-err-tx flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-err-tx shrink-0"></span> {msg}
-              </div>
+      <div className="grid grid-cols-3 md:grid-cols-5 gap-2 mb-4">
+        {STAGES.map((st) => (
+          <div key={st} className="bg-white border border-slate-200 rounded-md p-2.5 text-center">
+            <div className="text-[9.5px] uppercase tracking-wider text-slate-400 font-semibold">{st}</div>
+            <div className={`text-[20px] font-semibold mt-0.5 ${queue[st] > 0 ? "text-slate-900" : "text-slate-300"}`}>{queue[st]}</div>
+          </div>
+        ))}
+      </div>
+
+      {needsAttention.length > 0 && (
+        <div className="bg-rose-50 border border-rose-200 rounded-md p-3 mb-4">
+          <div className="text-[11px] font-semibold text-rose-800 uppercase tracking-wider mb-2">Needs Attention</div>
+          {needsAttention.map((r) => (
+            <button key={r.id} onClick={() => router.push(`/job-cards/${r.id}`)} className="flex items-center gap-2 text-[12px] text-rose-800 hover:underline">
+              <span className="mono">{r.id}</span> · {r.itemName} · {r.status}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="bg-white border border-slate-200 rounded-md">
+        <div className="px-4 py-2.5 text-[11px] uppercase tracking-wider text-slate-500 font-semibold border-b border-slate-100 flex items-center justify-between">
+          Open Job Cards
+        </div>
+        <table className="w-full border-collapse">
+          <tbody>
+            {open.slice(0, 8).map((r) => (
+              <tr key={r.id} onClick={() => router.push(`/job-cards/${r.id}`)} className="border-b border-slate-50 h-10 cursor-pointer hover:bg-slate-50">
+                <td className="px-4 text-[12px] mono text-blue-800">{r.id}</td>
+                <td className="px-3 text-[12px] text-slate-900">{r.itemName}</td>
+                <td className="px-3 text-[12px] text-slate-600">{r.activeStage ?? "Not issued"}</td>
+                <td className="px-3"><StatusPill status={r.status} /></td>
+              </tr>
             ))}
-          </div>
-        )}
-
-        <div className="grid grid-cols-2 lg:grid-cols-2 gap-3 mb-4">
-          <button onClick={() => router.push("/job-cards")} className="text-left bg-white border border-slate-200 rounded-md p-3 hover:border-slate-300 transition-colors shadow-sm">
-            <div className="flex items-center justify-between text-slate-400">
-              <span className="text-[10px] uppercase tracking-wider font-semibold">Jobs In Production</span>
-              <Briefcase size={14} className={overdueJobs.length > 0 ? "text-rose-600" : ""} />
-            </div>
-            <div className="text-[20px] font-semibold text-slate-900 mt-1 tabular-nums">{activeJobs.length}</div>
-            <div className="text-[11px] text-slate-500 mt-0.5">{overdueJobs.length} overdue</div>
-          </button>
-
-          <button onClick={() => router.push("/karigars")} className="text-left bg-white border border-slate-200 rounded-md p-3 hover:border-slate-300 transition-colors shadow-sm">
-            <div className="flex items-center justify-between text-amber-600">
-              <span className="text-[10px] uppercase tracking-wider font-semibold">Silver Out w/ Karigars</span>
-              <Package size={14} />
-            </div>
-            <div className="text-[20px] font-semibold text-slate-900 mt-1 tabular-nums">{formatWeight(ownerStats?.goldWithKarigarsG ?? 0)} g</div>
-            <div className="text-[11px] text-slate-500 mt-0.5">across floor</div>
-          </button>
-        </div>
-
-        <div className="grid lg:grid-cols-3 gap-3 mb-4">
-          <div className="lg:col-span-2 bg-white border border-slate-200 rounded-md shadow-sm">
-            <div className="h-9 px-3 flex items-center justify-between border-b border-slate-100">
-              <span className="text-[12px] font-semibold text-slate-900">Active Jobs — stage wise</span>
-              <Link href="/job-cards" className="text-[11px] text-blue-800 hover:underline">View all →</Link>
-            </div>
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200">
-                  <th className="px-3 py-1.5 text-left text-[10px] uppercase tracking-wider font-semibold text-slate-500">Job</th>
-                  <th className="px-3 py-1.5 text-left text-[10px] uppercase tracking-wider font-semibold text-slate-500">Item</th>
-                  <th className="px-3 py-1.5 text-left text-[10px] uppercase tracking-wider font-semibold text-slate-500">Stage</th>
-                  <th className="px-3 py-1.5 text-left text-[10px] uppercase tracking-wider font-semibold text-slate-500">Due</th>
-                </tr>
-              </thead>
-              <tbody>
-                {activeJobs.slice(0, 6).map((j) => {
-                  const s = activeStageOf(j);
-                  const isOverdue = j.targetDeliveryDate && new Date(j.targetDeliveryDate) < new Date();
-                  return (
-                    <tr key={j.id} className="border-b border-slate-100 h-9 hover:bg-slate-50 cursor-pointer" onClick={() => router.push(`/job-cards/${j.id}`)}>
-                      <td className="px-3 text-[12px] mono text-blue-800">{j.id}</td>
-                      <td className="px-3 text-[12px] text-slate-900">{j.product.serialNo}</td>
-                      <td className="px-3">
-                        <span className="console-pill neu">{s?.processStage.name ?? "—"}</span>
-                        {isOverdue && <span className="text-[10px] text-rose-600 font-medium ml-1">OVERDUE</span>}
-                      </td>
-                      <td className="px-3 text-[12px] text-slate-600 tabular-nums">{j.targetDeliveryDate ? formatDate(j.targetDeliveryDate) : "—"}</td>
-                    </tr>
-                  );
-                })}
-                {activeJobs.length === 0 && (
-                  <tr><td colSpan={4} className="px-3 py-4 text-center text-xs text-mute">No active jobs</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="bg-white border border-slate-200 rounded-md shadow-sm">
-            <div className="h-9 px-3 flex items-center justify-between border-b border-slate-100">
-              <span className="text-[12px] font-semibold text-slate-900">Karigar Network</span>
-              <Link href="/karigars" className="text-[11px] text-blue-800 hover:underline">View all →</Link>
-            </div>
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200">
-                  <th className="px-3 py-1.5 text-left text-[10px] uppercase tracking-wider font-semibold text-slate-500">Karigar</th>
-                  <th className="px-3 py-1.5 text-right text-[10px] uppercase tracking-wider font-semibold text-slate-500">Specialization</th>
-                </tr>
-              </thead>
-              <tbody>
-                {karigars?.slice(0, 6).map((k) => (
-                  <tr key={k.id} className="border-b border-slate-100 h-9">
-                    <td className="px-3 text-[12px] text-slate-900">
-                      {k.name}
-                      <div className="text-[10px] text-slate-400">{k.employmentType}</div>
-                    </td>
-                    <td className="px-3 text-[12px] text-right text-slate-600">{k.specialization ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-3 md:grid-cols-6 lg:grid-cols-8 gap-2">
-          {processStages?.sort((a,b) => a.sequenceOrder - b.sequenceOrder).map((ps) => {
-            const count = ownerStats?.pipeline?.[ps.name] ?? 0;
-            return (
-              <div key={ps.id} className="bg-white border border-slate-200 rounded-md p-2 shadow-sm text-center flex flex-col items-center justify-center">
-                <div className="text-[9.5px] uppercase tracking-wider text-slate-400 font-semibold truncate w-full">{ps.name}</div>
-                <div className={`text-[20px] font-semibold mt-1 tabular-nums ${count > 0 ? 'text-ink' : 'text-slate-300'}`}>{count}</div>
-              </div>
-            );
-          })}
-        </div>
+            {open.length === 0 && <tr><td className="px-4 py-8 text-center text-[12px] text-slate-400">No open job cards.</td></tr>}
+          </tbody>
+        </table>
       </div>
     </div>
+  );
+}
+
+function Kpi({ label, value, tone, onClick }: { label: string; value: string; tone?: "amber" | "rose"; onClick?: () => void }) {
+  return (
+    <button onClick={onClick} className="text-left bg-white border border-slate-200 rounded-md p-3 hover:border-slate-300 disabled:cursor-default" disabled={!onClick}>
+      <div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">{label}</div>
+      <div className={`text-[20px] font-semibold mt-0.5 mono ${tone === "amber" ? "text-amber-700" : tone === "rose" ? "text-rose-600" : "text-slate-900"}`}>{value}</div>
+    </button>
   );
 }

@@ -26,6 +26,7 @@ export interface ProdSettings {
 
 export interface ItemMaster {
   id: string;
+  serialNo?: string;
   name: string;
   category: string;
   designCode: string | null;
@@ -124,6 +125,16 @@ export const reopenJobCard = (jobNo: string, body: { reason: string; approvedBy:
   post(`/job-cards/${jobNo}/reopen`, body);
 export const toggleHold = (jobNo: string, holdReason?: string) =>
   post(`/job-cards/${jobNo}/hold`, { holdReason });
+
+// config / masters
+const patch = (path: string, body?: unknown) => apiFetch(`/api/production${path}`, { method: "PATCH", body });
+export const updateSettings = (body: { baseRate?: number; defaultRates?: Record<string, number> }) => patch("/settings", body);
+export const addTier = (body: { label: string; percent: number }) => post("/purity-tiers", body);
+export const updateTier = (id: string, body: { label?: string; percent?: number }) => patch(`/purity-tiers/${id}`, body);
+export const deleteTier = (id: string) => del(`/purity-tiers/${id}`);
+export const createKarigar = (body: Record<string, unknown>) => post("/karigars", body);
+export const updateKarigar = (id: string, body: Record<string, unknown>) => patch(`/karigars/${id}`, body);
+export const createItemMaster = (body: Record<string, unknown>) => post("/item-masters", body);
 
 export const STAGE_HI: Record<string, string> = {
   Casting: "ढलाई",
