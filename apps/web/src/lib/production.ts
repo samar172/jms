@@ -140,6 +140,8 @@ export const addLabour = (assignmentId: string, body: Record<string, unknown>) =
 export const removeLabour = (labourId: string) => del(`/labour/${labourId}`);
 export const approveStage = (jobNo: string, stageName: string) =>
   post(`/job-cards/${jobNo}/stages/${stageName}/approve`);
+export const unapproveStage = (jobNo: string, stageName: string, reason?: string) =>
+  post(`/job-cards/${jobNo}/stages/${stageName}/unapprove`, { reason });
 export const closeJobCard = (jobNo: string) => post(`/job-cards/${jobNo}/close`);
 export const reopenJobCard = (jobNo: string, body: { reason: string; approvedBy: string }) =>
   post(`/job-cards/${jobNo}/reopen`, body);

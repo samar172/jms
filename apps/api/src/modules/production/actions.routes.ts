@@ -532,6 +532,24 @@ router.post(
     res.json({ ok: true });
   })
 );
+// Unlock an already-approved stage so its karigars/outputs/stones can be edited
+// again (client: "stage approve ke baad edit ka option"). Reverts to In Progress
+// and logs it; re-approve when done. If the job was Closed, reopen it too.
+router.post(
+  "/job-cards/:jobNo/stages/:stageName/unapprove",
+  requireRole(...MANAGER),
+  asyncHandler(async (req, res) => {
+    const { reason } = z.object({ reason: z.string().optional() }).parse(req.body ?? {});
+    const { jc, stage } = await stageByName(req.params.jobNo, req.params.stageName);
+    if (stage.status !== "Approved") throw badRequest("Stage is not approved");
+    await prisma.prodStage.update({ where: { id: stage.id }, data: { status: "InProgress", approvedDate: null } });
+    if (jc.status === "Closed") {
+      await prisma.prodJobCard.update({ where: { id: jc.id }, data: { status: "InProduction", closedAt: null } });
+    }
+    await logActivity(jc.id, `${req.params.stageName} stage unlocked for editing${reason ? ` — ${reason}` : ""}`);
+    res.json({ ok: true });
+  })
+);
 router.post(
   "/job-cards/:jobNo/close",
   requireRole("SUPER_ADMIN", "MANAGER"),

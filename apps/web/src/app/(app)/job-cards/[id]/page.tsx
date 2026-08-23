@@ -5,10 +5,10 @@ import Link from "next/link";
 import {
   useJobCard, useProdKarigars, useProdSettings,
   assignKarigar, castOutput, issueMaterial, reconcile, editReconcile, cancelReconcile, jadaiOutput, findingOutput,
-  issueStones, approveStage, closeJobCard, reopenJobCard, toggleHold, updateJobCardMeta,
+  issueStones, returnStones, approveStage, unapproveStage, closeJobCard, reopenJobCard, toggleHold, updateJobCardMeta,
   STAGE_HI, type JobCardDetail,
 } from "@/lib/production";
-import type { Stage, Assignment, MaterialIssue } from "@jms/shared";
+import type { Stage, Assignment, MaterialIssue, StoneEntry } from "@jms/shared";
 import { StatusPill } from "../page";
 
 const money = (v: number) => `₹ ${Math.round(v).toLocaleString("en-IN")}`;
@@ -221,7 +221,7 @@ function StageCard({ jobNo, stage, pieceCount, targetPurity, karigars, settings,
   jobNo: string; stage: Stage; pieceCount: number | null; targetPurity: string;
   karigars: Karigar[]; settings: Settings; onChange: () => void;
 }) {
-  const [modal, setModal] = useState<null | { kind: string; assignment: Assignment; issue?: MaterialIssue; labourRate?: number }>(null);
+  const [modal, setModal] = useState<null | { kind: string; assignment: Assignment; issue?: MaterialIssue; stone?: StoneEntry; labourRate?: number }>(null);
   const [adding, setAdding] = useState(false);
   const [newKarigar, setNewKarigar] = useState("");
 
@@ -259,6 +259,11 @@ function StageCard({ jobNo, stage, pieceCount, targetPurity, karigars, settings,
           )}
           {allReconciled && stage.status !== "Approved" && (
             <button onClick={async () => { await approveStage(jobNo, stage.stage); onChange(); }} className="h-7 px-2.5 rounded bg-emerald-600 text-white text-[11px] font-medium hover:bg-emerald-700">Approve Stage (स्वीकृत)</button>
+          )}
+          {stage.status === "Approved" && (
+            <button
+              onClick={async () => { if (confirm("Unlock this approved stage for editing? You can re-approve when done.")) { await unapproveStage(jobNo, stage.stage); onChange(); } }}
+              className="h-7 px-2.5 rounded border border-amber-300 text-amber-800 text-[11px] font-medium hover:bg-amber-50">Edit Stage (संपादित करें)</button>
           )}
         </div>
       </div>
@@ -299,7 +304,12 @@ function StageCard({ jobNo, stage, pieceCount, targetPurity, karigars, settings,
             ))}
             {/* Stones */}
             {a.stones.map((s) => (
-              <div key={s.id} className="text-[11px] text-slate-500 py-0.5">💎 {s.type} · {s.qtyIssued} · {money(s.valueIssued)}{s.valueReturned > 0 ? ` (returned ${money(s.valueReturned)})` : ""}</div>
+              <div key={s.id} className="flex items-center justify-between text-[11px] text-slate-500 py-0.5">
+                <span>💎 {s.type} · {s.qtyIssued} · {money(s.valueIssued)}{s.valueReturned > 0 ? ` (returned ${s.caratReturned ? `${s.caratReturned}ct / ` : ""}${money(s.valueReturned)} — net ${money(s.valueIssued - s.valueReturned)})` : ""}</span>
+                {stage.status !== "Approved" && (
+                  <ActBtn onClick={() => setModal({ kind: "stoneReturn", assignment: a, stone: s })}>Return</ActBtn>
+                )}
+              </div>
             ))}
             {/* Labour */}
             {a.labour.map((l) => (
@@ -337,7 +347,7 @@ function ActBtn({ children, onClick }: { children: React.ReactNode; onClick: () 
 /* ------------------------------- Stage modals ----------------------------- */
 function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, onClose, onDone }: {
   jobNo: string; stage: Stage; pieceCount: number | null; targetPurity: string; settings: Settings;
-  modal: { kind: string; assignment: Assignment; issue?: MaterialIssue; labourRate?: number }; onClose: () => void; onDone: () => void;
+  modal: { kind: string; assignment: Assignment; issue?: MaterialIssue; stone?: StoneEntry; labourRate?: number }; onClose: () => void; onDone: () => void;
 }) {
   const dr = settings.defaultRates;
   const pure = settings.tiers.find((x) => x.percent === 100)?.label ?? "24K";
@@ -357,6 +367,10 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
   const [stoneCarat, setStoneCarat] = useState("");
   const [stoneRate, setStoneRate] = useState("");
   const [stonePieces, setStonePieces] = useState("");
+  // stone return
+  const [retCarat, setRetCarat] = useState("");
+  const [retPieces, setRetPieces] = useState("");
+  const [retValue, setRetValue] = useState("");
   // multi-row inputs (Jadai stones, Fitting findings + other items)
   const [stoneRows, setStoneRows] = useState<{ name: string; pieces: string; carat: string; rate: string }[]>([{ name: "Polki", pieces: "", carat: "", rate: "" }]);
   const [findingRows, setFindingRows] = useState<{ type: string; weight: string }[]>([{ type: "Wire", weight: "" }]);
@@ -376,7 +390,14 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
     cast: "Record Cast Output", jadai: "Record Jadai Output", finding: "Record Finding Output",
     issue: `Issue Material — ${stage.stage}`, reconcile: `Receive & Reconcile — ${stage.stage}`,
     editReconcile: `Edit Output — ${stage.stage}`, stones: "Issue Stones",
+    stoneReturn: "Return Stones (वापसी)",
   };
+
+  // stone-return derived amount: auto = returned carat × original ₹/carat, unless overridden
+  const st = modal.stone;
+  const stRate = st?.ratePerCarat ?? (st && st.carat ? st.valueIssued / st.carat : 0);
+  const retValueAuto = +(((Number(retCarat) || 0) * (stRate || 0))).toFixed(2);
+  const retValueEff = retValue !== "" ? Number(retValue) : retValueAuto;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={onClose}>
@@ -469,6 +490,19 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
               <F label="₹/carat"><I value={stoneRate} onChange={setStoneRate} step="1" /></F>
             </div>
           </>)}
+
+          {modal.kind === "stoneReturn" && st && (<>
+            <p className="text-[11px] text-slate-500">
+              Issued <b>{st.type}</b> · {st.qtyIssued} · {money(st.valueIssued)}
+              {stRate ? ` (₹${stRate.toFixed(0)}/ct)` : ""}. Record what the karigar returns — it is deducted from net stone value and gross weight.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <F label="Pieces returned"><I value={retPieces} onChange={setRetPieces} step="1" /></F>
+              <F label="Carat returned *"><I value={retCarat} onChange={setRetCarat} step="0.01" /></F>
+            </div>
+            <F label="Value returned ₹ (auto from ₹/ct)"><I value={retValue} onChange={setRetValue} step="1" /></F>
+            <p className="text-[11px] text-emerald-700 font-medium">Deducting {retCarat || 0}ct · {money(retValueEff)} → net consumed {money(st.valueIssued - retValueEff)}</p>
+          </>)}
         </div>
         <div className="px-4 py-3 border-t border-slate-100 flex justify-end gap-2">
           <button onClick={onClose} className="h-8 px-3 rounded border border-slate-200 text-[12px]">Cancel</button>
@@ -495,6 +529,10 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
               if (modal.kind === "stones") {
                 const carat = Number(stoneCarat) || 0; const rate = Number(stoneRate) || 0;
                 return issueStones(A, { type: stoneType, qtyIssued: `${stonePieces || 0} pcs / ${carat} ct`, valueIssued: +(carat * rate).toFixed(2), piecesCount: Number(stonePieces) || null, carat: carat || null, ratePerCarat: rate || null });
+              }
+              if (modal.kind === "stoneReturn" && st) {
+                const carat = Number(retCarat) || 0;
+                return returnStones(st.id, { qtyReturned: `${retPieces || 0} pcs / ${carat} ct`, valueReturned: retValueEff, caratReturned: carat || null });
               }
             })}>
             {busy ? "Saving…" : "Confirm"}
