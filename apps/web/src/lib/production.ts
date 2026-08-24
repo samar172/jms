@@ -129,6 +129,8 @@ export const castOutput = (jobNo: string, body: { assignmentId: string; returned
   post(`/job-cards/${jobNo}/cast-output`, body);
 export const jadaiOutput = (jobNo: string, body: Record<string, unknown>) =>
   post(`/job-cards/${jobNo}/jadai-output`, body);
+export const editJadaiOutput = (jobNo: string, body: Record<string, unknown>) =>
+  post(`/job-cards/${jobNo}/jadai-output/edit`, body);
 export const findingOutput = (jobNo: string, body: Record<string, unknown>) =>
   post(`/job-cards/${jobNo}/finding-output`, body);
 export const issueStones = (assignmentId: string, body: Record<string, unknown>) =>

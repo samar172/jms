@@ -324,61 +324,87 @@ router.post(
 );
 
 /* ----------------------------- Jadai Output ------------------------------- */
+const jadaiBody = z.object({
+  assignmentId: z.string().min(1),
+  weight: z.number().positive(),
+  labourAmount: z.number().default(0),
+  pieceCount: z.number().int().positive(),
+  stones: z
+    .array(z.object({ name: z.string(), pieces: z.number().int().default(0), carat: z.number(), rate: z.number().default(0) }))
+    .default([]),
+});
+
+// Writes the Jadai output (kundan material, polki/diamond stones, labour) for an
+// assignment. Shared by the create route and the edit route.
+async function writeJadaiOutput(body: z.infer<typeof jadaiBody>, jcId: string, stageId: string, pureLabel: string) {
+  await prisma.prodMaterialIssue.create({
+    data: {
+      assignmentId: body.assignmentId,
+      purityId: null,
+      issueDate: new Date(),
+      status: "Reconciled",
+      returnedWeight: body.weight,
+      returnedPurityId: await purityIdFor(pureLabel),
+      dustWeight: 0,
+      returnDate: new Date(),
+      fromBulkStock: true,
+      pieceCount: body.pieceCount,
+    },
+  });
+  for (const s of body.stones) {
+    const finalAmount = +(s.carat * s.rate).toFixed(2);
+    await prisma.prodStoneEntry.create({
+      data: {
+        assignmentId: body.assignmentId,
+        type: s.name,
+        qtyIssued: `${s.pieces} pcs / ${s.carat} ct`,
+        valueIssued: finalAmount,
+        piecesCount: s.pieces,
+        carat: s.carat,
+        ratePerCarat: s.rate,
+      },
+    });
+  }
+  if (body.labourAmount > 0) {
+    await prisma.prodLabourEntry.create({
+      data: { assignmentId: body.assignmentId, basis: "Flat", qty: 1, rate: body.labourAmount, amount: body.labourAmount, note: "Manual labour entry (from bulk stock)" },
+    });
+  }
+  await prisma.prodStage.update({ where: { id: stageId }, data: { status: "InProgress" } });
+  await prisma.prodJobCard.update({ where: { id: jcId }, data: { pieceCount: body.pieceCount } });
+}
+
 router.post(
   "/job-cards/:jobNo/jadai-output",
   requireRole(...MANAGER),
   asyncHandler(async (req, res) => {
-    const body = z
-      .object({
-        assignmentId: z.string().min(1),
-        weight: z.number().positive(),
-        labourAmount: z.number().default(0),
-        pieceCount: z.number().int().positive(),
-        stones: z
-          .array(z.object({ name: z.string(), pieces: z.number().int().default(0), carat: z.number(), rate: z.number().default(0) }))
-          .default([]),
-      })
-      .parse(req.body);
+    const body = jadaiBody.parse(req.body);
     const { jc, stage } = await stageByName(req.params.jobNo, "Jadai");
-    const tierList = await tiers();
-    const pureLabel = pureTierLabel(tierList);
-    await prisma.prodMaterialIssue.create({
-      data: {
-        assignmentId: body.assignmentId,
-        purityId: null,
-        issueDate: new Date(),
-        status: "Reconciled",
-        returnedWeight: body.weight,
-        returnedPurityId: await purityIdFor(pureLabel),
-        dustWeight: 0,
-        returnDate: new Date(),
-        fromBulkStock: true,
-        pieceCount: body.pieceCount,
-      },
-    });
-    for (const s of body.stones) {
-      const finalAmount = +(s.carat * s.rate).toFixed(2);
-      await prisma.prodStoneEntry.create({
-        data: {
-          assignmentId: body.assignmentId,
-          type: s.name,
-          qtyIssued: `${s.pieces} pcs / ${s.carat} ct`,
-          valueIssued: finalAmount,
-          piecesCount: s.pieces,
-          carat: s.carat,
-          ratePerCarat: s.rate,
-        },
-      });
-    }
-    if (body.labourAmount > 0) {
-      await prisma.prodLabourEntry.create({
-        data: { assignmentId: body.assignmentId, basis: "Flat", qty: 1, rate: body.labourAmount, amount: body.labourAmount, note: "Manual labour entry (from bulk stock)" },
-      });
-    }
-    await prisma.prodStage.update({ where: { id: stage.id }, data: { status: "InProgress" } });
-    await prisma.prodJobCard.update({ where: { id: jc.id }, data: { pieceCount: body.pieceCount } });
+    const pureLabel = pureTierLabel(await tiers());
+    await writeJadaiOutput(body, jc.id, stage.id, pureLabel);
     await logActivity(jc.id, `Jadai output recorded — ${gm(body.weight)} @ ${pureLabel} (${body.pieceCount} pcs), labour ${money(body.labourAmount)}`);
     res.status(201).json({ ok: true });
+  })
+);
+
+// Edit a recorded Jadai output — client: fix a mistyped kundan weight/rate, or
+// fill the kundan weight in after jadai is finished. Clears the assignment's
+// existing jadai material/stones/labour and rewrites from the corrected values.
+// Blocked once the stage is Approved (use Edit Stage to unlock first).
+router.post(
+  "/job-cards/:jobNo/jadai-output/edit",
+  requireRole(...MANAGER),
+  asyncHandler(async (req, res) => {
+    const body = jadaiBody.parse(req.body);
+    const { jc, stage } = await stageByName(req.params.jobNo, "Jadai");
+    if (stage.status === "Approved") throw badRequest("Stage is approved — unlock it (Edit Stage) before editing the output");
+    await prisma.prodLabourEntry.deleteMany({ where: { assignmentId: body.assignmentId } });
+    await prisma.prodStoneEntry.deleteMany({ where: { assignmentId: body.assignmentId } });
+    await prisma.prodMaterialIssue.deleteMany({ where: { assignmentId: body.assignmentId } });
+    const pureLabel = pureTierLabel(await tiers());
+    await writeJadaiOutput(body, jc.id, stage.id, pureLabel);
+    await logActivity(jc.id, `Jadai output edited — ${gm(body.weight)} @ ${pureLabel} (${body.pieceCount} pcs), labour ${money(body.labourAmount)}`);
+    res.json({ ok: true });
   })
 );
 

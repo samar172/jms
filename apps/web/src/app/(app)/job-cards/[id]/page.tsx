@@ -4,7 +4,7 @@ import { use, useState } from "react";
 import Link from "next/link";
 import {
   useJobCard, useProdKarigars, useProdSettings,
-  assignKarigar, castOutput, issueMaterial, reconcile, editReconcile, cancelReconcile, jadaiOutput, findingOutput,
+  assignKarigar, castOutput, issueMaterial, reconcile, editReconcile, cancelReconcile, jadaiOutput, editJadaiOutput, findingOutput,
   issueStones, returnStones, approveStage, unapproveStage, closeJobCard, reopenJobCard, toggleHold, updateJobCardMeta,
   STAGE_HI, type JobCardDetail,
 } from "@/lib/production";
@@ -278,6 +278,7 @@ function StageCard({ jobNo, stage, pieceCount, targetPurity, karigars, settings,
                 <div className="flex gap-1.5">
                   {stage.stage === "Casting" && a.issues.length === 0 && <ActBtn onClick={() => setModal({ kind: "cast", assignment: a })}>Record Cast Output</ActBtn>}
                   {stage.stage === "Jadai" && a.issues.length === 0 && <ActBtn onClick={() => setModal({ kind: "jadai", assignment: a })}>Record Jadai Output</ActBtn>}
+                  {stage.stage === "Jadai" && a.issues.length > 0 && <ActBtn onClick={() => setModal({ kind: "jadaiEdit", assignment: a })}>Edit Jadai Output (संपादित करें)</ActBtn>}
                   {stage.stage === "Fitting" && <ActBtn onClick={() => setModal({ kind: "finding", assignment: a })}>Record Finding Output</ActBtn>}
                   {(isMeenakari || isSetting) && <ActBtn onClick={() => setModal({ kind: "issue", assignment: a })}>+ Issue Material</ActBtn>}
                   {isSetting && <ActBtn onClick={() => setModal({ kind: "stones", assignment: a })}>+ Issue Stones</ActBtn>}
@@ -352,17 +353,21 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
   const dr = settings.defaultRates;
   const pure = settings.tiers.find((x) => x.percent === 100)?.label ?? "24K";
   const isEdit = modal.kind === "editReconcile";
-  const pc0 = String(modal.issue?.pieceCount ?? pieceCount ?? 1);
+  // Jadai edit: prefill from the already-recorded output on this assignment.
+  const isJadaiEdit = modal.kind === "jadaiEdit";
+  const jIssue = isJadaiEdit ? modal.assignment.issues.find((i) => i.fromBulkStock) : undefined;
+  const jLabour = isJadaiEdit ? modal.assignment.labour.reduce((s, l) => s + l.amount, 0) : 0;
+  const pc0 = String(jIssue?.pieceCount ?? modal.issue?.pieceCount ?? pieceCount ?? 1);
 
   // shared fields
   const [returnedWeight, setReturnedWeight] = useState("");
   const [wastagePercent, setWastagePercent] = useState(String(stage.stage === "Casting" ? dr.castingWastagePct : ""));
   const [pieces, setPieces] = useState(pc0);
-  const [weight, setWeight] = useState("");
+  const [weight, setWeight] = useState(isJadaiEdit && jIssue?.returnedWeight != null ? String(jIssue.returnedWeight) : "");
   const [dust, setDust] = useState(isEdit ? String(modal.issue?.dustWeight ?? 0) : "0");
   const [ratePerGm, setRatePerGm] = useState(isEdit && modal.labourRate != null ? String(modal.labourRate) : String(dr.meenakariRatePerGm));
   const [flat, setFlat] = useState(isEdit && modal.labourRate != null ? String(modal.labourRate) : "");
-  const [labourAmount, setLabourAmount] = useState("");
+  const [labourAmount, setLabourAmount] = useState(isJadaiEdit && jLabour > 0 ? String(jLabour) : "");
   const [stoneType, setStoneType] = useState("Polki");
   const [stoneCarat, setStoneCarat] = useState("");
   const [stoneRate, setStoneRate] = useState("");
@@ -372,7 +377,11 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
   const [retPieces, setRetPieces] = useState("");
   const [retValue, setRetValue] = useState("");
   // multi-row inputs (Jadai stones, Fitting findings + other items)
-  const [stoneRows, setStoneRows] = useState<{ name: string; pieces: string; carat: string; rate: string }[]>([{ name: "Polki", pieces: "", carat: "", rate: "" }]);
+  const [stoneRows, setStoneRows] = useState<{ name: string; pieces: string; carat: string; rate: string }[]>(
+    isJadaiEdit && modal.assignment.stones.length > 0
+      ? modal.assignment.stones.map((s) => ({ name: s.type, pieces: s.piecesCount != null ? String(s.piecesCount) : "", carat: s.carat != null ? String(s.carat) : "", rate: s.ratePerCarat != null ? String(s.ratePerCarat) : "" }))
+      : [{ name: "Polki", pieces: "", carat: "", rate: "" }],
+  );
   const [findingRows, setFindingRows] = useState<{ type: string; weight: string }[]>([{ type: "Wire", weight: "" }]);
   const [itemRows, setItemRows] = useState<{ type: string; amount: string; carat: string }[]>([]);
   const [busy, setBusy] = useState(false);
@@ -387,7 +396,7 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
   }
 
   const title: Record<string, string> = {
-    cast: "Record Cast Output", jadai: "Record Jadai Output", finding: "Record Finding Output",
+    cast: "Record Cast Output", jadai: "Record Jadai Output", jadaiEdit: "Edit Jadai Output (संपादित करें)", finding: "Record Finding Output",
     issue: `Issue Material — ${stage.stage}`, reconcile: `Receive & Reconcile — ${stage.stage}`,
     editReconcile: `Edit Output — ${stage.stage}`, stones: "Issue Stones",
     stoneReturn: "Return Stones (वापसी)",
@@ -414,7 +423,10 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
             <F label="Wastage % (charged as extra silver weight)"><I value={wastagePercent} onChange={setWastagePercent} step="0.1" /></F>
           </>)}
 
-          {modal.kind === "jadai" && (<>
+          {(modal.kind === "jadai" || modal.kind === "jadaiEdit") && (<>
+            {modal.kind === "jadaiEdit" && (
+              <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">Editing recorded output — correct the kundan weight / stone rates, then Confirm. This replaces the earlier entry.</p>
+            )}
             <F label="Number of pieces *"><I value={pieces} onChange={setPieces} step="1" /></F>
             <F label={`Kundan gold weight (g) @ ${pure} *`}><I value={weight} onChange={setWeight} /></F>
             <F label="Labour (₹) — manual"><I value={labourAmount} onChange={setLabourAmount} step="1" /></F>
@@ -510,9 +522,10 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
             onClick={() => run(async () => {
               const A = modal.assignment.id;
               if (modal.kind === "cast") return castOutput(jobNo, { assignmentId: A, returnedWeight: Number(returnedWeight), wastagePercent: Number(wastagePercent) || 0, pieceCount: Number(pieces) });
-              if (modal.kind === "jadai") {
+              if (modal.kind === "jadai" || modal.kind === "jadaiEdit") {
                 const stones = stoneRows.filter((r) => r.name.trim() && Number(r.carat) > 0).map((r) => ({ name: r.name.trim(), pieces: Number(r.pieces) || 0, carat: Number(r.carat), rate: Number(r.rate) || 0 }));
-                return jadaiOutput(jobNo, { assignmentId: A, weight: Number(weight), labourAmount: Number(labourAmount) || 0, pieceCount: Number(pieces), stones });
+                const payload = { assignmentId: A, weight: Number(weight), labourAmount: Number(labourAmount) || 0, pieceCount: Number(pieces), stones };
+                return modal.kind === "jadaiEdit" ? editJadaiOutput(jobNo, payload) : jadaiOutput(jobNo, payload);
               }
               if (modal.kind === "finding") {
                 const findings = findingRows.filter((r) => Number(r.weight) > 0).map((r) => ({ type: r.type || "Finding", weight: Number(r.weight), karat: pure }));
