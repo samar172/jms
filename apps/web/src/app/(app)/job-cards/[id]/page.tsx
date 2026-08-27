@@ -8,13 +8,11 @@ import {
   issueStones, returnStones, approveStage, unapproveStage, closeJobCard, reopenJobCard, toggleHold, updateJobCardMeta,
   STAGE_HI, type JobCardDetail,
 } from "@/lib/production";
-import type { Stage, Assignment, MaterialIssue, StoneEntry } from "@jms/shared";
+import type { Stage, Assignment, MaterialIssue, StoneEntry, SubItem } from "@jms/shared";
 import { StatusPill } from "../page";
 
 const money = (v: number) => `₹ ${Math.round(v).toLocaleString("en-IN")}`;
 const gm = (v: number | null | undefined) => (v == null ? "—" : `${v.toFixed(3)} g`);
-// Casting sub-item types (client): what kind of piece came back from casting.
-const SUB_ITEM_TYPES = ["Ghat (घाट)", "Otla (ओटला)", "Chain (चेन)", "Other (अन्य)"];
 
 export default function JobCardDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -293,7 +291,6 @@ function StageCard({ jobNo, stage, pieceCount, targetPurity, karigars, settings,
                 <span>
                   {i.fromBulkStock ? "Bulk output" : `Issued ${gm(i.issuedWeight)} @ ${i.purity}`}
                   {i.status === "Reconciled" && ` → ${gm(i.returnedWeight)} @ ${i.returnedPurity}${i.dustWeight ? `, dust ${gm(i.dustWeight)}` : ""}${i.wastageWeight ? `, wastage ${gm(i.wastageWeight)}` : ""}`}
-                  {(i.pieceCount != null && i.subItemType) ? ` (${i.pieceCount} pcs · ${i.subItemType})` : i.subItemType ? ` · ${i.subItemType}` : ""}
                 </span>
                 {i.status === "Issued" && stage.status !== "Approved" && (
                   <ActBtn onClick={() => setModal({ kind: "reconcile", assignment: a, issue: i })}>Receive &amp; Reconcile</ActBtn>
@@ -306,6 +303,18 @@ function StageCard({ jobNo, stage, pieceCount, targetPurity, karigars, settings,
                 )}
               </div>
             ))}
+            {/* Sub-items (casting breakdown, karigar-wise) */}
+            {a.subItems.length > 0 && (
+              <div className="mt-1 ml-3 border-l-2 border-slate-100 pl-2">
+                {a.subItems.map((s) => (
+                  <div key={s.id} className="flex items-center gap-2 text-[11px] text-slate-500 py-0.5">
+                    <span className="text-slate-700 font-medium">{s.name}</span>
+                    <span className="mono">{s.pieces} pcs</span>
+                    <span className="mono">{s.weightG != null ? gm(s.weightG) : "—"}</span>
+                  </div>
+                ))}
+              </div>
+            )}
             {/* Stones */}
             {a.stones.map((s) => (
               <div key={s.id} className="flex items-center justify-between text-[11px] text-slate-500 py-0.5">
@@ -363,8 +372,10 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
   const pc0 = String(jIssue?.pieceCount ?? modal.issue?.pieceCount ?? pieceCount ?? 1);
 
   // shared fields
-  const [returnedWeight, setReturnedWeight] = useState("");
-  const [subItemType, setSubItemType] = useState("");
+  const subNames = settings.subItemNames ?? [];
+  const [subRows, setSubRows] = useState<{ name: string; pieces: string; weight: string }[]>([{ name: subNames[0]?.label ?? "", pieces: "", weight: "" }]);
+  const subTotalPieces = subRows.reduce((s, r) => s + (Number(r.pieces) || 0), 0);
+  const subTotalWeight = subRows.reduce((s, r) => s + (Number(r.weight) || 0), 0);
   const [wastagePercent, setWastagePercent] = useState(String(stage.stage === "Casting" ? dr.castingWastagePct : ""));
   const [pieces, setPieces] = useState(pc0);
   const [weight, setWeight] = useState(isJadaiEdit && jIssue?.returnedWeight != null ? String(jIssue.returnedWeight) : "");
@@ -421,15 +432,28 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
         </div>
         <div className="p-4 space-y-3">
           {modal.kind === "cast" && (<>
-            <F label="Returned weight (g) — finished piece(s) *"><I value={returnedWeight} onChange={setReturnedWeight} /></F>
-            <p className="text-[11px] text-slate-500">Purity locked to {targetPurity}. Drawn from karigar&apos;s 24K running stock.</p>
-            <F label="Number of pieces *"><I value={pieces} onChange={setPieces} step="1" /></F>
-            <F label="Sub item type (उप-आइटम प्रकार)">
-              <select className="w-full h-9 px-2 border border-slate-200 rounded text-[12px]" value={subItemType} onChange={(e) => setSubItemType(e.target.value)}>
-                <option value="">— none —</option>
-                {SUB_ITEM_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </F>
+            <p className="text-[11px] text-slate-500">Purity locked to {targetPurity}. Drawn from karigar&apos;s 24K running stock. Break the output down row-wise — sub-item name, pieces and weight.</p>
+            <div className="border-t border-slate-100 pt-2">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[11px] font-medium text-slate-600">Sub-items (उप-आइटम)</span>
+                <button type="button" onClick={() => setSubRows((r) => [...r, { name: subNames[0]?.label ?? "", pieces: "", weight: "" }])} className="h-6 px-2 rounded border border-slate-200 text-[11px] hover:bg-slate-50">+ Add Row</button>
+              </div>
+              <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-1.5 mb-1 text-[10px] text-slate-400 px-0.5">
+                <span>Name (नाम)</span><span>Pieces</span><span>Weight (g)</span><span></span>
+              </div>
+              {subNames.length === 0 && <p className="text-[11px] text-amber-700">No sub-item names configured — add them in Settings first.</p>}
+              {subRows.map((row, idx) => (
+                <div key={idx} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-1.5 mb-1.5 items-center">
+                  <select className="h-8 px-1 border border-slate-200 rounded text-[11px]" value={row.name} onChange={(e) => setSubRows((r) => r.map((x, i) => i === idx ? { ...x, name: e.target.value } : x))}>
+                    {subNames.map((t) => <option key={t.id} value={t.label}>{t.label}</option>)}
+                  </select>
+                  <input placeholder="Pcs" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono" value={row.pieces} onChange={(e) => setSubRows((r) => r.map((x, i) => i === idx ? { ...x, pieces: e.target.value } : x))} />
+                  <input placeholder="g" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono" value={row.weight} onChange={(e) => setSubRows((r) => r.map((x, i) => i === idx ? { ...x, weight: e.target.value } : x))} />
+                  <button type="button" onClick={() => setSubRows((r) => r.filter((_, i) => i !== idx))} className="text-rose-500 text-[13px] w-5">✕</button>
+                </div>
+              ))}
+              <p className="text-[11px] text-emerald-700 font-medium mt-1">Total: {subTotalPieces} pcs · {subTotalWeight.toFixed(3)} g</p>
+            </div>
             <F label="Wastage % (charged as extra silver weight)"><I value={wastagePercent} onChange={setWastagePercent} step="0.1" /></F>
           </>)}
 
@@ -531,7 +555,11 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
           <button disabled={busy} className="h-8 px-3 rounded bg-blue-800 text-white text-[12px] font-medium hover:bg-blue-900 disabled:opacity-50"
             onClick={() => run(async () => {
               const A = modal.assignment.id;
-              if (modal.kind === "cast") return castOutput(jobNo, { assignmentId: A, returnedWeight: Number(returnedWeight), wastagePercent: Number(wastagePercent) || 0, pieceCount: Number(pieces), subItemType: subItemType || undefined });
+              if (modal.kind === "cast") {
+                const subItems = subRows.filter((r) => r.name.trim() && (Number(r.pieces) > 0 || Number(r.weight) > 0)).map((r) => ({ name: r.name.trim(), pieces: Number(r.pieces) || 0, weightG: r.weight !== "" ? Number(r.weight) : null }));
+                if (subItems.length === 0) throw new Error("Add at least one sub-item row (pieces or weight).");
+                return castOutput(jobNo, { assignmentId: A, returnedWeight: subTotalWeight, wastagePercent: Number(wastagePercent) || 0, pieceCount: subTotalPieces, subItems });
+              }
               if (modal.kind === "jadai" || modal.kind === "jadaiEdit") {
                 const stones = stoneRows.filter((r) => r.name.trim() && Number(r.carat) > 0).map((r) => ({ name: r.name.trim(), pieces: Number(r.pieces) || 0, carat: Number(r.carat), rate: Number(r.rate) || 0 }));
                 const payload = { assignmentId: A, weight: Number(weight), labourAmount: Number(labourAmount) || 0, pieceCount: Number(pieces), stones };

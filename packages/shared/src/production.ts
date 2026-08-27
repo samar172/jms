@@ -39,7 +39,6 @@ export interface MaterialIssue {
   returnDate: string | null;
   fromBulkStock: boolean;
   pieceCount: number | null;
-  subItemType: string | null; // Casting: Ghat / Otla / Chain / Other
   wastagePercent: number | null; // Casting only
   wastageWeight: number | null; // Casting only
   labourEntryId: string | null;
@@ -74,6 +73,7 @@ export interface Assignment {
   issues: MaterialIssue[];
   stones: StoneEntry[];
   labour: LabourEntry[];
+  subItems: SubItem[];
 }
 
 export interface Stage {
@@ -81,6 +81,16 @@ export interface Stage {
   status: StageStatus;
   approvedDate: string | null;
   assignments: Assignment[];
+}
+
+// A row in a casting karigar's output breakdown (name from the master list +
+// pieces + weight). Recorded against the casting assignment (shows karigar-wise).
+export interface SubItem {
+  id: string;
+  sortOrder: number;
+  name: string; // sub-item name (Ghat / Otla / Chain / …)
+  pieces: number;
+  weightG: number | null;
 }
 
 export interface JobCard {

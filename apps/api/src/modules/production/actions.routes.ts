@@ -295,11 +295,19 @@ router.post(
         returnedWeight: z.number().positive(),
         wastagePercent: z.number().default(0),
         pieceCount: z.number().int().positive(),
-        subItemType: z.string().optional(),
+        // Row-wise sub-item breakdown (name from master list × pieces × weight).
+        // When present it drives the totals and is stored karigar-wise against
+        // this casting assignment; plain returnedWeight/pieceCount are fallback.
+        subItems: z
+          .array(z.object({ name: z.string(), pieces: z.number().int().default(0), weightG: z.number().nullable().optional() }))
+          .default([]),
       })
       .parse(req.body);
     const { jc, stage } = await stageByName(req.params.jobNo, "Casting");
-    const wastageWeight = +(body.returnedWeight * (body.wastagePercent / 100)).toFixed(3);
+    const rows = body.subItems.filter((r) => r.name.trim());
+    const totalWeight = rows.length ? +rows.reduce((s, r) => s + (r.weightG ?? 0), 0).toFixed(3) : body.returnedWeight;
+    const totalPieces = rows.length ? rows.reduce((s, r) => s + (r.pieces || 0), 0) : body.pieceCount;
+    const wastageWeight = +(totalWeight * (body.wastagePercent / 100)).toFixed(3);
     await prisma.prodMaterialIssue.create({
       data: {
         assignmentId: body.assignmentId,
@@ -307,20 +315,27 @@ router.post(
         issuedWeight: null,
         issueDate: new Date(),
         status: "Reconciled",
-        returnedWeight: body.returnedWeight,
+        returnedWeight: totalWeight,
         returnedPurityId: jc.targetPurityId,
         dustWeight: 0,
         returnDate: new Date(),
         fromBulkStock: true,
-        pieceCount: body.pieceCount,
-        subItemType: body.subItemType || null,
+        pieceCount: totalPieces,
         wastagePercent: body.wastagePercent,
         wastageWeight,
       },
     });
+    // Store the sub-item breakdown against this karigar's casting assignment.
+    if (rows.length) {
+      await prisma.prodSubItem.deleteMany({ where: { assignmentId: body.assignmentId } });
+      await prisma.prodSubItem.createMany({
+        data: rows.map((r, i) => ({ assignmentId: body.assignmentId, sortOrder: i, name: r.name.trim(), pieces: r.pieces || 0, weightG: r.weightG ?? null })),
+      });
+    }
     await prisma.prodStage.update({ where: { id: stage.id }, data: { status: "InProgress" } });
-    await prisma.prodJobCard.update({ where: { id: jc.id }, data: { pieceCount: body.pieceCount } });
-    await logActivity(jc.id, `Casting output recorded — ${gm(body.returnedWeight)} (${body.pieceCount} pcs${body.subItemType ? `, ${body.subItemType}` : ""}) + ${gm(wastageWeight)} wastage (${body.wastagePercent}%)`);
+    await prisma.prodJobCard.update({ where: { id: jc.id }, data: { pieceCount: totalPieces } });
+    const rowLabel = rows.length ? ` [${rows.map((r) => `${r.pieces}×${r.name.trim()}`).join(", ")}]` : "";
+    await logActivity(jc.id, `Casting output recorded — ${gm(totalWeight)} (${totalPieces} pcs)${rowLabel} + ${gm(wastageWeight)} wastage (${body.wastagePercent}%)`);
     res.status(201).json({ ok: true });
   })
 );

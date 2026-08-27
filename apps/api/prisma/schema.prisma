@@ -1277,6 +1277,32 @@ model ProdJobCard {
   @@index([status])
 }
 
+// Row-wise breakdown of a casting karigar's output — one row per sub-item
+// (name + pieces + weight, e.g. 5×Ghat, 4×Chain). Recorded against the casting
+// assignment so it shows karigar-wise. `name` is picked from ProdSubItemName.
+model ProdSubItem {
+  id           String         @id @default(cuid())
+  assignmentId String
+  assignment   ProdAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  sortOrder    Int            @default(0)
+  name         String         // sub-item name from the master list (Ghat / Otla / Chain / …)
+  pieces       Int            @default(0)
+  weightG      Decimal?       @db.Decimal(12, 3)
+  createdAt    DateTime       @default(now())
+
+  @@index([assignmentId])
+}
+
+// Master list of sub-item names, managed by admin in Settings and shared across
+// all job cards (Ghat / Otla / Chain / Other seeded; admin can add more).
+model ProdSubItemName {
+  id        String   @id @default(cuid())
+  label     String   @unique
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
 model ProdStage {
   id           String          @id @default(cuid())
   jobCardId    String
@@ -1300,9 +1326,10 @@ model ProdAssignment {
   karigar  Karigar   @relation(fields: [karigarId], references: [id])
   createdAt DateTime @default(now())
 
-  issues ProdMaterialIssue[]
-  stones ProdStoneEntry[]
-  labour ProdLabourEntry[]
+  issues   ProdMaterialIssue[]
+  stones   ProdStoneEntry[]
+  labour   ProdLabourEntry[]
+  subItems ProdSubItem[]
 
   @@index([stageId])
 }
@@ -1323,7 +1350,6 @@ model ProdMaterialIssue {
   returnDate       DateTime?
   fromBulkStock    Boolean         @default(false)
   pieceCount       Int?
-  subItemType      String?         // Casting: Ghat / Otla / Chain / Other (per-output classification)
   wastagePercent   Decimal?        @db.Decimal(6, 3)
   wastageWeight    Decimal?        @db.Decimal(12, 3)
   labourEntryId    String?

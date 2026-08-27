@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useProdSettings, updateSettings, addTier, updateTier, deleteTier, type ProdSettings } from "@/lib/production";
+import { useProdSettings, updateSettings, addTier, updateTier, deleteTier, addSubItemName, updateSubItemName, deleteSubItemName, type ProdSettings } from "@/lib/production";
 
 const RATE_LABELS: Record<string, string> = {
   castingWastagePct: "Casting wastage %",
@@ -46,9 +46,52 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      <SubItemNames names={data.subItemNames ?? []} onChanged={mutate} />
       <BaseRatesForm settings={data} onSaved={mutate} />
       <PureEqCalculator tiers={data.tiers} baseRate={data.baseRate} />
     </div>
+  );
+}
+
+/* ------------------------- Sub-item names (master) ------------------------ */
+function SubItemNames({ names, onChanged }: { names: { id: string; label: string }[]; onChanged: () => void }) {
+  const [newLabel, setNewLabel] = useState("");
+  return (
+    <div className="bg-white border border-slate-200 rounded-md mb-4">
+      <div className="px-4 py-2.5 text-[11px] uppercase tracking-wider text-slate-500 font-semibold border-b border-slate-100">Sub-item Names (उप-आइटम नाम)</div>
+      <div className="p-4">
+        <p className="text-[11px] text-slate-400 mb-2">These names appear in the casting output dropdown on every job card. Add the sub-items your workshop makes (Ghat, Otla, Chain, …).</p>
+        <div className="flex flex-wrap gap-2 mb-3">
+          {names.length === 0 && <span className="text-[12px] text-slate-400">No names yet.</span>}
+          {names.map((n) => <SubItemNameChip key={n.id} name={n} onChanged={onChanged} />)}
+        </div>
+        <div className="flex items-center gap-2">
+          <input placeholder="e.g. Kada" className="h-8 w-40 px-2 border border-slate-200 rounded text-[12px]" value={newLabel} onChange={(e) => setNewLabel(e.target.value)} />
+          <button disabled={!newLabel.trim()} onClick={async () => { await addSubItemName(newLabel.trim()); setNewLabel(""); onChanged(); }} className="h-8 px-2.5 rounded bg-blue-800 text-white text-[11px] disabled:opacity-50">+ Add name</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SubItemNameChip({ name, onChanged }: { name: { id: string; label: string }; onChanged: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [label, setLabel] = useState(name.label);
+  if (editing) {
+    return (
+      <span className="inline-flex items-center gap-1 border border-slate-200 rounded px-1.5 py-1">
+        <input className="h-6 w-24 px-1 border border-slate-200 rounded text-[11px]" value={label} onChange={(e) => setLabel(e.target.value)} />
+        <button onClick={async () => { await updateSubItemName(name.id, label.trim()); setEditing(false); onChanged(); }} className="text-[11px] text-emerald-700">Save</button>
+        <button onClick={() => { setLabel(name.label); setEditing(false); }} className="text-[11px] text-slate-400">✕</button>
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded px-2 py-1 text-[12px] text-slate-700">
+      {name.label}
+      <button onClick={() => setEditing(true)} className="text-slate-400 hover:text-blue-700 text-[10px]">edit</button>
+      <button onClick={async () => { if (confirm(`Remove "${name.label}"?`)) { await deleteSubItemName(name.id); onChanged(); } }} className="text-slate-300 hover:text-rose-600">✕</button>
+    </span>
   );
 }
 

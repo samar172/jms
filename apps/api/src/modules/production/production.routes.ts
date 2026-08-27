@@ -49,12 +49,13 @@ router.get(
   "/settings",
   requireAuth,
   asyncHandler(async (_req, res) => {
-    const [tiers, baseRate, defaultRates] = await Promise.all([
+    const [tiers, baseRate, defaultRates, subItemNames] = await Promise.all([
       loadTiers(),
       loadBaseRate(),
       loadDefaultRates(),
+      prisma.prodSubItemName.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" }, select: { id: true, label: true } }),
     ]);
-    res.json({ tiers, baseRate, defaultRates });
+    res.json({ tiers, baseRate, defaultRates, subItemNames });
   })
 );
 

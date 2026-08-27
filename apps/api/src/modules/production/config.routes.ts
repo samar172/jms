@@ -64,6 +64,45 @@ router.delete(
   })
 );
 
+/* -------------------------- Sub-item names (master) ----------------------- */
+// Admin-managed list of casting sub-item names (Ghat/Otla/Chain/…), shared
+// across all job cards and offered in the casting output dropdown.
+router.post(
+  "/sub-item-names",
+  requireRole(...ADMIN),
+  asyncHandler(async (req, res) => {
+    const body = z.object({ label: z.string().min(1) }).parse(req.body);
+    const count = await prisma.prodSubItemName.count();
+    const existing = await prisma.prodSubItemName.findUnique({ where: { label: body.label.trim() } });
+    if (existing) {
+      // Re-activate a previously removed name rather than erroring on the unique.
+      const t = await prisma.prodSubItemName.update({ where: { id: existing.id }, data: { isActive: true } });
+      return res.status(201).json(t);
+    }
+    const t = await prisma.prodSubItemName.create({ data: { label: body.label.trim(), sortOrder: count } });
+    res.status(201).json(t);
+  })
+);
+router.patch(
+  "/sub-item-names/:id",
+  requireRole(...ADMIN),
+  asyncHandler(async (req, res) => {
+    const body = z.object({ label: z.string().min(1) }).parse(req.body);
+    const t = await prisma.prodSubItemName.update({ where: { id: req.params.id }, data: { label: body.label.trim() } });
+    res.json(t);
+  })
+);
+router.delete(
+  "/sub-item-names/:id",
+  requireRole(...ADMIN),
+  asyncHandler(async (req, res) => {
+    // Soft-remove — historical sub-items store the label as text, so hiding the
+    // master entry never breaks past records.
+    await prisma.prodSubItemName.update({ where: { id: req.params.id }, data: { isActive: false } });
+    res.json({ ok: true });
+  })
+);
+
 /* ------------------------------- Karigars --------------------------------- */
 const karigarSchema = z.object({
   name: z.string().min(1),

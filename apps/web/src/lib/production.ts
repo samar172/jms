@@ -22,6 +22,7 @@ export interface ProdSettings {
     settingRatePerStone: number;
     flatLabour?: number;
   };
+  subItemNames: { id: string; label: string }[];
 }
 
 export interface ItemMaster {
@@ -125,7 +126,7 @@ export const editReconcile = (issueId: string, body: Record<string, unknown>) =>
   post(`/issues/${issueId}/edit-reconcile`, body);
 export const cancelReconcile = (issueId: string) =>
   post(`/issues/${issueId}/cancel-reconcile`);
-export const castOutput = (jobNo: string, body: { assignmentId: string; returnedWeight: number; wastagePercent: number; pieceCount: number; subItemType?: string }) =>
+export const castOutput = (jobNo: string, body: { assignmentId: string; returnedWeight: number; wastagePercent: number; pieceCount: number; subItems?: { name: string; pieces: number; weightG: number | null }[] }) =>
   post(`/job-cards/${jobNo}/cast-output`, body);
 export const jadaiOutput = (jobNo: string, body: Record<string, unknown>) =>
   post(`/job-cards/${jobNo}/jadai-output`, body);
@@ -158,6 +159,9 @@ export const updateSettings = (body: { baseRate?: number; defaultRates?: Record<
 export const addTier = (body: { label: string; percent: number }) => post("/purity-tiers", body);
 export const updateTier = (id: string, body: { label?: string; percent?: number }) => patch(`/purity-tiers/${id}`, body);
 export const deleteTier = (id: string) => del(`/purity-tiers/${id}`);
+export const addSubItemName = (label: string) => post("/sub-item-names", { label });
+export const updateSubItemName = (id: string, label: string) => patch(`/sub-item-names/${id}`, { label });
+export const deleteSubItemName = (id: string) => del(`/sub-item-names/${id}`);
 export const createKarigar = (body: Record<string, unknown>) => post("/karigars", body);
 export const updateKarigar = (id: string, body: Record<string, unknown>) => patch(`/karigars/${id}`, body);
 export const createItemMaster = (body: Record<string, unknown>) => post("/item-masters", body);

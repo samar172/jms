@@ -291,7 +291,16 @@ async function main() {
     const existing = await prisma.product.findUnique({ where: { serialNo: it.serialNo } });
     if (!existing) await prisma.product.create({ data: { ...it, netWeightG: it.grossWeightG, categoryId: cat.id, createdById: adminUser!.id } });
   }
-  console.log(`Chowker seed: ${chowkerKarigars.length} karigars, ${silverItems.length} item masters, tiers % + settings.`);
+  // Sub-item name master list (admin can add more from Settings).
+  const subItemNames = ["Ghat", "Otla", "Chain", "Other"];
+  for (let i = 0; i < subItemNames.length; i++) {
+    await prisma.prodSubItemName.upsert({
+      where: { label: subItemNames[i] },
+      create: { label: subItemNames[i], sortOrder: i },
+      update: {},
+    });
+  }
+  console.log(`Chowker seed: ${chowkerKarigars.length} karigars, ${silverItems.length} item masters, ${subItemNames.length} sub-item names, tiers % + settings.`);
 
   console.log("Seed complete. Demo login: admin@jms.local / Password@123 (all seeded users share this password).");
 }
