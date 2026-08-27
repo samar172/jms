@@ -13,6 +13,8 @@ import { StatusPill } from "../page";
 
 const money = (v: number) => `₹ ${Math.round(v).toLocaleString("en-IN")}`;
 const gm = (v: number | null | undefined) => (v == null ? "—" : `${v.toFixed(3)} g`);
+// Casting sub-item types (client): what kind of piece came back from casting.
+const SUB_ITEM_TYPES = ["Ghat (घाट)", "Otla (ओटला)", "Chain (चेन)", "Other (अन्य)"];
 
 export default function JobCardDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -291,6 +293,7 @@ function StageCard({ jobNo, stage, pieceCount, targetPurity, karigars, settings,
                 <span>
                   {i.fromBulkStock ? "Bulk output" : `Issued ${gm(i.issuedWeight)} @ ${i.purity}`}
                   {i.status === "Reconciled" && ` → ${gm(i.returnedWeight)} @ ${i.returnedPurity}${i.dustWeight ? `, dust ${gm(i.dustWeight)}` : ""}${i.wastageWeight ? `, wastage ${gm(i.wastageWeight)}` : ""}`}
+                  {(i.pieceCount != null && i.subItemType) ? ` (${i.pieceCount} pcs · ${i.subItemType})` : i.subItemType ? ` · ${i.subItemType}` : ""}
                 </span>
                 {i.status === "Issued" && stage.status !== "Approved" && (
                   <ActBtn onClick={() => setModal({ kind: "reconcile", assignment: a, issue: i })}>Receive &amp; Reconcile</ActBtn>
@@ -361,6 +364,7 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
 
   // shared fields
   const [returnedWeight, setReturnedWeight] = useState("");
+  const [subItemType, setSubItemType] = useState("");
   const [wastagePercent, setWastagePercent] = useState(String(stage.stage === "Casting" ? dr.castingWastagePct : ""));
   const [pieces, setPieces] = useState(pc0);
   const [weight, setWeight] = useState(isJadaiEdit && jIssue?.returnedWeight != null ? String(jIssue.returnedWeight) : "");
@@ -420,6 +424,12 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
             <F label="Returned weight (g) — finished piece(s) *"><I value={returnedWeight} onChange={setReturnedWeight} /></F>
             <p className="text-[11px] text-slate-500">Purity locked to {targetPurity}. Drawn from karigar&apos;s 24K running stock.</p>
             <F label="Number of pieces *"><I value={pieces} onChange={setPieces} step="1" /></F>
+            <F label="Sub item type (उप-आइटम प्रकार)">
+              <select className="w-full h-9 px-2 border border-slate-200 rounded text-[12px]" value={subItemType} onChange={(e) => setSubItemType(e.target.value)}>
+                <option value="">— none —</option>
+                {SUB_ITEM_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </F>
             <F label="Wastage % (charged as extra silver weight)"><I value={wastagePercent} onChange={setWastagePercent} step="0.1" /></F>
           </>)}
 
@@ -521,7 +531,7 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
           <button disabled={busy} className="h-8 px-3 rounded bg-blue-800 text-white text-[12px] font-medium hover:bg-blue-900 disabled:opacity-50"
             onClick={() => run(async () => {
               const A = modal.assignment.id;
-              if (modal.kind === "cast") return castOutput(jobNo, { assignmentId: A, returnedWeight: Number(returnedWeight), wastagePercent: Number(wastagePercent) || 0, pieceCount: Number(pieces) });
+              if (modal.kind === "cast") return castOutput(jobNo, { assignmentId: A, returnedWeight: Number(returnedWeight), wastagePercent: Number(wastagePercent) || 0, pieceCount: Number(pieces), subItemType: subItemType || undefined });
               if (modal.kind === "jadai" || modal.kind === "jadaiEdit") {
                 const stones = stoneRows.filter((r) => r.name.trim() && Number(r.carat) > 0).map((r) => ({ name: r.name.trim(), pieces: Number(r.pieces) || 0, carat: Number(r.carat), rate: Number(r.rate) || 0 }));
                 const payload = { assignmentId: A, weight: Number(weight), labourAmount: Number(labourAmount) || 0, pieceCount: Number(pieces), stones };

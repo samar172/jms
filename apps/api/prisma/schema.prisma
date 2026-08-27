@@ -1323,6 +1323,7 @@ model ProdMaterialIssue {
   returnDate       DateTime?
   fromBulkStock    Boolean         @default(false)
   pieceCount       Int?
+  subItemType      String?         // Casting: Ghat / Otla / Chain / Other (per-output classification)
   wastagePercent   Decimal?        @db.Decimal(6, 3)
   wastageWeight    Decimal?        @db.Decimal(12, 3)
   labourEntryId    String?

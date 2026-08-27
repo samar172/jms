@@ -295,6 +295,7 @@ router.post(
         returnedWeight: z.number().positive(),
         wastagePercent: z.number().default(0),
         pieceCount: z.number().int().positive(),
+        subItemType: z.string().optional(),
       })
       .parse(req.body);
     const { jc, stage } = await stageByName(req.params.jobNo, "Casting");
@@ -312,13 +313,14 @@ router.post(
         returnDate: new Date(),
         fromBulkStock: true,
         pieceCount: body.pieceCount,
+        subItemType: body.subItemType || null,
         wastagePercent: body.wastagePercent,
         wastageWeight,
       },
     });
     await prisma.prodStage.update({ where: { id: stage.id }, data: { status: "InProgress" } });
     await prisma.prodJobCard.update({ where: { id: jc.id }, data: { pieceCount: body.pieceCount } });
-    await logActivity(jc.id, `Casting output recorded — ${gm(body.returnedWeight)} (${body.pieceCount} pcs) + ${gm(wastageWeight)} wastage (${body.wastagePercent}%)`);
+    await logActivity(jc.id, `Casting output recorded — ${gm(body.returnedWeight)} (${body.pieceCount} pcs${body.subItemType ? `, ${body.subItemType}` : ""}) + ${gm(wastageWeight)} wastage (${body.wastagePercent}%)`);
     res.status(201).json({ ok: true });
   })
 );

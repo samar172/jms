@@ -39,6 +39,7 @@ export interface MaterialIssue {
   returnDate: string | null;
   fromBulkStock: boolean;
   pieceCount: number | null;
+  subItemType: string | null; // Casting: Ghat / Otla / Chain / Other
   wastagePercent: number | null; // Casting only
   wastageWeight: number | null; // Casting only
   labourEntryId: string | null;

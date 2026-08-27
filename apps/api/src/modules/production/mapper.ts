@@ -118,6 +118,7 @@ export function mapJobCard(jc: FullJobCard): EngineJobCard {
           returnDate: i.returnDate ? iso(i.returnDate) : null,
           fromBulkStock: i.fromBulkStock,
           pieceCount: i.pieceCount,
+          subItemType: i.subItemType ?? null,
           wastagePercent: num(i.wastagePercent),
           wastageWeight: num(i.wastageWeight),
           labourEntryId: i.labourEntryId ?? null,
