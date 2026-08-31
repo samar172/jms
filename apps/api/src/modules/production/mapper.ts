@@ -122,6 +122,7 @@ export function mapJobCard(jc: FullJobCard): EngineJobCard {
           wastagePercent: num(i.wastagePercent),
           wastageWeight: num(i.wastageWeight),
           labourEntryId: i.labourEntryId ?? null,
+          label: i.label ?? null,
         })),
         stones: a.stones.map((s) => ({
           id: s.id,

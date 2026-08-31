@@ -4,11 +4,11 @@ import { useState } from "react";
 import Link from "next/link";
 import { useProdKarigars, useLedger, useProdSettings, issueBulkStock, createKarigar, updateKarigar, type ProdKarigar } from "@/lib/production";
 
-const SPEC_OPTS = ["Casting", "Meenakari", "Jadai", "Setting", "Fitting"];
+const SPEC_OPTS = ["Casting", "Meenakari", "Jadai", "Kundan", "Setting", "Fitting"];
 
 const money = (v: number) => `₹ ${Math.round(v).toLocaleString("en-IN")}`;
 const gm = (v: number) => `${v.toFixed(3)} g`;
-const SPECS = ["all", "Casting", "Meenakari", "Jadai", "Setting", "Fitting"];
+const SPECS = ["all", "Casting", "Meenakari", "Jadai", "Kundan", "Setting", "Fitting"];
 
 function defaultRateLabel(k: ProdKarigar): string | null {
   if (k.specialization === "Casting" && k.defaultWastagePct != null) return `${k.defaultWastagePct}% wastage`;
@@ -185,7 +185,7 @@ function KarigarForm({ mode, karigar, onClose, onDone }: { mode: "new" | "edit";
           <div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold pt-1">Default rates (specialization-dependent)</div>
           {spec === "Casting" && <L label="Default wastage %"><input type="number" className="w-full h-9 px-2 border border-slate-200 rounded text-[12px] mono" value={wastage} onChange={(e) => setWastage(e.target.value)} /></L>}
           {spec === "Meenakari" && <L label="Default ₹/gram"><input type="number" className="w-full h-9 px-2 border border-slate-200 rounded text-[12px] mono" value={ratePerGm} onChange={(e) => setRatePerGm(e.target.value)} /></L>}
-          {(spec === "Jadai" || spec === "Setting" || spec === "Fitting") && <L label="Default flat labour ₹"><input type="number" className="w-full h-9 px-2 border border-slate-200 rounded text-[12px] mono" value={flat} onChange={(e) => setFlat(e.target.value)} /></L>}
+          {(spec === "Jadai" || spec === "Kundan" || spec === "Setting" || spec === "Fitting") && <L label="Default flat labour ₹"><input type="number" className="w-full h-9 px-2 border border-slate-200 rounded text-[12px] mono" value={flat} onChange={(e) => setFlat(e.target.value)} /></L>}
         </div>
         <div className="px-4 py-3 border-t border-slate-100 flex justify-end gap-2">
           <button onClick={onClose} className="h-8 px-3 rounded border border-slate-200 text-[12px]">Cancel</button>

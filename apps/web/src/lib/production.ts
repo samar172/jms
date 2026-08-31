@@ -128,16 +128,30 @@ export const cancelReconcile = (issueId: string) =>
   post(`/issues/${issueId}/cancel-reconcile`);
 export const castOutput = (jobNo: string, body: { assignmentId: string; returnedWeight: number; wastagePercent: number; pieceCount: number; subItems?: { name: string; pieces: number; weightG: number | null }[] }) =>
   post(`/job-cards/${jobNo}/cast-output`, body);
+export const editCastOutput = (jobNo: string, body: { assignmentId: string; returnedWeight: number; wastagePercent: number; pieceCount: number; subItems?: { name: string; pieces: number; weightG: number | null }[] }) =>
+  post(`/job-cards/${jobNo}/cast-output/edit`, body);
 export const jadaiOutput = (jobNo: string, body: Record<string, unknown>) =>
   post(`/job-cards/${jobNo}/jadai-output`, body);
 export const editJadaiOutput = (jobNo: string, body: Record<string, unknown>) =>
   post(`/job-cards/${jobNo}/jadai-output/edit`, body);
+export const kundanOutput = (jobNo: string, body: { assignmentId: string; weight: number; labourAmount: number }) =>
+  post(`/job-cards/${jobNo}/kundan-output`, body);
+export const editKundanOutput = (jobNo: string, body: { assignmentId: string; weight: number; labourAmount: number }) =>
+  post(`/job-cards/${jobNo}/kundan-output/edit`, body);
 export const findingOutput = (jobNo: string, body: Record<string, unknown>) =>
   post(`/job-cards/${jobNo}/finding-output`, body);
+export const editFindingOutput = (jobNo: string, body: Record<string, unknown>) =>
+  post(`/job-cards/${jobNo}/finding-output/edit`, body);
 export const issueStones = (assignmentId: string, body: Record<string, unknown>) =>
   post(`/assignments/${assignmentId}/stones`, body);
 export const returnStones = (stoneId: string, body: Record<string, unknown>) =>
   post(`/stones/${stoneId}/return`, body);
+export const editStone = (stoneId: string, body: { type: string; piecesCount: number | null; carat: number | null; ratePerCarat: number | null }) =>
+  post(`/stones/${stoneId}/edit`, body);
+export const removeStone = (stoneId: string) => del(`/stones/${stoneId}`);
+export const removeIssue = (issueId: string) => del(`/issues/${issueId}`);
+export const removeAssignment = (assignmentId: string) => del(`/assignments/${assignmentId}`);
+export const clearAssignmentOutput = (assignmentId: string) => del(`/assignments/${assignmentId}/output`);
 export const addLabour = (assignmentId: string, body: Record<string, unknown>) =>
   post(`/assignments/${assignmentId}/labour`, body);
 export const removeLabour = (labourId: string) => del(`/labour/${labourId}`);
@@ -171,6 +185,7 @@ export const STAGE_HI: Record<string, string> = {
   Casting: "ढलाई",
   Meenakari: "मीनाकारी",
   Jadai: "जड़ाई",
+  Kundan: "कुंदन",
   Setting: "सेटिंग",
   Fitting: "फिटिंग / पॉलिश",
 };

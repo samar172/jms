@@ -4,8 +4,8 @@ import { use, useState } from "react";
 import Link from "next/link";
 import {
   useJobCard, useProdKarigars, useProdSettings,
-  assignKarigar, castOutput, issueMaterial, reconcile, editReconcile, cancelReconcile, jadaiOutput, editJadaiOutput, findingOutput,
-  issueStones, returnStones, approveStage, unapproveStage, closeJobCard, reopenJobCard, toggleHold, updateJobCardMeta,
+  assignKarigar, castOutput, editCastOutput, issueMaterial, reconcile, editReconcile, cancelReconcile, jadaiOutput, editJadaiOutput, kundanOutput, editKundanOutput, findingOutput, editFindingOutput,
+  issueStones, returnStones, editStone, removeStone, removeIssue, removeAssignment, clearAssignmentOutput, approveStage, unapproveStage, closeJobCard, reopenJobCard, toggleHold, updateJobCardMeta,
   STAGE_HI, type JobCardDetail,
 } from "@/lib/production";
 import type { Stage, Assignment, MaterialIssue, StoneEntry, SubItem } from "@jms/shared";
@@ -234,10 +234,32 @@ function StageCard({ jobNo, stage, pieceCount, targetPurity, karigars, settings,
   const isMeenakari = stage.stage === "Meenakari";
   const isSetting = stage.stage === "Setting";
   const labourTotal = stage.assignments.flatMap((a) => a.labour).reduce((s, l) => s + l.amount, 0);
-  const allReconciled = stage.assignments.length > 0 && stage.assignments.every((a) => {
-    const hasWork = stage.stage === "Fitting" ? a.issues.length + a.labour.length + a.stones.length > 0 : a.issues.length > 0;
-    return hasWork && a.issues.every((i) => i.status === "Reconciled");
-  });
+  // A stage is ready to lock when at least one karigar has produced output and
+  // no material is still out un-reconciled. An idle karigar (added but nothing
+  // recorded yet) must NOT block approval — otherwise a spare assignment strands
+  // the whole stage; the manager can leave it or remove it. Output isn't always a
+  // material issue (Jadai records only stones/labour), so "produced" = any of
+  // issues / stones / labour / sub-items.
+  const anyOutput = stage.assignments.some((a) => a.issues.length > 0 || a.stones.length > 0 || a.labour.length > 0 || a.subItems.length > 0);
+  const noPendingIssues = stage.assignments.every((a) => a.issues.every((i) => i.status === "Reconciled"));
+  const allReconciled = stage.assignments.length > 0 && anyOutput && noPendingIssues;
+
+  async function removeKarigar(assignmentId: string, name: string) {
+    if (!confirm(`Remove ${name} from ${stage.stage}? (Only works if nothing is recorded against them yet.)`)) return;
+    try { await removeAssignment(assignmentId); onChange(); } catch (e) { alert((e as Error).message); }
+  }
+  async function removeIssueRow(issueId: string) {
+    if (!confirm("Remove this issued material line?")) return;
+    try { await removeIssue(issueId); onChange(); } catch (e) { alert((e as Error).message); }
+  }
+  async function removeStoneRow(stoneId: string) {
+    if (!confirm("Remove this stone?")) return;
+    try { await removeStone(stoneId); onChange(); } catch (e) { alert((e as Error).message); }
+  }
+  async function clearOutput(assignmentId: string, name: string) {
+    if (!confirm(`Clear all of ${name}'s recorded ${stage.stage} output? This wipes their material / stones / labour on this stage (the karigar stays assigned).`)) return;
+    try { await clearAssignmentOutput(assignmentId); onChange(); } catch (e) { alert((e as Error).message); }
+  }
 
   async function addKarigar() {
     if (!newKarigar) return;
@@ -270,16 +292,35 @@ function StageCard({ jobNo, stage, pieceCount, targetPurity, karigars, settings,
 
       <div className="p-2.5 space-y-2">
         {stage.assignments.length === 0 && <p className="text-[12px] text-slate-400 px-1">No karigar assigned to this stage yet.</p>}
-        {stage.assignments.map((a) => (
+        {stage.assignments.map((a) => {
+          // Output is "recorded" once this karigar has produced anything on the
+          // stage — a returned material issue, stones, labour or sub-items. Not
+          // every stage writes a material issue (Jadai records only stones/labour),
+          // so keying the Record→Edit flip off issues alone would strand them.
+          const hasOutput = a.issues.length > 0 || a.stones.length > 0 || a.labour.length > 0 || a.subItems.length > 0;
+          return (
           <div key={a.id} className="border border-slate-100 rounded p-2">
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[12px] font-medium text-slate-800">{a.karigar}</span>
+              <span className="flex items-center gap-1.5">
+                <span className="text-[12px] font-medium text-slate-800">{a.karigar}</span>
+                {stage.status !== "Approved" && !hasOutput && (
+                  <button onClick={() => removeKarigar(a.id, a.karigar)} title="Remove this karigar (added by mistake)"
+                    className="text-[11px] text-rose-500 hover:text-rose-700 leading-none">✕ remove</button>
+                )}
+              </span>
               {stage.status !== "Approved" && (
                 <div className="flex gap-1.5">
-                  {stage.stage === "Casting" && a.issues.length === 0 && <ActBtn onClick={() => setModal({ kind: "cast", assignment: a })}>Record Cast Output</ActBtn>}
-                  {stage.stage === "Jadai" && a.issues.length === 0 && <ActBtn onClick={() => setModal({ kind: "jadai", assignment: a })}>Record Jadai Output</ActBtn>}
-                  {stage.stage === "Jadai" && a.issues.length > 0 && <ActBtn onClick={() => setModal({ kind: "jadaiEdit", assignment: a })}>Edit Jadai Output (संपादित करें)</ActBtn>}
-                  {stage.stage === "Fitting" && <ActBtn onClick={() => setModal({ kind: "finding", assignment: a })}>Record Finding Output</ActBtn>}
+                  {stage.stage === "Casting" && !hasOutput && <ActBtn onClick={() => setModal({ kind: "cast", assignment: a })}>Record Cast Output</ActBtn>}
+                  {stage.stage === "Casting" && hasOutput && <ActBtn onClick={() => setModal({ kind: "castEdit", assignment: a })}>Edit Cast Output (संपादित करें)</ActBtn>}
+                  {stage.stage === "Jadai" && !hasOutput && <ActBtn onClick={() => setModal({ kind: "jadai", assignment: a })}>Record Jadai Output</ActBtn>}
+                  {stage.stage === "Jadai" && hasOutput && <ActBtn onClick={() => setModal({ kind: "jadaiEdit", assignment: a })}>Edit Jadai Output (संपादित करें)</ActBtn>}
+                  {stage.stage === "Kundan" && !hasOutput && <ActBtn onClick={() => setModal({ kind: "kundan", assignment: a })}>Record Kundan Output</ActBtn>}
+                  {stage.stage === "Kundan" && hasOutput && <ActBtn onClick={() => setModal({ kind: "kundanEdit", assignment: a })}>Edit Kundan Output (संपादित करें)</ActBtn>}
+                  {stage.stage === "Fitting" && !hasOutput && <ActBtn onClick={() => setModal({ kind: "finding", assignment: a })}>Record Finding Output</ActBtn>}
+                  {stage.stage === "Fitting" && hasOutput && <ActBtn onClick={() => setModal({ kind: "findingEdit", assignment: a })}>Edit Finding Output (संपादित करें)</ActBtn>}
+                  {["Casting", "Jadai", "Kundan", "Fitting"].includes(stage.stage) && hasOutput && (
+                    <button onClick={() => clearOutput(a.id, a.karigar)} title="Wipe this karigar's recorded output on this stage" className="h-6 px-2 rounded border border-rose-200 text-[11px] text-rose-600 hover:bg-rose-50">Remove output</button>
+                  )}
                   {(isMeenakari || isSetting) && <ActBtn onClick={() => setModal({ kind: "issue", assignment: a })}>+ Issue Material</ActBtn>}
                   {isSetting && <ActBtn onClick={() => setModal({ kind: "stones", assignment: a })}>+ Issue Stones</ActBtn>}
                 </div>
@@ -293,7 +334,10 @@ function StageCard({ jobNo, stage, pieceCount, targetPurity, karigars, settings,
                   {i.status === "Reconciled" && ` → ${gm(i.returnedWeight)} @ ${i.returnedPurity}${i.dustWeight ? `, dust ${gm(i.dustWeight)}` : ""}${i.wastageWeight ? `, wastage ${gm(i.wastageWeight)}` : ""}`}
                 </span>
                 {i.status === "Issued" && stage.status !== "Approved" && (
-                  <ActBtn onClick={() => setModal({ kind: "reconcile", assignment: a, issue: i })}>Receive &amp; Reconcile</ActBtn>
+                  <span className="flex gap-1">
+                    <ActBtn onClick={() => setModal({ kind: "reconcile", assignment: a, issue: i })}>Receive &amp; Reconcile</ActBtn>
+                    <button onClick={() => removeIssueRow(i.id)} className="h-6 px-2 rounded border border-rose-200 text-[11px] text-rose-600 hover:bg-rose-50">Remove</button>
+                  </span>
                 )}
                 {i.status === "Reconciled" && !i.fromBulkStock && stage.status !== "Approved" && (
                   <span className="flex gap-1">
@@ -320,7 +364,11 @@ function StageCard({ jobNo, stage, pieceCount, targetPurity, karigars, settings,
               <div key={s.id} className="flex items-center justify-between text-[11px] text-slate-500 py-0.5">
                 <span>💎 {s.type} · {s.qtyIssued} · {money(s.valueIssued)}{s.valueReturned > 0 ? ` (returned ${s.caratReturned ? `${s.caratReturned}ct / ` : ""}${money(s.valueReturned)} — net ${money(s.valueIssued - s.valueReturned)})` : ""}</span>
                 {stage.status !== "Approved" && (
-                  <ActBtn onClick={() => setModal({ kind: "stoneReturn", assignment: a, stone: s })}>Return</ActBtn>
+                  <span className="flex gap-1">
+                    <ActBtn onClick={() => setModal({ kind: "stoneEdit", assignment: a, stone: s })}>Edit</ActBtn>
+                    <ActBtn onClick={() => setModal({ kind: "stoneReturn", assignment: a, stone: s })}>Return</ActBtn>
+                    <button onClick={() => removeStoneRow(s.id)} className="h-6 px-2 rounded border border-rose-200 text-[11px] text-rose-600 hover:bg-rose-50">Remove</button>
+                  </span>
                 )}
               </div>
             ))}
@@ -329,7 +377,8 @@ function StageCard({ jobNo, stage, pieceCount, targetPurity, karigars, settings,
               <div key={l.id} className="text-[11px] text-slate-500 py-0.5">🧾 {l.basis} · {money(l.amount)} <span className="text-slate-400">{l.note}</span></div>
             ))}
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {adding && (
@@ -367,26 +416,42 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
   const isEdit = modal.kind === "editReconcile";
   // Jadai edit: prefill from the already-recorded output on this assignment.
   const isJadaiEdit = modal.kind === "jadaiEdit";
+  const isCastEdit = modal.kind === "castEdit";
+  const isFindingEdit = modal.kind === "findingEdit";
+  const isKundanEdit = modal.kind === "kundanEdit";
+  const isStoneEdit = modal.kind === "stoneEdit";
   const jIssue = isJadaiEdit ? modal.assignment.issues.find((i) => i.fromBulkStock) : undefined;
+  const cIssue = isCastEdit ? modal.assignment.issues.find((i) => i.fromBulkStock) : undefined;
+  const kIssue = isKundanEdit ? modal.assignment.issues.find((i) => i.fromBulkStock) : undefined;
   const jLabour = isJadaiEdit ? modal.assignment.labour.reduce((s, l) => s + l.amount, 0) : 0;
-  const pc0 = String(jIssue?.pieceCount ?? modal.issue?.pieceCount ?? pieceCount ?? 1);
+  const fLabour = isFindingEdit ? modal.assignment.labour.reduce((s, l) => s + l.amount, 0) : 0;
+  const kLabour = isKundanEdit ? modal.assignment.labour.reduce((s, l) => s + l.amount, 0) : 0;
+  const pc0 = String(jIssue?.pieceCount ?? cIssue?.pieceCount ?? modal.issue?.pieceCount ?? pieceCount ?? 1);
 
   // shared fields
   const subNames = settings.subItemNames ?? [];
-  const [subRows, setSubRows] = useState<{ name: string; pieces: string; weight: string }[]>([{ name: subNames[0]?.label ?? "", pieces: "", weight: "" }]);
+  const [subRows, setSubRows] = useState<{ name: string; pieces: string; weight: string }[]>(
+    isCastEdit && modal.assignment.subItems.length > 0
+      ? modal.assignment.subItems.map((s) => ({ name: s.name, pieces: String(s.pieces), weight: s.weightG != null ? String(s.weightG) : "" }))
+      : [{ name: subNames[0]?.label ?? "", pieces: "", weight: "" }],
+  );
   const subTotalPieces = subRows.reduce((s, r) => s + (Number(r.pieces) || 0), 0);
   const subTotalWeight = subRows.reduce((s, r) => s + (Number(r.weight) || 0), 0);
-  const [wastagePercent, setWastagePercent] = useState(String(stage.stage === "Casting" ? dr.castingWastagePct : ""));
+  const [wastagePercent, setWastagePercent] = useState(String(isCastEdit ? (cIssue?.wastagePercent ?? 0) : stage.stage === "Casting" ? dr.castingWastagePct : ""));
   const [pieces, setPieces] = useState(pc0);
-  const [weight, setWeight] = useState(isJadaiEdit && jIssue?.returnedWeight != null ? String(jIssue.returnedWeight) : "");
+  const [weight, setWeight] = useState(
+    isJadaiEdit && jIssue?.returnedWeight != null ? String(jIssue.returnedWeight)
+      : isKundanEdit && kIssue?.returnedWeight != null ? String(kIssue.returnedWeight)
+      : "",
+  );
   const [dust, setDust] = useState(isEdit ? String(modal.issue?.dustWeight ?? 0) : "0");
   const [ratePerGm, setRatePerGm] = useState(isEdit && modal.labourRate != null ? String(modal.labourRate) : String(dr.meenakariRatePerGm));
   const [flat, setFlat] = useState(isEdit && modal.labourRate != null ? String(modal.labourRate) : "");
-  const [labourAmount, setLabourAmount] = useState(isJadaiEdit && jLabour > 0 ? String(jLabour) : "");
-  const [stoneType, setStoneType] = useState("Polki");
-  const [stoneCarat, setStoneCarat] = useState("");
-  const [stoneRate, setStoneRate] = useState("");
-  const [stonePieces, setStonePieces] = useState("");
+  const [labourAmount, setLabourAmount] = useState((isJadaiEdit && jLabour > 0) ? String(jLabour) : (isFindingEdit && fLabour > 0) ? String(fLabour) : (isKundanEdit && kLabour > 0) ? String(kLabour) : "");
+  const [stoneType, setStoneType] = useState(isStoneEdit ? (modal.stone?.type ?? "") : "Polki");
+  const [stoneCarat, setStoneCarat] = useState(isStoneEdit && modal.stone?.carat != null ? String(modal.stone.carat) : "");
+  const [stoneRate, setStoneRate] = useState(isStoneEdit && modal.stone?.ratePerCarat != null ? String(modal.stone.ratePerCarat) : "");
+  const [stonePieces, setStonePieces] = useState(isStoneEdit && modal.stone?.piecesCount != null ? String(modal.stone.piecesCount) : "");
   // stone return
   const [retCarat, setRetCarat] = useState("");
   const [retPieces, setRetPieces] = useState("");
@@ -397,8 +462,16 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
       ? modal.assignment.stones.map((s) => ({ name: s.type, pieces: s.piecesCount != null ? String(s.piecesCount) : "", carat: s.carat != null ? String(s.carat) : "", rate: s.ratePerCarat != null ? String(s.ratePerCarat) : "" }))
       : [{ name: "Polki", pieces: "", carat: "", rate: "" }],
   );
-  const [findingRows, setFindingRows] = useState<{ type: string; weight: string }[]>([{ type: "Wire", weight: "" }]);
-  const [itemRows, setItemRows] = useState<{ type: string; amount: string; carat: string }[]>([]);
+  const [findingRows, setFindingRows] = useState<{ type: string; weight: string }[]>(
+    isFindingEdit && modal.assignment.issues.length > 0
+      ? modal.assignment.issues.map((i) => ({ type: i.label ?? "Finding", weight: i.returnedWeight != null ? String(i.returnedWeight) : "" }))
+      : [{ type: "Wire", weight: "" }],
+  );
+  const [itemRows, setItemRows] = useState<{ type: string; amount: string; carat: string }[]>(
+    isFindingEdit && modal.assignment.stones.length > 0
+      ? modal.assignment.stones.map((s) => ({ type: s.type, amount: String(s.valueIssued), carat: s.carat != null ? String(s.carat) : "" }))
+      : [],
+  );
   const [busy, setBusy] = useState(false);
 
   const issue = modal.issue;
@@ -411,9 +484,9 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
   }
 
   const title: Record<string, string> = {
-    cast: "Record Cast Output", jadai: "Record Jadai Output", jadaiEdit: "Edit Jadai Output (संपादित करें)", finding: "Record Finding Output",
+    cast: "Record Cast Output", castEdit: "Edit Cast Output (संपादित करें)", jadai: "Record Jadai Output", jadaiEdit: "Edit Jadai Output (संपादित करें)", kundan: "Record Kundan Output", kundanEdit: "Edit Kundan Output (संपादित करें)", finding: "Record Finding Output", findingEdit: "Edit Finding Output (संपादित करें)",
     issue: `Issue Material — ${stage.stage}`, reconcile: `Receive & Reconcile — ${stage.stage}`,
-    editReconcile: `Edit Output — ${stage.stage}`, stones: "Issue Stones",
+    editReconcile: `Edit Output — ${stage.stage}`, stones: "Issue Stones", stoneEdit: "Edit Stone (संपादित करें)",
     stoneReturn: "Return Stones (वापसी)",
   };
 
@@ -431,7 +504,10 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600">✕</button>
         </div>
         <div className="p-4 space-y-3">
-          {modal.kind === "cast" && (<>
+          {(modal.kind === "cast" || modal.kind === "castEdit") && (<>
+            {modal.kind === "castEdit" && (
+              <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">Editing recorded output — correct the sub-item rows / wastage, then Confirm. This replaces the earlier entry.</p>
+            )}
             <p className="text-[11px] text-slate-500">Purity locked to {targetPurity}. Drawn from karigar&apos;s 24K running stock. Break the output down row-wise — sub-item name, pieces and weight.</p>
             <div className="border-t border-slate-100 pt-2">
               <div className="flex items-center justify-between mb-1">
@@ -444,11 +520,11 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
               {subNames.length === 0 && <p className="text-[11px] text-amber-700">No sub-item names configured — add them in Settings first.</p>}
               {subRows.map((row, idx) => (
                 <div key={idx} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-1.5 mb-1.5 items-center">
-                  <select className="h-8 px-1 border border-slate-200 rounded text-[11px]" value={row.name} onChange={(e) => setSubRows((r) => r.map((x, i) => i === idx ? { ...x, name: e.target.value } : x))}>
+                  <select className="h-8 px-1 border border-slate-200 rounded text-[11px] min-w-0 w-full" value={row.name} onChange={(e) => setSubRows((r) => r.map((x, i) => i === idx ? { ...x, name: e.target.value } : x))}>
                     {subNames.map((t) => <option key={t.id} value={t.label}>{t.label}</option>)}
                   </select>
-                  <input placeholder="Pcs" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono" value={row.pieces} onChange={(e) => setSubRows((r) => r.map((x, i) => i === idx ? { ...x, pieces: e.target.value } : x))} />
-                  <input placeholder="g" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono" value={row.weight} onChange={(e) => setSubRows((r) => r.map((x, i) => i === idx ? { ...x, weight: e.target.value } : x))} />
+                  <input placeholder="Pcs" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono min-w-0 w-full" value={row.pieces} onChange={(e) => setSubRows((r) => r.map((x, i) => i === idx ? { ...x, pieces: e.target.value } : x))} />
+                  <input placeholder="g" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono min-w-0 w-full" value={row.weight} onChange={(e) => setSubRows((r) => r.map((x, i) => i === idx ? { ...x, weight: e.target.value } : x))} />
                   <button type="button" onClick={() => setSubRows((r) => r.filter((_, i) => i !== idx))} className="text-rose-500 text-[13px] w-5">✕</button>
                 </div>
               ))}
@@ -459,10 +535,9 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
 
           {(modal.kind === "jadai" || modal.kind === "jadaiEdit") && (<>
             {modal.kind === "jadaiEdit" && (
-              <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">Editing recorded output — correct the kundan weight / stone rates, then Confirm. This replaces the earlier entry.</p>
+              <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">Editing recorded output — correct the pieces / stone rates / labour, then Confirm. This replaces the earlier entry. (Kundan gold is recorded in the Kundan stage.)</p>
             )}
             <F label="Number of pieces *"><I value={pieces} onChange={setPieces} step="1" /></F>
-            <F label={`Kundan gold weight (g) @ ${pure} *`}><I value={weight} onChange={setWeight} /></F>
             <F label="Labour (₹) — manual"><I value={labourAmount} onChange={setLabourAmount} step="1" /></F>
             <div className="border-t border-slate-100 pt-2">
               <div className="flex items-center justify-between mb-1">
@@ -471,17 +546,29 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
               </div>
               {stoneRows.map((row, idx) => (
                 <div key={idx} className="grid grid-cols-[1fr_1fr_1fr_1fr_auto] gap-1.5 mb-1.5 items-center">
-                  <input placeholder="Name" className="h-8 px-1.5 border border-slate-200 rounded text-[11px]" value={row.name} onChange={(e) => setStoneRows((r) => r.map((x, i) => i === idx ? { ...x, name: e.target.value } : x))} />
-                  <input placeholder="Pcs" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono" value={row.pieces} onChange={(e) => setStoneRows((r) => r.map((x, i) => i === idx ? { ...x, pieces: e.target.value } : x))} />
-                  <input placeholder="Carat" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono" value={row.carat} onChange={(e) => setStoneRows((r) => r.map((x, i) => i === idx ? { ...x, carat: e.target.value } : x))} />
-                  <input placeholder="₹/ct" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono" value={row.rate} onChange={(e) => setStoneRows((r) => r.map((x, i) => i === idx ? { ...x, rate: e.target.value } : x))} />
+                  <input placeholder="Name" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] min-w-0 w-full" value={row.name} onChange={(e) => setStoneRows((r) => r.map((x, i) => i === idx ? { ...x, name: e.target.value } : x))} />
+                  <input placeholder="Pcs" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono min-w-0 w-full" value={row.pieces} onChange={(e) => setStoneRows((r) => r.map((x, i) => i === idx ? { ...x, pieces: e.target.value } : x))} />
+                  <input placeholder="Carat" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono min-w-0 w-full" value={row.carat} onChange={(e) => setStoneRows((r) => r.map((x, i) => i === idx ? { ...x, carat: e.target.value } : x))} />
+                  <input placeholder="₹/ct" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono min-w-0 w-full" value={row.rate} onChange={(e) => setStoneRows((r) => r.map((x, i) => i === idx ? { ...x, rate: e.target.value } : x))} />
                   <button type="button" onClick={() => setStoneRows((r) => r.filter((_, i) => i !== idx))} className="text-rose-500 text-[13px] w-5">✕</button>
                 </div>
               ))}
             </div>
           </>)}
 
-          {modal.kind === "finding" && (<>
+          {(modal.kind === "kundan" || modal.kind === "kundanEdit") && (<>
+            {modal.kind === "kundanEdit" && (
+              <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">Editing recorded output — correct the kundan gold weight / labour, then Confirm. This replaces the earlier entry.</p>
+            )}
+            <p className="text-[11px] text-slate-500">Kundan gold is set onto the piece here — its weight adds to the piece&apos;s net metal @ {pure}.</p>
+            <F label={`Kundan gold weight (g) @ ${pure} *`}><I value={weight} onChange={setWeight} /></F>
+            <F label="Labour (₹) — manual"><I value={labourAmount} onChange={setLabourAmount} step="1" /></F>
+          </>)}
+
+          {(modal.kind === "finding" || modal.kind === "findingEdit") && (<>
+            {modal.kind === "findingEdit" && (
+              <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">Editing recorded output — correct findings / items / labour, then Confirm. This replaces the earlier entry.</p>
+            )}
             <F label="Number of pieces *"><I value={pieces} onChange={setPieces} step="1" /></F>
             <F label="Labour (₹) — flat"><I value={labourAmount} onChange={setLabourAmount} step="1" /></F>
             <div className="border-t border-slate-100 pt-2">
@@ -491,8 +578,8 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
               </div>
               {findingRows.map((row, idx) => (
                 <div key={idx} className="grid grid-cols-[1fr_1fr_auto] gap-1.5 mb-1.5 items-center">
-                  <input placeholder="Wire / Push Cap / Clip Cap" className="h-8 px-1.5 border border-slate-200 rounded text-[11px]" value={row.type} onChange={(e) => setFindingRows((r) => r.map((x, i) => i === idx ? { ...x, type: e.target.value } : x))} />
-                  <input placeholder="Weight g" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono" value={row.weight} onChange={(e) => setFindingRows((r) => r.map((x, i) => i === idx ? { ...x, weight: e.target.value } : x))} />
+                  <input placeholder="Wire / Push Cap / Clip Cap" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] min-w-0 w-full" value={row.type} onChange={(e) => setFindingRows((r) => r.map((x, i) => i === idx ? { ...x, type: e.target.value } : x))} />
+                  <input placeholder="Weight g" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono min-w-0 w-full" value={row.weight} onChange={(e) => setFindingRows((r) => r.map((x, i) => i === idx ? { ...x, weight: e.target.value } : x))} />
                   <button type="button" onClick={() => setFindingRows((r) => r.filter((_, i) => i !== idx))} className="text-rose-500 text-[13px] w-5">✕</button>
                 </div>
               ))}
@@ -504,9 +591,9 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
               </div>
               {itemRows.map((row, idx) => (
                 <div key={idx} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-1.5 mb-1.5 items-center">
-                  <input placeholder="Type" className="h-8 px-1.5 border border-slate-200 rounded text-[11px]" value={row.type} onChange={(e) => setItemRows((r) => r.map((x, i) => i === idx ? { ...x, type: e.target.value } : x))} />
-                  <input placeholder="Amount ₹" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono" value={row.amount} onChange={(e) => setItemRows((r) => r.map((x, i) => i === idx ? { ...x, amount: e.target.value } : x))} />
-                  <input placeholder="Carat (opt)" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono" value={row.carat} onChange={(e) => setItemRows((r) => r.map((x, i) => i === idx ? { ...x, carat: e.target.value } : x))} />
+                  <input placeholder="Type" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] min-w-0 w-full" value={row.type} onChange={(e) => setItemRows((r) => r.map((x, i) => i === idx ? { ...x, type: e.target.value } : x))} />
+                  <input placeholder="Amount ₹" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono min-w-0 w-full" value={row.amount} onChange={(e) => setItemRows((r) => r.map((x, i) => i === idx ? { ...x, amount: e.target.value } : x))} />
+                  <input placeholder="Carat (opt)" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono min-w-0 w-full" value={row.carat} onChange={(e) => setItemRows((r) => r.map((x, i) => i === idx ? { ...x, carat: e.target.value } : x))} />
                   <button type="button" onClick={() => setItemRows((r) => r.filter((_, i) => i !== idx))} className="text-rose-500 text-[13px] w-5">✕</button>
                 </div>
               ))}
@@ -528,7 +615,10 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
               : <F label="Labour (₹) — flat"><I value={flat} onChange={setFlat} step="1" /></F>}
           </>)}
 
-          {modal.kind === "stones" && (<>
+          {(modal.kind === "stones" || modal.kind === "stoneEdit") && (<>
+            {modal.kind === "stoneEdit" && (
+              <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">Editing an issued stone — correct the type / pieces / carat / rate, then Confirm. Value is recomputed as carat × ₹/ct.</p>
+            )}
             <F label="Stone type"><input className="w-full h-9 px-2 border border-slate-200 rounded text-[12px]" value={stoneType} onChange={(e) => setStoneType(e.target.value)} /></F>
             <div className="grid grid-cols-3 gap-2">
               <F label="Pieces"><I value={stonePieces} onChange={setStonePieces} step="1" /></F>
@@ -555,23 +645,34 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
           <button disabled={busy} className="h-8 px-3 rounded bg-blue-800 text-white text-[12px] font-medium hover:bg-blue-900 disabled:opacity-50"
             onClick={() => run(async () => {
               const A = modal.assignment.id;
-              if (modal.kind === "cast") {
+              if (modal.kind === "cast" || modal.kind === "castEdit") {
                 const subItems = subRows.filter((r) => r.name.trim() && (Number(r.pieces) > 0 || Number(r.weight) > 0)).map((r) => ({ name: r.name.trim(), pieces: Number(r.pieces) || 0, weightG: r.weight !== "" ? Number(r.weight) : null }));
                 if (subItems.length === 0) throw new Error("Add at least one sub-item row (pieces or weight).");
-                return castOutput(jobNo, { assignmentId: A, returnedWeight: subTotalWeight, wastagePercent: Number(wastagePercent) || 0, pieceCount: subTotalPieces, subItems });
+                const payload = { assignmentId: A, returnedWeight: subTotalWeight, wastagePercent: Number(wastagePercent) || 0, pieceCount: subTotalPieces, subItems };
+                return modal.kind === "castEdit" ? editCastOutput(jobNo, payload) : castOutput(jobNo, payload);
               }
               if (modal.kind === "jadai" || modal.kind === "jadaiEdit") {
+                if (!Number(pieces)) throw new Error("Enter the number of pieces.");
                 const stones = stoneRows.filter((r) => r.name.trim() && Number(r.carat) > 0).map((r) => ({ name: r.name.trim(), pieces: Number(r.pieces) || 0, carat: Number(r.carat), rate: Number(r.rate) || 0 }));
-                const payload = { assignmentId: A, weight: Number(weight), labourAmount: Number(labourAmount) || 0, pieceCount: Number(pieces), stones };
+                // Kundan gold is recorded in the dedicated Kundan stage, not here.
+                const payload = { assignmentId: A, weight: 0, labourAmount: Number(labourAmount) || 0, pieceCount: Number(pieces), stones };
                 return modal.kind === "jadaiEdit" ? editJadaiOutput(jobNo, payload) : jadaiOutput(jobNo, payload);
               }
-              if (modal.kind === "finding") {
+              if (modal.kind === "kundan" || modal.kind === "kundanEdit") {
+                if (!Number(weight)) throw new Error("Enter the kundan gold weight.");
+                const payload = { assignmentId: A, weight: Number(weight), labourAmount: Number(labourAmount) || 0 };
+                return modal.kind === "kundanEdit" ? editKundanOutput(jobNo, payload) : kundanOutput(jobNo, payload);
+              }
+              if (modal.kind === "finding" || modal.kind === "findingEdit") {
+                if (!Number(pieces)) throw new Error("Enter the number of pieces.");
                 const findings = findingRows.filter((r) => Number(r.weight) > 0).map((r) => ({ type: r.type || "Finding", weight: Number(r.weight), karat: pure }));
                 const items = itemRows.filter((r) => Number(r.amount) > 0).map((r) => ({ type: r.type || "Item", amount: Number(r.amount), carat: Number(r.carat) || 0 }));
-                return findingOutput(jobNo, { assignmentId: A, pieceCount: Number(pieces), labourAmount: Number(labourAmount) || 0, findings, items });
+                const payload = { assignmentId: A, pieceCount: Number(pieces), labourAmount: Number(labourAmount) || 0, findings, items };
+                return modal.kind === "findingEdit" ? editFindingOutput(jobNo, payload) : findingOutput(jobNo, payload);
               }
               if (modal.kind === "issue") return issueMaterial(A, { purity: targetPurity, issuedWeight: Number(weight), pieceCount: Number(pieces) || undefined });
               if (modal.kind === "reconcile" || isEdit) {
+                if (finished < 0) throw new Error(`Dust recovered (${gm(Number(dust) || 0)}) can't be more than the issued weight (${gm(issuedW)}).`);
                 const body: Record<string, unknown> = { returnedWeight: finished, returnedPurity: issue?.purity ?? targetPurity, dustWeight: Number(dust) || 0, pieceCount: Number(pieces) };
                 if (stage.stage === "Meenakari") body.ratePerGm = Number(ratePerGm) || 0;
                 else body.flatLabourAmount = Number(flat) || 0;
@@ -580,6 +681,10 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
               if (modal.kind === "stones") {
                 const carat = Number(stoneCarat) || 0; const rate = Number(stoneRate) || 0;
                 return issueStones(A, { type: stoneType, qtyIssued: `${stonePieces || 0} pcs / ${carat} ct`, valueIssued: +(carat * rate).toFixed(2), piecesCount: Number(stonePieces) || null, carat: carat || null, ratePerCarat: rate || null });
+              }
+              if (modal.kind === "stoneEdit" && modal.stone) {
+                if (!stoneType.trim()) throw new Error("Enter the stone type.");
+                return editStone(modal.stone.id, { type: stoneType.trim(), piecesCount: stonePieces === "" ? null : Number(stonePieces), carat: stoneCarat === "" ? null : Number(stoneCarat), ratePerCarat: stoneRate === "" ? null : Number(stoneRate) });
               }
               if (modal.kind === "stoneReturn" && st) {
                 const carat = Number(retCarat) || 0;

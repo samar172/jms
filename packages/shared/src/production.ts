@@ -12,8 +12,8 @@
 
 /* ============================== TYPES (spec §2) ============================== */
 
-export type StageName = "Casting" | "Meenakari" | "Jadai" | "Setting" | "Fitting";
-export const STAGE_ORDER: StageName[] = ["Casting", "Meenakari", "Jadai", "Setting", "Fitting"];
+export type StageName = "Casting" | "Meenakari" | "Jadai" | "Kundan" | "Setting" | "Fitting";
+export const STAGE_ORDER: StageName[] = ["Casting", "Meenakari", "Jadai", "Kundan", "Setting", "Fitting"];
 
 export type JobCardStatus = "Draft" | "In Production" | "On Hold" | "Reconciliation" | "Closed";
 export type StageStatus = "Pending" | "In Progress" | "Approved";
@@ -42,6 +42,7 @@ export interface MaterialIssue {
   wastagePercent: number | null; // Casting only
   wastageWeight: number | null; // Casting only
   labourEntryId: string | null;
+  label: string | null; // free-text line name (Fitting finding type: Wire / Push Cap / …)
 }
 
 export interface StoneEntry {
@@ -134,11 +135,19 @@ export function pureTierLabel(tiers: PurityTier[]): string {
 
 /* ============================== WEIGHT ACCUMULATION (§4) ============================== */
 
-// This stage's own net output IS the new running mass (dust already netted out).
-export const REPLACE_STAGES: StageName[] = ["Casting", "Meenakari", "Setting"];
+// Casting is the origin: it creates the piece from bulk stock, so its reconciled
+// output simply IS the running mass.
+export const ORIGIN_STAGES: StageName[] = ["Casting"];
+// The piece leaves the running mass and comes back a little lighter (dust/filing).
+// Only a PORTION may be sent (e.g. meenakari on some pieces, not all), so the
+// running mass changes by (returned − issued) — just the loss on what was sent —
+// never a wholesale replace that would discard the metal left behind. A bulk-added
+// issue here (no issuedWeight) fuses its returned weight on, same as an ADD stage.
+export const DELTA_STAGES: StageName[] = ["Meenakari", "Setting"];
 // Bulk-stock material fused onto the piece — physical mass simply adds on,
 // regardless of its own karat. Grams are grams when two pieces of metal fuse.
-export const ADD_STAGES: StageName[] = ["Jadai", "Fitting"];
+// Kundan gold (24K) is added onto the piece here, so it adds to the mass too.
+export const ADD_STAGES: StageName[] = ["Jadai", "Kundan", "Fitting"];
 
 export function accumulatedWeight(jc: JobCard): number {
   let weight = 0;
@@ -149,11 +158,15 @@ export function accumulatedWeight(jc: JobCard): number {
       .flatMap((a) => a.issues)
       .filter((i) => i.status === "Reconciled");
     if (reconciled.length === 0) continue;
-    const stageWeight = reconciled.reduce((s, i) => s + (i.returnedWeight || 0), 0);
-    if (REPLACE_STAGES.includes(stageName)) weight = stageWeight;
-    else if (ADD_STAGES.includes(stageName)) weight += stageWeight;
+    if (ORIGIN_STAGES.includes(stageName)) {
+      weight = reconciled.reduce((s, i) => s + (i.returnedWeight || 0), 0);
+    } else if (DELTA_STAGES.includes(stageName)) {
+      weight += reconciled.reduce((s, i) => s + (i.returnedWeight || 0) - (i.issuedWeight || 0), 0);
+    } else if (ADD_STAGES.includes(stageName)) {
+      weight += reconciled.reduce((s, i) => s + (i.returnedWeight || 0), 0);
+    }
   }
-  return weight;
+  return +weight.toFixed(3);
 }
 
 export const CARAT_TO_GRAM = 0.2; // 1 carat = 0.2g

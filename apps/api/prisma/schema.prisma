@@ -1210,6 +1210,7 @@ enum ProdStageName {
   Casting
   Meenakari
   Jadai
+  Kundan
   Setting
   Fitting
 }
@@ -1353,6 +1354,7 @@ model ProdMaterialIssue {
   wastagePercent   Decimal?        @db.Decimal(6, 3)
   wastageWeight    Decimal?        @db.Decimal(12, 3)
   labourEntryId    String?
+  label            String?         // free-text name for the line (e.g. Fitting finding type: Wire / Push Cap)
 
   @@index([assignmentId])
 }
