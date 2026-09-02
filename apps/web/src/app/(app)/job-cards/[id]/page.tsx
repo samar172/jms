@@ -9,6 +9,7 @@ import {
   STAGE_HI, type JobCardDetail,
 } from "@/lib/production";
 import type { Stage, Assignment, MaterialIssue, StoneEntry, SubItem } from "@jms/shared";
+import { wastageLines } from "@jms/shared";
 import { StatusPill } from "../page";
 
 const money = (v: number) => `₹ ${Math.round(v).toLocaleString("en-IN")}`;
@@ -120,6 +121,9 @@ function CostingSummary({ data, onSaved }: { data: JobCardDetail; onSaved: () =>
         <Row label="Gross weight (w/ stones)" value={gm(t.grossWeight)} />
         <Row label={`Silver value @ ₹${data.baseRate}/g`} value={money(t.effectiveSilverValue)} />
         <Row label="Labour accrued" value={money(t.labour)} />
+        {(t.wastageWeight > 0 || t.wastageValue > 0) && (
+          <Row label="↳ incl. wastage" value={`${gm(t.wastageWeight)} · ${money(t.wastageValue)}`} />
+        )}
         <Row label="Stones consumed" value={money(t.stonesConsumed)} />
         <Row label="Est. cost to date" value={money(t.estimatedCostToDate)} strong />
         <Row label="Today's sale value" value={money(t.todaysSaleValue)} />
@@ -162,6 +166,24 @@ function MaterialBreakdown({ data, onSaved }: { data: JobCardDetail; onSaved: ()
         <div className="text-[11px] text-emerald-700 font-medium mt-1">Today&apos;s sale value: {money(t.todaysSaleValue)}</div>
         <button onClick={save} className="mt-1.5 h-6 px-2 rounded bg-blue-800 text-white text-[11px]">Save overrides</button>
       </div>
+      {(() => {
+        const wl = wastageLines(jc);
+        if (wl.length === 0) return null;
+        return (
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Wastage</div>
+            {wl.map((w, i) => (
+              <div key={i} className="flex justify-between text-[11px] text-slate-600">
+                <span>{w.stage} · {w.karigar}{w.percent != null ? ` (${w.percent}%)` : ""}</span>
+                <span className="mono">{gm(w.weight)} · {money(w.value)}</span>
+              </div>
+            ))}
+            <div className="flex justify-between text-[11px] text-slate-700 font-medium border-t border-slate-50 mt-0.5 pt-0.5">
+              <span>Total wastage</span><span className="mono">{gm(t.wastageWeight)} · {money(t.wastageValue)}</span>
+            </div>
+          </div>
+        );
+      })()}
       {data.stonesByType.length > 0 && (
         <div>
           <div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Stones by type</div>

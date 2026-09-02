@@ -187,8 +187,33 @@ export function grossWeight(jc: JobCard): number {
   return +(accumulatedWeight(jc) + stonesNetCaratGrams(jc)).toFixed(3);
 }
 
+// Pure (fine-metal) equivalent of the running mass. Each contribution is
+// converted at ITS OWN karat, never one blanket job-target factor — the base
+// metal cast at the target purity (e.g. 18K → ×0.76), but Kundan gold and
+// Fitting findings are added as pure (24K → ×1.0) and must count at full value.
+// Falls back to the job's target purity only when a row has no purity recorded.
 export function accumulatedPureEq(jc: JobCard, tiers: PurityTier[]): number {
-  return +(accumulatedWeight(jc) * factorFor(jc.targetPurity, tiers)).toFixed(3);
+  const f = (label: string | null): number => factorFor(label ?? jc.targetPurity, tiers);
+  let pure = 0;
+  for (const stageName of STAGE_ORDER) {
+    const stage = jc.stages.find((s) => s.stage === stageName);
+    if (!stage) continue;
+    const reconciled = stage.assignments
+      .flatMap((a) => a.issues)
+      .filter((i) => i.status === "Reconciled");
+    if (reconciled.length === 0) continue;
+    if (ORIGIN_STAGES.includes(stageName)) {
+      pure = reconciled.reduce((s, i) => s + (i.returnedWeight || 0) * f(i.returnedPurity), 0);
+    } else if (DELTA_STAGES.includes(stageName)) {
+      pure += reconciled.reduce(
+        (s, i) => s + ((i.returnedWeight || 0) - (i.issuedWeight || 0)) * f(i.returnedPurity ?? i.purity),
+        0
+      );
+    } else if (ADD_STAGES.includes(stageName)) {
+      pure += reconciled.reduce((s, i) => s + (i.returnedWeight || 0) * f(i.returnedPurity), 0);
+    }
+  }
+  return +pure.toFixed(3);
 }
 
 export function carriedSilver(jc: JobCard): { weight: number; purity: string } {
@@ -235,8 +260,32 @@ export interface JcTotals {
   currentWeight: number;
   currentPurity: string;
   pureEq: number;
+  wastageWeight: number; // total wastage metal lost (g), across all stages
+  wastageValue: number; // ₹ charged for that wastage (the "Wastage %" labour, already in `labour`)
   activeStage: StageName | null;
   activeStageStatus: StageStatus | null;
+}
+
+// Per-line wastage detail for the costing breakdown (stage / karigar / % / g / ₹).
+export interface WastageLine {
+  stage: StageName;
+  karigar: string;
+  percent: number | null;
+  weight: number;
+  value: number;
+}
+
+export function wastageLines(jc: JobCard): WastageLine[] {
+  const rows: WastageLine[] = [];
+  jc.stages.forEach((st) =>
+    st.assignments.forEach((a) => {
+      const weight = a.issues.reduce((s, i) => s + (i.wastageWeight || 0), 0);
+      const percent = a.issues.find((i) => i.wastagePercent != null)?.wastagePercent ?? null;
+      const value = a.labour.filter((l) => l.basis === "Wastage %").reduce((s, l) => s + l.amount, 0);
+      if (weight > 0 || value > 0) rows.push({ stage: st.stage, karigar: a.karigar, percent, weight: +weight.toFixed(3), value: +value.toFixed(2) });
+    })
+  );
+  return rows;
 }
 
 export function activeStageInfo(jc: JobCard): { stage: StageName | null; status: StageStatus | null } {
@@ -250,12 +299,16 @@ export function activeStageInfo(jc: JobCard): { stage: StageName | null; status:
 export function jcTotals(jc: JobCard, tiers: PurityTier[]): JcTotals {
   let labour = 0,
     stonesIssued = 0,
-    stonesReturned = 0;
+    stonesReturned = 0,
+    wastageWeight = 0,
+    wastageValue = 0;
   jc.stages.forEach((st) =>
     st.assignments.forEach((a) => {
       labour += a.labour.reduce((s, l) => s + l.amount, 0);
       stonesIssued += a.stones.reduce((s, x) => s + (x.valueIssued || 0), 0);
       stonesReturned += a.stones.reduce((s, x) => s + (x.valueReturned || 0), 0);
+      wastageWeight += a.issues.reduce((s, i) => s + (i.wastageWeight || 0), 0);
+      wastageValue += a.labour.filter((l) => l.basis === "Wastage %").reduce((s, l) => s + l.amount, 0);
     })
   );
   const carried = carriedSilver(jc);
@@ -269,6 +322,8 @@ export function jcTotals(jc: JobCard, tiers: PurityTier[]): JcTotals {
     currentWeight: carried.weight,
     currentPurity: carried.purity,
     pureEq,
+    wastageWeight: +wastageWeight.toFixed(3),
+    wastageValue: +wastageValue.toFixed(2),
     activeStage: info.stage,
     activeStageStatus: info.status,
   };
