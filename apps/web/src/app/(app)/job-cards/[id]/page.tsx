@@ -9,8 +9,9 @@ import {
   STAGE_HI, type JobCardDetail,
 } from "@/lib/production";
 import type { Stage, Assignment, MaterialIssue, StoneEntry, SubItem } from "@jms/shared";
-import { wastageLines } from "@jms/shared";
+import { wastageLines, labourLines, stoneLines } from "@jms/shared";
 import { StatusPill } from "../page";
+import { openAuthenticated } from "@/lib/api";
 
 const money = (v: number) => `₹ ${Math.round(v).toLocaleString("en-IN")}`;
 const gm = (v: number | null | undefined) => (v == null ? "—" : `${v.toFixed(3)} g`);
@@ -21,6 +22,7 @@ export default function JobCardDetailPage({ params }: { params: Promise<{ id: st
   const { data: karigars } = useProdKarigars();
   const { data: settings } = useProdSettings();
   const [reopenOpen, setReopenOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
 
   if (!data || !settings) return <div className="text-slate-400 p-4 text-sm">Loading…</div>;
   const jc = data.jobCard;
@@ -41,6 +43,9 @@ export default function JobCardDetailPage({ params }: { params: Promise<{ id: st
           </h1>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => setExportOpen(true)} className="h-8 px-3 rounded border border-slate-200 text-[12px] text-slate-700 hover:bg-slate-50">
+            Export PDF
+          </button>
           {jc.status !== "Closed" && (
             <button onClick={async () => { await toggleHold(jc.id); refresh(); }} className="h-8 px-3 rounded border border-slate-200 text-[12px] text-slate-700 hover:bg-slate-50">
               {jc.status === "On Hold" ? "Resume" : "Hold"}
@@ -96,6 +101,7 @@ export default function JobCardDetailPage({ params }: { params: Promise<{ id: st
       </div>
 
       {reopenOpen && <ReopenModal onClose={() => setReopenOpen(false)} onDone={async (reason, by) => { await reopenJobCard(jc.id, { reason, approvedBy: by }); setReopenOpen(false); refresh(); }} />}
+      {exportOpen && <ExportPdfModal jobNo={jc.id} onClose={() => setExportOpen(false)} />}
     </div>
   );
 }
@@ -111,7 +117,11 @@ function SumRow({ label, value, strong }: { label: string; value: string; strong
 function CostingSummary({ data, onSaved }: { data: JobCardDetail; onSaved: () => void }) {
   const t = data.totals;
   const Row = SumRow;
-  const [open, setOpen] = useState(false);
+  const [openSection, setOpenSection] = useState<null | "material" | "labour" | "stones">(null);
+  const toggle = (s: "material" | "labour" | "stones") => setOpenSection((v) => (v === s ? null : s));
+  const jc = data.jobCard;
+  const ll = labourLines(jc);
+  const sl = stoneLines(jc);
   return (
     <div className="bg-white border border-slate-200 rounded-md">
       <div className="px-4 py-2.5 text-[11px] uppercase tracking-wider text-slate-500 font-semibold border-b border-slate-100">Costing Summary</div>
@@ -128,11 +138,72 @@ function CostingSummary({ data, onSaved }: { data: JobCardDetail; onSaved: () =>
         <Row label="Est. cost to date" value={money(t.estimatedCostToDate)} strong />
         <Row label="Today's sale value" value={money(t.todaysSaleValue)} />
       </div>
-      <button onClick={() => setOpen((v) => !v)} className="w-full px-3 py-1.5 text-[11px] text-blue-700 hover:bg-slate-50 text-left border-t border-slate-100">
-        {open ? "▾" : "▸"} Material Breakdown
+      <button onClick={() => toggle("material")} className="w-full px-3 py-1.5 text-[11px] text-blue-700 hover:bg-slate-50 text-left border-t border-slate-100">
+        {openSection === "material" ? "▾" : "▸"} Material Breakdown
       </button>
-      {open && (
-        <MaterialBreakdown data={data} onSaved={onSaved} />
+      {openSection === "material" && <MaterialBreakdown data={data} onSaved={onSaved} />}
+
+      <button onClick={() => toggle("labour")} className="w-full px-3 py-1.5 text-[11px] text-blue-700 hover:bg-slate-50 text-left border-t border-slate-100">
+        {openSection === "labour" ? "▾" : "▸"} Labour Breakdown{ll.length > 0 ? ` (${ll.length})` : ""}
+      </button>
+      {openSection === "labour" && <LabourBreakdown lines={ll} total={t.labour} />}
+
+      <button onClick={() => toggle("stones")} className="w-full px-3 py-1.5 text-[11px] text-blue-700 hover:bg-slate-50 text-left border-t border-slate-100">
+        {openSection === "stones" ? "▾" : "▸"} Stones Breakdown{sl.length > 0 ? ` (${sl.length})` : ""}
+      </button>
+      {openSection === "stones" && <StonesBreakdown lines={sl} totals={t} byType={data.stonesByType} />}
+    </div>
+  );
+}
+
+function LabourBreakdown({ lines, total }: { lines: import("@jms/shared").LabourLine[]; total: number }) {
+  if (lines.length === 0) return <div className="border-t border-slate-100 px-3 py-2.5 text-[11px] text-slate-400">No labour recorded yet.</div>;
+  return (
+    <div className="border-t border-slate-100 px-3 py-2.5 space-y-1.5">
+      {lines.map((l, i) => (
+        <div key={i} className="flex items-start justify-between text-[11px] gap-2">
+          <div>
+            <div className="text-slate-700">{l.stage} · {l.karigar}</div>
+            <div className="text-slate-400">{l.basis}{l.basis !== "Flat" ? ` · ${l.qty} × ₹${l.rate}` : ""}</div>
+          </div>
+          <span className="mono text-slate-900 shrink-0">{money(l.amount)}</span>
+        </div>
+      ))}
+      <div className="flex justify-between text-[11px] text-slate-700 font-medium border-t border-slate-50 mt-1 pt-1">
+        <span>Total labour</span><span className="mono">{money(total)}</span>
+      </div>
+    </div>
+  );
+}
+
+function StonesBreakdown({ lines, totals, byType }: { lines: import("@jms/shared").StoneLine[]; totals: JobCardDetail["totals"]; byType: JobCardDetail["stonesByType"] }) {
+  if (lines.length === 0) return <div className="border-t border-slate-100 px-3 py-2.5 text-[11px] text-slate-400">No stones recorded yet.</div>;
+  return (
+    <div className="border-t border-slate-100 px-3 py-2.5 space-y-2.5">
+      <div className="space-y-1.5">
+        {lines.map((s, i) => (
+          <div key={i} className="text-[11px]">
+            <div className="flex items-start justify-between gap-2">
+              <div className="text-slate-700">{s.stage} · {s.karigar} · {s.type}</div>
+              <span className="mono text-slate-900 shrink-0">{money(s.netValue)}</span>
+            </div>
+            <div className="text-slate-400">
+              Issued {s.qtyIssued || "—"} · {money(s.valueIssued)}
+              {(s.valueReturned > 0 || s.qtyReturned) && ` → Returned ${s.qtyReturned || "—"} · ${money(s.valueReturned)}`}
+            </div>
+          </div>
+        ))}
+        <div className="flex justify-between text-[11px] text-slate-700 font-medium border-t border-slate-50 mt-1 pt-1">
+          <span>Net consumed</span><span className="mono">{money(totals.stonesConsumed)}</span>
+        </div>
+      </div>
+      {byType.length > 0 && (
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">By type</div>
+          {byType.map((s) => (
+            <div key={s.type} className="flex justify-between text-[11px] text-slate-600"><span>{s.type} ({s.carat.toFixed(2)}ct)</span><span className="mono">{money(s.value)}</span></div>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -184,14 +255,6 @@ function MaterialBreakdown({ data, onSaved }: { data: JobCardDetail; onSaved: ()
           </div>
         );
       })()}
-      {data.stonesByType.length > 0 && (
-        <div>
-          <div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Stones by type</div>
-          {data.stonesByType.map((s) => (
-            <div key={s.type} className="flex justify-between text-[11px] text-slate-600"><span>{s.type} ({s.carat.toFixed(2)}ct)</span><span className="mono">{money(s.value)}</span></div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
@@ -348,12 +411,17 @@ function StageCard({ jobNo, stage, pieceCount, targetPurity, karigars, settings,
                 </div>
               )}
             </div>
-            {/* Issues */}
-            {a.issues.map((i) => (
+            {/* Issues — wastage-tracking rows are 0-weight bookkeeping already shown
+                in the labour note below, so they're skipped here to avoid a
+                confusing "Bulk output → 0.000 g" line. */}
+            {a.issues.filter((i) => !i.label?.startsWith("Wastage")).map((i) => (
               <div key={i.id} className="flex items-center justify-between text-[11px] text-slate-600 py-0.5">
                 <span>
-                  {i.fromBulkStock ? "Bulk output" : `Issued ${gm(i.issuedWeight)} @ ${i.purity}`}
+                  {i.fromBulkStock
+                    ? (i.label || "Bulk output")
+                    : `Issued ${gm(i.issuedWeight)} @ ${i.purity}`}
                   {i.status === "Reconciled" && ` → ${gm(i.returnedWeight)} @ ${i.returnedPurity}${i.dustWeight ? `, dust ${gm(i.dustWeight)}` : ""}${i.wastageWeight ? `, wastage ${gm(i.wastageWeight)}` : ""}`}
+                  {!i.fromBulkStock && i.label ? ` (${i.label})` : ""}
                 </span>
                 {i.status === "Issued" && stage.status !== "Approved" && (
                   <span className="flex gap-1">
@@ -446,7 +514,7 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
   const cIssue = isCastEdit ? modal.assignment.issues.find((i) => i.fromBulkStock) : undefined;
   const kIssue = isKundanEdit ? modal.assignment.issues.find((i) => i.fromBulkStock) : undefined;
   const jLabour = isJadaiEdit ? modal.assignment.labour.reduce((s, l) => s + l.amount, 0) : 0;
-  const fLabour = isFindingEdit ? modal.assignment.labour.reduce((s, l) => s + l.amount, 0) : 0;
+  const fLabour = isFindingEdit ? modal.assignment.labour.filter((l) => l.basis !== "Wastage %").reduce((s, l) => s + l.amount, 0) : 0;
   const kLabour = isKundanEdit ? modal.assignment.labour.reduce((s, l) => s + l.amount, 0) : 0;
   const pc0 = String(jIssue?.pieceCount ?? cIssue?.pieceCount ?? modal.issue?.pieceCount ?? pieceCount ?? 1);
 
@@ -459,7 +527,9 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
   );
   const subTotalPieces = subRows.reduce((s, r) => s + (Number(r.pieces) || 0), 0);
   const subTotalWeight = subRows.reduce((s, r) => s + (Number(r.weight) || 0), 0);
-  const [wastagePercent, setWastagePercent] = useState(String(isCastEdit ? (cIssue?.wastagePercent ?? 0) : stage.stage === "Casting" ? dr.castingWastagePct : ""));
+  const [wastagePercent, setWastagePercent] = useState(String(
+    isCastEdit ? (cIssue?.wastagePercent ?? 0) : stage.stage === "Casting" ? dr.castingWastagePct : "",
+  ));
   const [pieces, setPieces] = useState(pc0);
   const [weight, setWeight] = useState(
     isJadaiEdit && jIssue?.returnedWeight != null ? String(jIssue.returnedWeight)
@@ -467,6 +537,7 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
       : "",
   );
   const [dust, setDust] = useState(isEdit ? String(modal.issue?.dustWeight ?? 0) : "0");
+  const [workType, setWorkType] = useState(isEdit ? (modal.issue?.label ?? "") : (settings.workTypeNames?.[0]?.label ?? ""));
   const [ratePerGm, setRatePerGm] = useState(isEdit && modal.labourRate != null ? String(modal.labourRate) : String(dr.meenakariRatePerGm));
   const [flat, setFlat] = useState(isEdit && modal.labourRate != null ? String(modal.labourRate) : "");
   const [labourAmount, setLabourAmount] = useState((isJadaiEdit && jLabour > 0) ? String(jLabour) : (isFindingEdit && fLabour > 0) ? String(fLabour) : (isKundanEdit && kLabour > 0) ? String(kLabour) : "");
@@ -484,10 +555,12 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
       ? modal.assignment.stones.map((s) => ({ name: s.type, pieces: s.piecesCount != null ? String(s.piecesCount) : "", carat: s.carat != null ? String(s.carat) : "", rate: s.ratePerCarat != null ? String(s.ratePerCarat) : "" }))
       : [{ name: "Polki", pieces: "", carat: "", rate: "" }],
   );
-  const [findingRows, setFindingRows] = useState<{ type: string; weight: string }[]>(
-    isFindingEdit && modal.assignment.issues.length > 0
-      ? modal.assignment.issues.map((i) => ({ type: i.label ?? "Finding", weight: i.returnedWeight != null ? String(i.returnedWeight) : "" }))
-      : [{ type: "Wire", weight: "" }],
+  const findingIssues = isFindingEdit ? modal.assignment.issues.filter((i) => !i.label?.startsWith("Wastage")) : [];
+  const findingWastageOf = (type: string) => modal.assignment.issues.find((i) => i.label === `Wastage — ${type}`)?.wastagePercent ?? 0;
+  const [findingRows, setFindingRows] = useState<{ type: string; weight: string; karat: string; wastagePercent: string }[]>(
+    findingIssues.length > 0
+      ? findingIssues.map((i) => ({ type: i.label ?? "Finding", weight: i.returnedWeight != null ? String(i.returnedWeight) : "", karat: i.returnedPurity ?? pure, wastagePercent: String(findingWastageOf(i.label ?? "Finding")) }))
+      : [{ type: "Wire", weight: "", karat: pure, wastagePercent: String(dr.fittingWastagePct) }],
   );
   const [itemRows, setItemRows] = useState<{ type: string; amount: string; carat: string }[]>(
     isFindingEdit && modal.assignment.stones.length > 0
@@ -517,6 +590,12 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
   const stRate = st?.ratePerCarat ?? (st && st.carat ? st.valueIssued / st.carat : 0);
   const retValueAuto = +(((Number(retCarat) || 0) * (stRate || 0))).toFixed(2);
   const retValueEff = retValue !== "" ? Number(retValue) : retValueAuto;
+
+  // Jadai labour derived amount: auto = total stone pieces × Settings' ₹/stone
+  // rate, unless overridden — same auto/override pattern as stone-return above.
+  const jadaiStonePieces = stoneRows.reduce((s, r) => s + (Number(r.pieces) || 0), 0);
+  const jadaiLabourAuto = +(jadaiStonePieces * dr.jadaiRatePerStone).toFixed(2);
+  const jadaiLabourEff = labourAmount !== "" ? Number(labourAmount) : jadaiLabourAuto;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={onClose}>
@@ -560,7 +639,10 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
               <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">Editing recorded output — correct the pieces / stone rates / labour, then Confirm. This replaces the earlier entry. (Kundan gold is recorded in the Kundan stage.)</p>
             )}
             <F label="Number of pieces *"><I value={pieces} onChange={setPieces} step="1" /></F>
-            <F label="Labour (₹) — manual"><I value={labourAmount} onChange={setLabourAmount} step="1" /></F>
+            <F label={`Labour (₹) — auto: ${jadaiStonePieces} pcs × ₹${dr.jadaiRatePerStone}/stone`}>
+              <I value={labourAmount} onChange={setLabourAmount} step="1" placeholder={String(jadaiLabourAuto)} />
+            </F>
+            {labourAmount === "" && jadaiLabourAuto > 0 && <p className="text-[11px] text-emerald-700 -mt-2">Will charge {money(jadaiLabourAuto)} (edit above to override)</p>}
             <div className="border-t border-slate-100 pt-2">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-[11px] font-medium text-slate-600">Polki / Diamond</span>
@@ -595,16 +677,32 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
             <F label="Labour (₹) — flat"><I value={labourAmount} onChange={setLabourAmount} step="1" /></F>
             <div className="border-t border-slate-100 pt-2">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-[11px] font-medium text-slate-600">Silver Findings @ {pure}</span>
-                <button type="button" onClick={() => setFindingRows((r) => [...r, { type: "Wire", weight: "" }])} className="h-6 px-2 rounded border border-slate-200 text-[11px] hover:bg-slate-50">+ Add Finding</button>
+                <span className="text-[11px] font-medium text-slate-600">Silver Findings</span>
+                <button type="button" onClick={() => setFindingRows((r) => [...r, { type: settings.findingNames?.[0]?.label ?? "Wire", weight: "", karat: pure, wastagePercent: String(dr.fittingWastagePct) }])} className="h-6 px-2 rounded border border-slate-200 text-[11px] hover:bg-slate-50">+ Add Finding</button>
+              </div>
+              {(settings.findingNames?.length ?? 0) === 0 && <p className="text-[11px] text-amber-700 mb-1">No finding names configured — add them in Settings first.</p>}
+              <div className="grid grid-cols-[1fr_0.8fr_0.8fr_0.8fr_auto] gap-1.5 mb-1 text-[10px] text-slate-400 px-0.5">
+                <span>Type</span><span>Weight (g)</span><span>Purity</span><span>Wastage %</span><span></span>
               </div>
               {findingRows.map((row, idx) => (
-                <div key={idx} className="grid grid-cols-[1fr_1fr_auto] gap-1.5 mb-1.5 items-center">
-                  <input placeholder="Wire / Push Cap / Clip Cap" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] min-w-0 w-full" value={row.type} onChange={(e) => setFindingRows((r) => r.map((x, i) => i === idx ? { ...x, type: e.target.value } : x))} />
+                <div key={idx} className="grid grid-cols-[1fr_0.8fr_0.8fr_0.8fr_auto] gap-1.5 mb-1.5 items-center">
+                  <select className="h-8 px-1 border border-slate-200 rounded text-[11px] min-w-0 w-full" value={row.type} onChange={(e) => setFindingRows((r) => r.map((x, i) => i === idx ? { ...x, type: e.target.value } : x))}>
+                    {!settings.findingNames?.some((n) => n.label === row.type) && row.type && <option value={row.type}>{row.type}</option>}
+                    {settings.findingNames?.map((n) => <option key={n.id} value={n.label}>{n.label}</option>)}
+                  </select>
                   <input placeholder="Weight g" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono min-w-0 w-full" value={row.weight} onChange={(e) => setFindingRows((r) => r.map((x, i) => i === idx ? { ...x, weight: e.target.value } : x))} />
+                  <select className="h-8 px-1 border border-slate-200 rounded text-[11px] min-w-0 w-full" value={row.karat} onChange={(e) => setFindingRows((r) => r.map((x, i) => i === idx ? { ...x, karat: e.target.value } : x))}>
+                    {settings.tiers.map((t) => <option key={t.label} value={t.label}>{t.label}</option>)}
+                  </select>
+                  <input placeholder="%" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono min-w-0 w-full" value={row.wastagePercent} onChange={(e) => setFindingRows((r) => r.map((x, i) => i === idx ? { ...x, wastagePercent: e.target.value } : x))} />
                   <button type="button" onClick={() => setFindingRows((r) => r.filter((_, i) => i !== idx))} className="text-rose-500 text-[13px] w-5">✕</button>
                 </div>
               ))}
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Findings total: {findingRows.reduce((s, r) => s + (Number(r.weight) || 0), 0).toFixed(3)} g
+                {" · "}Wastage (priced @ pure): {findingRows.reduce((s, r) => s + (Number(r.weight) || 0) * (Number(r.wastagePercent) || 0) / 100, 0).toFixed(3)} g
+                {" ("}₹{findingRows.reduce((s, r) => s + (Number(r.weight) || 0) * (Number(r.wastagePercent) || 0) / 100 * settings.baseRate, 0).toFixed(0)})
+              </p>
             </div>
             <div className="border-t border-slate-100 pt-2">
               <div className="flex items-center justify-between mb-1">
@@ -635,6 +733,13 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
             {stage.stage === "Meenakari"
               ? <F label="Labour rate (₹/gram on finished)"><I value={ratePerGm} onChange={setRatePerGm} step="1" /></F>
               : <F label="Labour (₹) — flat"><I value={flat} onChange={setFlat} step="1" /></F>}
+            <F label="Work type (reference only — कोई असर नहीं)">
+              <select className="w-full h-9 px-2 border border-slate-200 rounded text-[12px]" value={workType} onChange={(e) => setWorkType(e.target.value)}>
+                <option value="">—</option>
+                {!settings.workTypeNames?.some((n) => n.label === workType) && workType && <option value={workType}>{workType}</option>}
+                {settings.workTypeNames?.map((n) => <option key={n.id} value={n.label}>{n.label}</option>)}
+              </select>
+            </F>
           </>)}
 
           {(modal.kind === "stones" || modal.kind === "stoneEdit") && (<>
@@ -677,7 +782,7 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
                 if (!Number(pieces)) throw new Error("Enter the number of pieces.");
                 const stones = stoneRows.filter((r) => r.name.trim() && Number(r.carat) > 0).map((r) => ({ name: r.name.trim(), pieces: Number(r.pieces) || 0, carat: Number(r.carat), rate: Number(r.rate) || 0 }));
                 // Kundan gold is recorded in the dedicated Kundan stage, not here.
-                const payload = { assignmentId: A, weight: 0, labourAmount: Number(labourAmount) || 0, pieceCount: Number(pieces), stones };
+                const payload = { assignmentId: A, weight: 0, labourAmount: jadaiLabourEff, pieceCount: Number(pieces), stones };
                 return modal.kind === "jadaiEdit" ? editJadaiOutput(jobNo, payload) : jadaiOutput(jobNo, payload);
               }
               if (modal.kind === "kundan" || modal.kind === "kundanEdit") {
@@ -687,7 +792,7 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
               }
               if (modal.kind === "finding" || modal.kind === "findingEdit") {
                 if (!Number(pieces)) throw new Error("Enter the number of pieces.");
-                const findings = findingRows.filter((r) => Number(r.weight) > 0).map((r) => ({ type: r.type || "Finding", weight: Number(r.weight), karat: pure }));
+                const findings = findingRows.filter((r) => Number(r.weight) > 0).map((r) => ({ type: r.type || "Finding", weight: Number(r.weight), karat: r.karat || pure, wastagePercent: Number(r.wastagePercent) || 0 }));
                 const items = itemRows.filter((r) => Number(r.amount) > 0).map((r) => ({ type: r.type || "Item", amount: Number(r.amount), carat: Number(r.carat) || 0 }));
                 const payload = { assignmentId: A, pieceCount: Number(pieces), labourAmount: Number(labourAmount) || 0, findings, items };
                 return modal.kind === "findingEdit" ? editFindingOutput(jobNo, payload) : findingOutput(jobNo, payload);
@@ -695,7 +800,7 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
               if (modal.kind === "issue") return issueMaterial(A, { purity: targetPurity, issuedWeight: Number(weight), pieceCount: Number(pieces) || undefined });
               if (modal.kind === "reconcile" || isEdit) {
                 if (finished < 0) throw new Error(`Dust recovered (${gm(Number(dust) || 0)}) can't be more than the issued weight (${gm(issuedW)}).`);
-                const body: Record<string, unknown> = { returnedWeight: finished, returnedPurity: issue?.purity ?? targetPurity, dustWeight: Number(dust) || 0, pieceCount: Number(pieces) };
+                const body: Record<string, unknown> = { returnedWeight: finished, returnedPurity: issue?.purity ?? targetPurity, dustWeight: Number(dust) || 0, pieceCount: Number(pieces), workType };
                 if (stage.stage === "Meenakari") body.ratePerGm = Number(ratePerGm) || 0;
                 else body.flatLabourAmount = Number(flat) || 0;
                 return isEdit ? editReconcile(issue!.id, body) : reconcile(issue!.id, body);
@@ -721,11 +826,42 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
   );
 }
 
+function ExportPdfModal({ jobNo, onClose }: { jobNo: string; onClose: () => void }) {
+  const [profitPct, setProfitPct] = useState("0");
+  const [busy, setBusy] = useState(false);
+  async function download() {
+    setBusy(true);
+    try {
+      await openAuthenticated(`/api/production/job-cards/${jobNo}/pdf?profitPct=${Number(profitPct) || 0}`);
+      onClose();
+    } catch (e) {
+      alert((e as Error).message || "Failed to generate PDF");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={onClose}>
+      <div className="bg-white rounded-md shadow-xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+        <div className="px-4 py-3 border-b border-slate-100"><h2 className="text-[14px] font-semibold">Export PDF</h2></div>
+        <div className="p-4 space-y-3">
+          <p className="text-[11px] text-slate-500">Metal / stones / labour breakdown, item photo, and a costing summary — ready to print or share.</p>
+          <F label="Profit % (for Grand Total — optional)"><I value={profitPct} onChange={setProfitPct} step="0.1" /></F>
+        </div>
+        <div className="px-4 py-3 border-t border-slate-100 flex justify-end gap-2">
+          <button onClick={onClose} className="h-8 px-3 rounded border border-slate-200 text-[12px]">Cancel</button>
+          <button disabled={busy} onClick={download} className="h-8 px-3 rounded bg-blue-800 text-white text-[12px] font-medium disabled:opacity-50">{busy ? "Generating…" : "Download PDF"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function F({ label, children }: { label: string; children: React.ReactNode }) {
   return <div><label className="block text-[11px] font-medium text-slate-600 mb-1">{label}</label>{children}</div>;
 }
-function I({ value, onChange, step = "0.001" }: { value: string; onChange: (v: string) => void; step?: string }) {
-  return <input type="number" step={step} min="0" className="w-full h-9 px-2 border border-slate-200 rounded text-[12px] mono" value={value} onChange={(e) => onChange(e.target.value)} placeholder="0" />;
+function I({ value, onChange, step = "0.001", placeholder = "0" }: { value: string; onChange: (v: string) => void; step?: string; placeholder?: string }) {
+  return <input type="number" step={step} min="0" className="w-full h-9 px-2 border border-slate-200 rounded text-[12px] mono" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />;
 }
 
 function ReopenModal({ onClose, onDone }: { onClose: () => void; onDone: (reason: string, by: string) => void }) {

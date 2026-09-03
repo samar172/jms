@@ -9,6 +9,7 @@ import type {
   PurityTier,
   JcTotals,
   LedgerRow,
+  LabourLedgerRow,
 } from "@jms/shared";
 
 export interface ProdSettings {
@@ -23,6 +24,17 @@ export interface ProdSettings {
     flatLabour?: number;
   };
   subItemNames: { id: string; label: string }[];
+  findingNames: { id: string; label: string }[];
+  workTypeNames: { id: string; label: string }[];
+  jobCardSeries: JobCardSeries[];
+}
+
+export interface JobCardSeries {
+  id: string;
+  name: string;
+  startAt: number;
+  padWidth: number;
+  effectiveFrom: string;
 }
 
 export interface ItemMaster {
@@ -46,6 +58,8 @@ export interface ProdKarigar {
   defaultWastagePct: number | null;
   defaultRatePerGm: number | null;
   defaultFlatLabour: number | null;
+  openingBalance: number;
+  openingBalanceDate: string;
   balance: number;
   labourEarned: number;
   holding: { jobId: string; stage: string; weight: number; purity: string | null }[];
@@ -99,7 +113,7 @@ export interface ItemMasterDetail {
   targetPurity: string;
   estGrossWeight: number;
   notes: string;
-  images: { url: string }[];
+  images: { id: string; url: string; isPrimary: boolean }[];
   jobCards: { id: string; status: string; pieceCount: number | null; dueDate: string; createdAt: string }[];
 }
 export const useItemMaster = (key: string | null) =>
@@ -107,15 +121,18 @@ export const useItemMaster = (key: string | null) =>
 export const useJobCard = (jobNo: string | null) =>
   useApi<JobCardDetail>(jobNo ? `/api/production/job-cards/${jobNo}` : null);
 export const useLedger = () => useApi<Record<string, LedgerRow[]>>("/api/production/ledger");
+export const useLabourLedger = () => useApi<Record<string, LabourLedgerRow[]>>("/api/production/labour-ledger");
 
 // ---- mutations ----
 const post = (path: string, body?: unknown) => apiFetch(`/api/production${path}`, { method: "POST", body });
 const del = (path: string) => apiFetch(`/api/production${path}`, { method: "DELETE" });
 
-export const createJobCard = (body: { itemMasterId: string; dueDate?: string; pieceCount?: number; notes?: string }) =>
+export const createJobCard = (body: { itemMasterId: string; seriesId: string; dueDate?: string; pieceCount?: number; notes?: string }) =>
   post("/job-cards", body) as Promise<{ id: string; jobNo: string }>;
 export const issueBulkStock = (body: { karigarId: string; purityId: string; weightGrams: number; note?: string }) =>
   post("/bulk-stock", body);
+export const recordBulkReceipt = (body: { karigarId: string; purityId: string; weightGrams: number; label?: string; wastagePercent?: number; note?: string }) =>
+  post("/bulk-receipt", body);
 export const assignKarigar = (jobNo: string, stageName: string, karigarId: string) =>
   post(`/job-cards/${jobNo}/assign`, { stageName, karigarId });
 export const issueMaterial = (assignmentId: string, body: { purity: string; issuedWeight: number; pieceCount?: number }) =>
@@ -176,10 +193,31 @@ export const deleteTier = (id: string) => del(`/purity-tiers/${id}`);
 export const addSubItemName = (label: string) => post("/sub-item-names", { label });
 export const updateSubItemName = (id: string, label: string) => patch(`/sub-item-names/${id}`, { label });
 export const deleteSubItemName = (id: string) => del(`/sub-item-names/${id}`);
+export const addFindingName = (label: string) => post("/finding-names", { label });
+export const updateFindingName = (id: string, label: string) => patch(`/finding-names/${id}`, { label });
+export const deleteFindingName = (id: string) => del(`/finding-names/${id}`);
+export const addWorkTypeName = (label: string) => post("/work-type-names", { label });
+export const updateWorkTypeName = (id: string, label: string) => patch(`/work-type-names/${id}`, { label });
+export const deleteWorkTypeName = (id: string) => del(`/work-type-names/${id}`);
+export const addJobCardSeries = (body: { name: string; startAt: number; padWidth?: number; effectiveFrom: string }) => post("/job-card-series", body);
+export const updateJobCardSeries = (id: string, body: { name?: string; startAt?: number; padWidth?: number; effectiveFrom?: string }) => patch(`/job-card-series/${id}`, body);
+export const deleteJobCardSeries = (id: string) => del(`/job-card-series/${id}`);
 export const createKarigar = (body: Record<string, unknown>) => post("/karigars", body);
 export const updateKarigar = (id: string, body: Record<string, unknown>) => patch(`/karigars/${id}`, body);
 export const createItemMaster = (body: Record<string, unknown>) => post("/item-masters", body);
 export const updateItemMaster = (id: string, body: Record<string, unknown>) => patch(`/item-masters/${id}`, body);
+
+// Image upload goes through the (older, still-mounted) products module — it's
+// the one place with multer + Cloudinary/local-disk storage wired up, shared
+// across both the Chowker item masters here and the pre-Chowker Product model.
+export const uploadItemImage = (itemId: string, file: File) => {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("type", "FINAL_PRODUCT");
+  form.append("isPrimary", "true");
+  return apiFetch(`/api/products/${itemId}/images`, { method: "POST", body: form, isForm: true });
+};
+export const deleteItemImage = (imageId: string) => apiFetch(`/api/products/images/${imageId}`, { method: "DELETE" });
 
 export const STAGE_HI: Record<string, string> = {
   Casting: "ढलाई",

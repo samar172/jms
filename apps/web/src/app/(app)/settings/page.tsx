@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useProdSettings, updateSettings, addTier, updateTier, deleteTier, addSubItemName, updateSubItemName, deleteSubItemName, type ProdSettings } from "@/lib/production";
+import { useProdSettings, updateSettings, addTier, updateTier, deleteTier, addSubItemName, updateSubItemName, deleteSubItemName, addFindingName, updateFindingName, deleteFindingName, addWorkTypeName, updateWorkTypeName, deleteWorkTypeName, addJobCardSeries, deleteJobCardSeries, type ProdSettings, type JobCardSeries } from "@/lib/production";
 
 const RATE_LABELS: Record<string, string> = {
   castingWastagePct: "Casting wastage %",
@@ -47,6 +47,9 @@ export default function SettingsPage() {
       </div>
 
       <SubItemNames names={data.subItemNames ?? []} onChanged={mutate} />
+      <FindingNames names={data.findingNames ?? []} onChanged={mutate} />
+      <WorkTypeNames names={data.workTypeNames ?? []} onChanged={mutate} />
+      <JobCardSeriesSection series={data.jobCardSeries ?? []} onChanged={mutate} />
       <BaseRatesForm settings={data} onSaved={mutate} />
       <PureEqCalculator tiers={data.tiers} baseRate={data.baseRate} />
     </div>
@@ -92,6 +95,154 @@ function SubItemNameChip({ name, onChanged }: { name: { id: string; label: strin
       <button onClick={() => setEditing(true)} className="text-slate-400 hover:text-blue-700 text-[10px]">edit</button>
       <button onClick={async () => { if (confirm(`Remove "${name.label}"?`)) { await deleteSubItemName(name.id); onChanged(); } }} className="text-slate-300 hover:text-rose-600">✕</button>
     </span>
+  );
+}
+
+/* -------------------------- Finding names (master) ------------------------ */
+function FindingNames({ names, onChanged }: { names: { id: string; label: string }[]; onChanged: () => void }) {
+  const [newLabel, setNewLabel] = useState("");
+  return (
+    <div className="bg-white border border-slate-200 rounded-md mb-4">
+      <div className="px-4 py-2.5 text-[11px] uppercase tracking-wider text-slate-500 font-semibold border-b border-slate-100">Finding Names (फिटिंग आइटम नाम)</div>
+      <div className="p-4">
+        <p className="text-[11px] text-slate-400 mb-2">These names appear in the Fitting output dropdown on every job card. Add the findings your karigars make (Wire, Push Clip, Kadi, …).</p>
+        <div className="flex flex-wrap gap-2 mb-3">
+          {names.length === 0 && <span className="text-[12px] text-slate-400">No names yet.</span>}
+          {names.map((n) => <FindingNameChip key={n.id} name={n} onChanged={onChanged} />)}
+        </div>
+        <div className="flex items-center gap-2">
+          <input placeholder="e.g. Kadi" className="h-8 w-40 px-2 border border-slate-200 rounded text-[12px]" value={newLabel} onChange={(e) => setNewLabel(e.target.value)} />
+          <button disabled={!newLabel.trim()} onClick={async () => { await addFindingName(newLabel.trim()); setNewLabel(""); onChanged(); }} className="h-8 px-2.5 rounded bg-blue-800 text-white text-[11px] disabled:opacity-50">+ Add name</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FindingNameChip({ name, onChanged }: { name: { id: string; label: string }; onChanged: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [label, setLabel] = useState(name.label);
+  if (editing) {
+    return (
+      <span className="inline-flex items-center gap-1 border border-slate-200 rounded px-1.5 py-1">
+        <input className="h-6 w-24 px-1 border border-slate-200 rounded text-[11px]" value={label} onChange={(e) => setLabel(e.target.value)} />
+        <button onClick={async () => { await updateFindingName(name.id, label.trim()); setEditing(false); onChanged(); }} className="text-[11px] text-emerald-700">Save</button>
+        <button onClick={() => { setLabel(name.label); setEditing(false); }} className="text-[11px] text-slate-400">✕</button>
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded px-2 py-1 text-[12px] text-slate-700">
+      {name.label}
+      <button onClick={() => setEditing(true)} className="text-slate-400 hover:text-blue-700 text-[10px]">edit</button>
+      <button onClick={async () => { if (confirm(`Remove "${name.label}"?`)) { await deleteFindingName(name.id); onChanged(); } }} className="text-slate-300 hover:text-rose-600">✕</button>
+    </span>
+  );
+}
+
+/* ------------------------- Work-type names (master) ------------------------ */
+function WorkTypeNames({ names, onChanged }: { names: { id: string; label: string }[]; onChanged: () => void }) {
+  const [newLabel, setNewLabel] = useState("");
+  return (
+    <div className="bg-white border border-slate-200 rounded-md mb-4">
+      <div className="px-4 py-2.5 text-[11px] uppercase tracking-wider text-slate-500 font-semibold border-b border-slate-100">Work Type Names (काम का प्रकार)</div>
+      <div className="p-4">
+        <p className="text-[11px] text-slate-400 mb-2">A reference tag for Meenakari/Setting labour — what kind of work this was (Enamel, Polish, Stone Setting, …). Record-keeping only, no effect on the calculation.</p>
+        <div className="flex flex-wrap gap-2 mb-3">
+          {names.length === 0 && <span className="text-[12px] text-slate-400">No names yet.</span>}
+          {names.map((n) => <WorkTypeNameChip key={n.id} name={n} onChanged={onChanged} />)}
+        </div>
+        <div className="flex items-center gap-2">
+          <input placeholder="e.g. Enamel" className="h-8 w-40 px-2 border border-slate-200 rounded text-[12px]" value={newLabel} onChange={(e) => setNewLabel(e.target.value)} />
+          <button disabled={!newLabel.trim()} onClick={async () => { await addWorkTypeName(newLabel.trim()); setNewLabel(""); onChanged(); }} className="h-8 px-2.5 rounded bg-blue-800 text-white text-[11px] disabled:opacity-50">+ Add name</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WorkTypeNameChip({ name, onChanged }: { name: { id: string; label: string }; onChanged: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [label, setLabel] = useState(name.label);
+  if (editing) {
+    return (
+      <span className="inline-flex items-center gap-1 border border-slate-200 rounded px-1.5 py-1">
+        <input className="h-6 w-24 px-1 border border-slate-200 rounded text-[11px]" value={label} onChange={(e) => setLabel(e.target.value)} />
+        <button onClick={async () => { await updateWorkTypeName(name.id, label.trim()); setEditing(false); onChanged(); }} className="text-[11px] text-emerald-700">Save</button>
+        <button onClick={() => { setLabel(name.label); setEditing(false); }} className="text-[11px] text-slate-400">✕</button>
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded px-2 py-1 text-[12px] text-slate-700">
+      {name.label}
+      <button onClick={() => setEditing(true)} className="text-slate-400 hover:text-blue-700 text-[10px]">edit</button>
+      <button onClick={async () => { if (confirm(`Remove "${name.label}"?`)) { await deleteWorkTypeName(name.id); onChanged(); } }} className="text-slate-300 hover:text-rose-600">✕</button>
+    </span>
+  );
+}
+
+/* --------------------------- Job Card Series -------------------------------- */
+function JobCardSeriesSection({ series, onChanged }: { series: JobCardSeries[]; onChanged: () => void }) {
+  const [name, setName] = useState("");
+  const [startAt, setStartAt] = useState("001");
+  const [effectiveFrom, setEffectiveFrom] = useState(new Date().toISOString().slice(0, 10));
+  const [busy, setBusy] = useState(false);
+  const today = new Date().toISOString().slice(0, 10);
+
+  async function add() {
+    if (!name.trim() || !Number(startAt)) return;
+    setBusy(true);
+    try {
+      await addJobCardSeries({ name: name.trim(), startAt: Number(startAt), padWidth: startAt.length, effectiveFrom });
+      setName(""); setStartAt("001");
+      onChanged();
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-md mb-4">
+      <div className="px-4 py-2.5 text-[11px] uppercase tracking-wider text-slate-500 font-semibold border-b border-slate-100">Job Card Series (जॉब कार्ड सीरीज़)</div>
+      <div className="p-4">
+        <p className="text-[11px] text-slate-400 mb-2">Each series numbers independently (e.g. N-001, N-002 … alongside P-001, P-002 …). A series only shows up when creating a job card once its effective date has arrived.</p>
+        <table className="w-full mb-3">
+          <thead><tr className="text-left text-[10px] uppercase tracking-wider text-slate-400"><th className="pb-1">Series Name</th><th className="pb-1">Start By</th><th className="pb-1">Effective</th><th className="pb-1">Status</th><th /></tr></thead>
+          <tbody>
+            {series.length === 0 && <tr><td colSpan={5} className="py-2 text-[12px] text-slate-400">No series yet — add one below.</td></tr>}
+            {series.map((s) => (
+              <tr key={s.id} className="border-t border-slate-50 h-9">
+                <td className="text-[12px] font-medium text-slate-900">{s.name}</td>
+                <td className="text-[12px] mono text-slate-600">{String(s.startAt).padStart(s.padWidth, "0")}</td>
+                <td className="text-[12px] mono text-slate-600">{s.effectiveFrom}</td>
+                <td className="text-[11px]">
+                  {s.effectiveFrom <= today
+                    ? <span className="text-emerald-700">Active</span>
+                    : <span className="text-amber-700">Starts {s.effectiveFrom}</span>}
+                </td>
+                <td className="text-right">
+                  <button onClick={async () => { if (confirm(`Remove series "${s.name}"?`)) { await deleteJobCardSeries(s.id); onChanged(); } }} className="h-7 px-2 rounded border border-slate-200 text-[11px] text-rose-600 hover:bg-rose-50">Remove</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="flex items-end gap-2">
+          <div>
+            <label className="block text-[11px] font-medium text-slate-600 mb-1">Series Name</label>
+            <input placeholder="e.g. N" className="h-8 w-24 px-2 border border-slate-200 rounded text-[12px]" value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-[11px] font-medium text-slate-600 mb-1">Start By</label>
+            <input placeholder="001" className="h-8 w-24 px-2 border border-slate-200 rounded text-[12px] mono" value={startAt} onChange={(e) => setStartAt(e.target.value.replace(/[^0-9]/g, ""))} />
+          </div>
+          <div>
+            <label className="block text-[11px] font-medium text-slate-600 mb-1">Effective</label>
+            <input type="date" className="h-8 px-2 border border-slate-200 rounded text-[12px]" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} />
+          </div>
+          <button disabled={!name.trim() || !Number(startAt) || busy} onClick={add} className="h-8 px-2.5 rounded bg-blue-800 text-white text-[11px] disabled:opacity-50">+ Add series</button>
+        </div>
+      </div>
+    </div>
   );
 }
 

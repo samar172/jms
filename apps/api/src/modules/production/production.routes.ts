@@ -10,15 +10,27 @@ import {
   stonesByType,
   stonesNetCaratGrams,
   buildLedger,
+  buildLabourLedger,
   karigarBalance,
   karigarLabourEarned,
+  metalLines,
+  stoneLines,
+  labourLines,
   STAGE_ORDER,
   rateForLabel,
   type PurityTier as EngineTier,
+  type KarigarOpeningBalance,
 } from "@jms/shared";
-import { jobCardInclude, mapJobCard, mapTier, mapBulkIssue } from "./mapper";
+import { jobCardInclude, mapJobCard, mapTier, mapBulkIssue, mapBulkReceipt } from "./mapper";
+import { nextSequenceNumber } from "../../services/voucherNumber";
+import { generateJobCardPdf } from "./pdf.service";
+import { env } from "../../env";
+import { promises as fs } from "node:fs";
+import path from "node:path";
 
 const router = Router();
+
+const iso = (d: Date | null | undefined): string => (d ? d.toISOString().slice(0, 10) : "");
 
 /* ----------------------------- shared loaders ----------------------------- */
 async function loadTiers(): Promise<EngineTier[]> {
@@ -49,13 +61,30 @@ router.get(
   "/settings",
   requireAuth,
   asyncHandler(async (_req, res) => {
-    const [tiers, baseRate, defaultRates, subItemNames] = await Promise.all([
+    const [tiers, baseRate, defaultRates, subItemNames, findingNames, workTypeNames, jobCardSeries] = await Promise.all([
       loadTiers(),
       loadBaseRate(),
       loadDefaultRates(),
       prisma.prodSubItemName.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" }, select: { id: true, label: true } }),
+      prisma.prodFindingName.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" }, select: { id: true, label: true } }),
+      prisma.prodWorkTypeName.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" }, select: { id: true, label: true } }),
+      prisma.prodJobCardSeries.findMany({ where: { isActive: true }, orderBy: { createdAt: "asc" } }),
     ]);
-    res.json({ tiers, baseRate, defaultRates, subItemNames });
+    res.json({
+      tiers,
+      baseRate,
+      defaultRates,
+      subItemNames,
+      findingNames,
+      workTypeNames,
+      jobCardSeries: jobCardSeries.map((s) => ({
+        id: s.id,
+        name: s.name,
+        startAt: s.startAt,
+        padWidth: s.padWidth,
+        effectiveFrom: s.effectiveFrom.toISOString().slice(0, 10),
+      })),
+    });
   })
 );
 
@@ -68,7 +97,7 @@ router.get(
       include: {
         category: true,
         purity: true,
-        images: { where: { isPrimary: true }, take: 1 },
+        images: { where: { isActive: true, isPrimary: true }, take: 1 },
         _count: { select: { prodJobCards: true } },
       },
       orderBy: { createdAt: "desc" },
@@ -100,7 +129,12 @@ router.get(
     const key = req.params.key;
     const p = await prisma.product.findFirst({
       where: { OR: [{ id: key }, { serialNo: key }] },
-      include: { category: true, purity: true, images: true, prodJobCards: { orderBy: { createdAt: "desc" } } },
+      include: {
+        category: true,
+        purity: true,
+        images: { where: { isActive: true }, orderBy: [{ isPrimary: "desc" }, { createdAt: "desc" }] },
+        prodJobCards: { orderBy: { createdAt: "desc" } },
+      },
     });
     if (!p) throw notFound("Item master not found");
     const iso = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : "");
@@ -113,7 +147,7 @@ router.get(
       targetPurity: p.purity.code,
       estGrossWeight: Number(p.grossWeightG),
       notes: p.description ?? "",
-      images: p.images.map((im) => ({ url: im.thumbnailUrl ?? im.url })),
+      images: p.images.map((im) => ({ id: im.id, url: im.thumbnailUrl ?? im.url, isPrimary: im.isPrimary })),
       jobCards: p.prodJobCards.map((jc) => ({
         id: jc.jobNo,
         status: JOB_STATUS_LABEL[jc.status] ?? jc.status,
@@ -130,13 +164,19 @@ router.get(
   "/karigars",
   requireAuth,
   asyncHandler(async (_req, res) => {
-    const [karigars, tiers, bulkRows, jobCards] = await Promise.all([
+    const [karigars, tiers, bulkRows, bulkReceiptRows, jobCards] = await Promise.all([
       prisma.karigar.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
       loadTiers(),
       prisma.bulkStockIssue.findMany({ include: { karigar: true, purity: true } }),
+      prisma.bulkStockReceipt.findMany({ include: { karigar: true, purity: true } }),
       loadAllEngineJobCards(),
     ]);
-    const ledger = buildLedger(jobCards, tiers, bulkRows.map(mapBulkIssue));
+    const openingBalances: KarigarOpeningBalance[] = karigars.map((k) => ({
+      karigar: k.name,
+      balance: Number(k.openingBalance),
+      date: iso(k.openingBalanceDate ?? k.createdAt),
+    }));
+    const ledger = buildLedger(jobCards, tiers, bulkRows.map(mapBulkIssue), bulkReceiptRows.map(mapBulkReceipt), openingBalances);
     // "Currently Holding" — per-karigar list of material still issued (not yet reconciled).
     const holdingByName: Record<string, { jobId: string; stage: string; weight: number; purity: string | null }[]> = {};
     for (const jc of jobCards) {
@@ -159,6 +199,8 @@ router.get(
         defaultWastagePct: k.defaultWastagePct == null ? null : Number(k.defaultWastagePct),
         defaultRatePerGm: k.defaultRatePerGm == null ? null : Number(k.defaultRatePerGm),
         defaultFlatLabour: k.defaultFlatLabour == null ? null : Number(k.defaultFlatLabour),
+        openingBalance: Number(k.openingBalance),
+        openingBalanceDate: iso(k.openingBalanceDate ?? k.createdAt),
         balance: +karigarBalance(k.name, ledger).toFixed(3),
         labourEarned: karigarLabourEarned(k.name, jobCards),
         holding: holdingByName[k.name] ?? [],
@@ -193,17 +235,75 @@ router.post(
   })
 );
 
+/* --------------------------- Bulk Stock Receipt ---------------------------- */
+// The reverse of Bulk Stock — a karigar (typically Fitting) hands bulk-made
+// findings back to the store, off metal already issued to them. One ledger
+// credit here, at whatever purity the delivered findings actually are —
+// deliberately not linked to any job card (see buildLedger's Fitting skip).
+const bulkReceiptSchema = z.object({
+  karigarId: z.string().min(1),
+  purityId: z.string().min(1),
+  weightGrams: z.number().positive(),
+  label: z.string().default(""),
+  wastagePercent: z.number().min(0).default(0),
+  receiptDate: z.coerce.date().optional(),
+  note: z.string().optional(),
+});
+router.post(
+  "/bulk-receipt",
+  requireRole("SUPER_ADMIN", "MANAGER", "STORE"),
+  asyncHandler(async (req, res) => {
+    const body = bulkReceiptSchema.parse(req.body);
+    // Same wastage-% basis as Casting/Fitting job-card output — a % of the
+    // delivered weight, credited to the karigar (not priced in ₹ here, since
+    // there's no job card to charge it against — just the ledger weight).
+    const wastageWeight = body.wastagePercent > 0 ? +(body.weightGrams * (body.wastagePercent / 100)).toFixed(3) : null;
+    const created = await prisma.bulkStockReceipt.create({
+      data: {
+        karigarId: body.karigarId,
+        purityId: body.purityId,
+        weightGrams: body.weightGrams,
+        label: body.label,
+        wastagePercent: body.wastagePercent > 0 ? body.wastagePercent : null,
+        wastageWeight,
+        receiptDate: body.receiptDate ?? new Date(),
+        note: body.note ?? "Bulk findings received",
+      },
+    });
+    res.status(201).json(created);
+  })
+);
+
 /* ------------------------------- Ledger ----------------------------------- */
 router.get(
   "/ledger",
   requireAuth,
   asyncHandler(async (_req, res) => {
-    const [tiers, bulkRows, jobCards] = await Promise.all([
+    const [tiers, bulkRows, bulkReceiptRows, jobCards, karigars] = await Promise.all([
       loadTiers(),
       prisma.bulkStockIssue.findMany({ include: { karigar: true, purity: true } }),
+      prisma.bulkStockReceipt.findMany({ include: { karigar: true, purity: true } }),
       loadAllEngineJobCards(),
+      prisma.karigar.findMany({ select: { name: true, openingBalance: true, openingBalanceDate: true, createdAt: true } }),
     ]);
-    res.json(buildLedger(jobCards, tiers, bulkRows.map(mapBulkIssue)));
+    const openingBalances: KarigarOpeningBalance[] = karigars.map((k) => ({
+      karigar: k.name,
+      balance: Number(k.openingBalance),
+      date: iso(k.openingBalanceDate ?? k.createdAt),
+    }));
+    res.json(buildLedger(jobCards, tiers, bulkRows.map(mapBulkIssue), bulkReceiptRows.map(mapBulkReceipt), openingBalances));
+  })
+);
+
+// The karigar-side ₹ labour ledger — every labour entry ever earned, across
+// every job card (unlike /ledger's metal tracking, which deliberately skips
+// Meenakari/Setting/Fitting — labour is paid regardless).
+router.get(
+  "/labour-ledger",
+  requireAuth,
+  asyncHandler(async (_req, res) => {
+    const jobCards = await loadAllEngineJobCards();
+    res.json(buildLabourLedger(jobCards));
   })
 );
 
@@ -216,7 +316,7 @@ router.get(
       prisma.prodJobCard.findMany({
         include: {
           ...jobCardInclude,
-          itemMaster: { include: { images: { where: { isPrimary: true }, take: 1 }, category: true } },
+          itemMaster: { include: { images: { where: { isActive: true, isPrimary: true }, take: 1 }, category: true } },
         },
         orderBy: { createdAt: "desc" },
       }),
@@ -247,6 +347,7 @@ router.get(
 
 const createSchema = z.object({
   itemMasterId: z.string().min(1),
+  seriesId: z.string().min(1),
   dueDate: z.coerce.date().optional(),
   pieceCount: z.number().int().positive().optional(),
   notes: z.string().optional(),
@@ -259,19 +360,16 @@ router.post(
     const item = await prisma.product.findUnique({ where: { id: body.itemMasterId } });
     if (!item) throw badRequest("Unknown item master");
 
-    // Next job number JC-YYYY-#####
-    const year = new Date().getFullYear();
-    const last = await prisma.prodJobCard.findFirst({
-      where: { jobNo: { startsWith: `JC-${year}-` } },
-      orderBy: { jobNo: "desc" },
-      select: { jobNo: true },
-    });
-    const nextSeq = last ? parseInt(last.jobNo.split("-").pop() || "0", 10) + 1 : 1;
-    const jobNo = `JC-${year}-${String(nextSeq).padStart(5, "0")}`;
+    const series = await prisma.prodJobCardSeries.findUnique({ where: { id: body.seriesId } });
+    if (!series || !series.isActive) throw badRequest("Unknown or inactive job card series — pick one in Settings first");
+    if (series.effectiveFrom > new Date()) throw badRequest(`Series "${series.name}" is not effective yet (from ${series.effectiveFrom.toISOString().slice(0, 10)})`);
+    const num = await nextSequenceNumber(`jobcard-series-${series.id}`, series.padWidth);
+    const jobNo = `${series.name}-${num}`;
 
     const jc = await prisma.prodJobCard.create({
       data: {
         jobNo,
+        seriesId: series.id,
         itemMasterId: item.id,
         targetPurityId: item.purityId,
         status: "InProduction",
@@ -347,6 +445,84 @@ router.get(
       },
       stonesByType: stonesByType(jc),
     });
+  })
+);
+
+// Fetches a product image as a base64 data URI for embedding in the PDF —
+// pdfmake's server-side PdfPrinter can't fetch remote URLs itself. Cloudinary
+// images are fetched over HTTP; local-disk images (dev fallback, see
+// imageStorage.ts) are read straight off UPLOAD_DIR instead of looping the
+// request back through our own server.
+async function loadImageAsDataUri(url: string): Promise<string | null> {
+  try {
+    if (url.startsWith("/uploads/")) {
+      const filePath = path.join(path.resolve(env.UPLOAD_DIR), url.slice("/uploads/".length));
+      const buf = await fs.readFile(filePath);
+      const ext = path.extname(filePath).slice(1) || "jpeg";
+      return `data:image/${ext};base64,${buf.toString("base64")}`;
+    }
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const contentType = res.headers.get("content-type") ?? "image/jpeg";
+    const buf = Buffer.from(await res.arrayBuffer());
+    return `data:${contentType};base64,${buf.toString("base64")}`;
+  } catch (err) {
+    console.error("Failed to load image for job-card PDF:", err);
+    return null;
+  }
+}
+
+router.get(
+  "/job-cards/:jobNo/pdf",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const profitPct = Number(req.query.profitPct) || 0;
+    const [row, tiers, baseRate] = await Promise.all([
+      prisma.prodJobCard.findUnique({
+        where: { jobNo: req.params.jobNo },
+        include: {
+          ...jobCardInclude,
+          itemMaster: { include: { images: true, category: true } },
+        },
+      }),
+      loadTiers(),
+      loadBaseRate(),
+    ]);
+    if (!row) throw notFound("Job card not found");
+    const jc = mapJobCard(row);
+    const t = jcTotals(jc, tiers);
+    const silverValue = +(t.pureEq * baseRate).toFixed(2);
+    const effectiveSilverValue = jc.manualSilverValue ?? silverValue;
+    const estimatedCostToDate = +(t.labour + t.stonesConsumed + effectiveSilverValue).toFixed(2);
+
+    const primaryImage = row.itemMaster.images.find((im) => im.isActive && im.isPrimary) ?? row.itemMaster.images.find((im) => im.isActive);
+    const imageDataUri = primaryImage ? await loadImageAsDataUri(primaryImage.url) : null;
+
+    const pdfBuffer = await generateJobCardPdf({
+      jobNo: jc.id,
+      itemName: row.itemMaster.designName,
+      category: row.itemMaster.category.name,
+      designCode: row.itemMaster.designCode,
+      createdAt: jc.createdAt,
+      targetPurity: jc.targetPurity,
+      pieceCount: jc.pieceCount,
+      imageDataUri,
+      metal: metalLines(jc, tiers),
+      stones: stoneLines(jc),
+      labour: labourLines(jc),
+      totals: {
+        grossWeight: grossWeight(jc),
+        pureEq: t.pureEq,
+        silverValue: effectiveSilverValue,
+        stonesConsumed: t.stonesConsumed,
+        labour: t.labour,
+        estimatedCostToDate,
+      },
+      profitPct,
+    });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename=${jc.id}.pdf`);
+    res.send(pdfBuffer);
   })
 );
 

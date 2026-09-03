@@ -1,9 +1,10 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useItemMaster, useProdSettings, createJobCard, updateItemMaster } from "@/lib/production";
+import { useItemMaster, useProdSettings, createJobCard, updateItemMaster, uploadItemImage, deleteItemImage } from "@/lib/production";
+import { resolveMediaUrl } from "@/lib/api";
 import { StatusPill } from "../../job-cards/page";
 
 export default function ItemMasterDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -11,19 +12,34 @@ export default function ItemMasterDetailPage({ params }: { params: Promise<{ id:
   const router = useRouter();
   const { data: item, mutate } = useItemMaster(id);
   const { data: settings } = useProdSettings();
-  const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [pickingSeries, setPickingSeries] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   if (!item) return <div className="text-slate-400 p-4 text-sm">Loading…</div>;
 
   const open = item.jobCards.filter((j) => j.status !== "Closed").length;
 
-  async function createJC() {
-    setCreating(true);
+  async function onPickImage(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setUploading(true);
     try {
-      const jc = await createJobCard({ itemMasterId: item!.id });
-      router.push(`/job-cards/${jc.jobNo}`);
-    } finally { setCreating(false); }
+      await uploadItemImage(item!.id, file);
+      await mutate();
+    } catch (err) {
+      alert((err as Error).message || "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function removeImage(imageId: string) {
+    if (!confirm("Remove this image?")) return;
+    await deleteItemImage(imageId);
+    await mutate();
   }
 
   return (
@@ -40,8 +56,8 @@ export default function ItemMasterDetailPage({ params }: { params: Promise<{ id:
           <p className="text-[12px] text-slate-500">{item.category}{item.designCode ? ` · ${item.designCode}` : ""} · {item.targetPurity} · est. {item.estGrossWeight}g</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={createJC} disabled={creating} className="h-8 px-3 rounded bg-blue-800 text-white text-[12px] font-medium hover:bg-blue-900 disabled:opacity-50">
-            <span className="font-bold">+</span> {creating ? "Creating…" : "Create Job Card"}
+          <button onClick={() => setPickingSeries(true)} className="h-8 px-3 rounded bg-blue-800 text-white text-[12px] font-medium hover:bg-blue-900">
+            <span className="font-bold">+</span> Create Job Card
           </button>
           <button onClick={() => setEditing((v) => !v)} className="h-8 px-3 rounded border border-slate-200 text-[12px] text-slate-700 hover:bg-slate-50">{editing ? "Cancel" : "Edit"}</button>
         </div>
@@ -49,12 +65,27 @@ export default function ItemMasterDetailPage({ params }: { params: Promise<{ id:
 
       <div className="grid lg:grid-cols-3 gap-4 items-start">
         <div className="lg:col-span-1 space-y-3">
-          <div className="bg-white border border-slate-200 rounded-md overflow-hidden aspect-square flex items-center justify-center">
+          <div className="bg-white border border-slate-200 rounded-md overflow-hidden aspect-square flex items-center justify-center relative group">
             {item.images[0]?.url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={item.images[0].url} alt={item.name} className="w-full h-full object-cover" />
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={resolveMediaUrl(item.images[0].url)} alt={item.name} className="w-full h-full object-cover" />
+                <button
+                  onClick={() => removeImage(item.images[0].id)}
+                  className="absolute top-2 right-2 h-6 w-6 rounded-full bg-slate-900/60 text-white text-[12px] opacity-0 group-hover:opacity-100 transition-opacity hover:bg-rose-600"
+                  title="Remove image"
+                >✕</button>
+              </>
             ) : <span className="text-slate-300 text-[12px]">No image</span>}
           </div>
+          <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" className="hidden" onChange={onPickImage} />
+          <button
+            onClick={() => fileInput.current?.click()}
+            disabled={uploading}
+            className="w-full h-8 rounded border border-slate-200 text-[12px] text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            {uploading ? "Uploading…" : item.images[0] ? "Replace Image" : "+ Add Image"}
+          </button>
           <div className="bg-white border border-slate-200 rounded-md p-3 grid grid-cols-2 gap-2 text-center">
             <div><div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Job Cards</div><div className="text-[18px] font-semibold text-slate-900">{item.jobCards.length}</div></div>
             <div><div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Open</div><div className="text-[18px] font-semibold text-blue-800">{open}</div></div>
@@ -84,6 +115,52 @@ export default function ItemMasterDetailPage({ params }: { params: Promise<{ id:
               </tbody>
             </table>
           </div>
+        </div>
+      </div>
+
+      {pickingSeries && (
+        <SeriesPickModal itemMasterId={item.id} jobCardSeries={settings?.jobCardSeries ?? []} onClose={() => setPickingSeries(false)}
+          onCreated={(jobNo) => { setPickingSeries(false); router.push(`/job-cards/${jobNo}`); }} />
+      )}
+    </div>
+  );
+}
+
+function SeriesPickModal({ itemMasterId, jobCardSeries, onClose, onCreated }: {
+  itemMasterId: string; jobCardSeries: { id: string; name: string; effectiveFrom: string }[];
+  onClose: () => void; onCreated: (jobNo: string) => void;
+}) {
+  const today = new Date().toISOString().slice(0, 10);
+  const availableSeries = jobCardSeries.filter((s) => s.effectiveFrom <= today);
+  const [seriesId, setSeriesId] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit() {
+    if (!seriesId) return;
+    setBusy(true);
+    try {
+      const jc = await createJobCard({ itemMasterId, seriesId });
+      onCreated(jc.jobNo);
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={onClose}>
+      <div className="bg-white rounded-md shadow-xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+        <div className="px-4 py-3 border-b border-slate-100"><h2 className="text-[14px] font-semibold">Create Job Card</h2></div>
+        <div className="p-4 space-y-3">
+          <div>
+            <label className="block text-[11px] font-medium text-slate-600 mb-1">Job No. Series *</label>
+            <select className="w-full h-9 px-2 border border-slate-200 rounded text-[12px]" value={seriesId} onChange={(e) => setSeriesId(e.target.value)}>
+              <option value="">Select a series…</option>
+              {availableSeries.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            {availableSeries.length === 0 && <p className="text-[11px] text-amber-700 mt-1">No effective series yet — add one in Settings first.</p>}
+          </div>
+        </div>
+        <div className="px-4 py-3 border-t border-slate-100 flex justify-end gap-2">
+          <button onClick={onClose} className="h-8 px-3 rounded border border-slate-200 text-[12px]">Cancel</button>
+          <button disabled={!seriesId || busy} onClick={submit} className="h-8 px-3 rounded bg-blue-800 text-white text-[12px] font-medium disabled:opacity-50">{busy ? "Creating…" : "Create"}</button>
         </div>
       </div>
     </div>

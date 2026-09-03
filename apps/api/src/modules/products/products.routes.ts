@@ -346,11 +346,22 @@ router.delete(
   asyncHandler(async (req, res) => {
     const before = await prisma.productImage.findUnique({ where: { id: req.params.imageId } });
     if (!before) throw notFound("Image not found");
-    // FR-8.08: never silently deleted — deactivated only.
+    // FR-8.08: never silently deleted — deactivated only. Also clear isPrimary
+    // here (not just isActive) — leaving it set let a soft-deleted image keep
+    // winning any query that filters on isPrimary without also checking
+    // isActive. If it was the primary, hand the flag to the next-most-recent
+    // still-active image so the item doesn't go thumbnail-less.
     const image = await prisma.productImage.update({
       where: { id: req.params.imageId },
-      data: { isActive: false },
+      data: { isActive: false, isPrimary: false },
     });
+    if (before.isPrimary) {
+      const next = await prisma.productImage.findFirst({
+        where: { productId: before.productId, isActive: true, id: { not: image.id } },
+        orderBy: { createdAt: "desc" },
+      });
+      if (next) await prisma.productImage.update({ where: { id: next.id }, data: { isPrimary: true } });
+    }
     await recordAudit(prisma, {
       userId: req.user!.id,
       action: "UPDATE",

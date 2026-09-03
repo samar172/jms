@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useJobCards, useItemMasters, createJobCard, type JobCardListRow } from "@/lib/production";
+import { useJobCards, useItemMasters, useProdSettings, createJobCard, type JobCardListRow } from "@/lib/production";
+import { resolveMediaUrl } from "@/lib/api";
 
 const TABS = ["all", "Draft", "In Production", "On Hold", "Reconciliation", "Closed"];
 const today = () => new Date().toISOString().slice(0, 10);
@@ -64,6 +65,7 @@ export default function JobCardsPage() {
         <table className="w-full border-collapse">
           <thead className="sticky top-0 bg-slate-50 z-10">
             <tr className="h-9 border-b border-slate-200 text-left">
+              <th className="px-3 w-12"></th>
               {["Job No.", "Item", "Stage", "Due Date", "GW Est", "Status"].map((h, i) => (
                 <th key={h} className={`px-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold ${i === 4 ? "text-right" : ""}`}>{h}</th>
               ))}
@@ -71,12 +73,20 @@ export default function JobCardsPage() {
           </thead>
           <tbody>
             {visible.length === 0 && (
-              <tr><td colSpan={6} className="py-14 text-center text-[13px] text-slate-500">No job cards match these filters</td></tr>
+              <tr><td colSpan={7} className="py-14 text-center text-[13px] text-slate-500">No job cards match these filters</td></tr>
             )}
             {visible.map((r: JobCardListRow) => {
               const overdueRow = r.status !== "Closed" && r.dueDate && r.dueDate < today();
               return (
                 <tr key={r.id} onClick={() => router.push(`/job-cards/${r.id}`)} className="border-b border-slate-100 cursor-pointer h-12 hover:bg-slate-50">
+                  <td className="px-3">
+                    <div className="w-8 h-8 rounded bg-slate-50 border border-slate-200 overflow-hidden flex items-center justify-center shrink-0">
+                      {r.thumbnailUrl
+                        // eslint-disable-next-line @next/next/no-img-element
+                        ? <img src={resolveMediaUrl(r.thumbnailUrl)} alt={r.itemName} className="w-full h-full object-cover" />
+                        : <span className="text-slate-300 text-[9px]">—</span>}
+                    </div>
+                  </td>
                   <td className="px-3 text-[12px] mono text-blue-800 font-medium">{r.id}</td>
                   <td className="px-3 text-[12px]">
                     <div className="text-slate-900">{r.itemName}</div>
@@ -119,18 +129,22 @@ export function StatusPill({ status }: { status: string }) {
 
 function NewJobCardModal({ onClose, onCreated }: { onClose: () => void; onCreated: (jobNo: string) => void }) {
   const { data: items } = useItemMasters();
+  const { data: settings } = useProdSettings();
   const [itemMasterId, setItemMasterId] = useState("");
+  const [seriesId, setSeriesId] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [pieceCount, setPieceCount] = useState("1");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const chosen = items?.find((i) => i.id === itemMasterId);
+  const today = new Date().toISOString().slice(0, 10);
+  const availableSeries = (settings?.jobCardSeries ?? []).filter((s) => s.effectiveFrom <= today);
 
   async function submit() {
-    if (!itemMasterId) return;
+    if (!itemMasterId || !seriesId) return;
     setBusy(true);
     try {
-      const jc = await createJobCard({ itemMasterId, dueDate: dueDate || undefined, pieceCount: Number(pieceCount) || undefined, notes: notes || undefined });
+      const jc = await createJobCard({ itemMasterId, seriesId, dueDate: dueDate || undefined, pieceCount: Number(pieceCount) || undefined, notes: notes || undefined });
       onCreated(jc.jobNo);
     } finally {
       setBusy(false);
@@ -153,6 +167,14 @@ function NewJobCardModal({ onClose, onCreated }: { onClose: () => void; onCreate
             </select>
             {chosen && <p className="text-[11px] text-slate-500 mt-1">Target purity {chosen.targetPurity} · est. {chosen.estGrossWeight}g · locked at creation.</p>}
           </div>
+          <div>
+            <label className="block text-[11px] font-medium text-slate-600 mb-1">Job No. Series *</label>
+            <select className="w-full h-9 px-2 border border-slate-200 rounded text-[12px]" value={seriesId} onChange={(e) => setSeriesId(e.target.value)}>
+              <option value="">Select a series…</option>
+              {availableSeries.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            {availableSeries.length === 0 && <p className="text-[11px] text-amber-700 mt-1">No effective series yet — add one in Settings first.</p>}
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-[11px] font-medium text-slate-600 mb-1">Pieces</label>
@@ -170,7 +192,7 @@ function NewJobCardModal({ onClose, onCreated }: { onClose: () => void; onCreate
         </div>
         <div className="px-4 py-3 border-t border-slate-100 flex justify-end gap-2">
           <button onClick={onClose} className="h-8 px-3 rounded border border-slate-200 text-[12px] text-slate-700 hover:bg-slate-50">Cancel</button>
-          <button disabled={!itemMasterId || busy} onClick={submit} className="h-8 px-3 rounded bg-blue-800 text-white text-[12px] font-medium hover:bg-blue-900 disabled:opacity-50">
+          <button disabled={!itemMasterId || !seriesId || busy} onClick={submit} className="h-8 px-3 rounded bg-blue-800 text-white text-[12px] font-medium hover:bg-blue-900 disabled:opacity-50">
             {busy ? "Creating…" : "Create Job Card"}
           </button>
         </div>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useItemMasters, useProdSettings, createItemMaster } from "@/lib/production";
+import { resolveMediaUrl } from "@/lib/api";
 
 const CATEGORIES = ["Necklace Set", "Ring", "Earrings", "Bangles", "Anklets", "Coin / Idol", "Chain", "Toe Ring", "Bracelet", "Pendant"];
 
@@ -27,7 +28,7 @@ export default function ItemMasterPage() {
             <div className="aspect-square bg-slate-50 flex items-center justify-center overflow-hidden">
               {it.imageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={it.imageUrl} alt={it.name} className="w-full h-full object-cover" />
+                <img src={resolveMediaUrl(it.imageUrl)} alt={it.name} className="w-full h-full object-cover" />
               ) : <span className="text-slate-300 text-[11px]">No image</span>}
             </div>
             <div className="p-2.5">

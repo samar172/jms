@@ -103,6 +103,80 @@ router.delete(
   })
 );
 
+/* -------------------------- Finding names (master) ------------------------ */
+// Admin-managed list of Fitting finding names (Wire/Push Clip/Kadi/…), shared
+// across all job cards and offered in the Fitting output dropdown — same
+// pattern as sub-item names above.
+router.post(
+  "/finding-names",
+  requireRole(...ADMIN),
+  asyncHandler(async (req, res) => {
+    const body = z.object({ label: z.string().min(1) }).parse(req.body);
+    const count = await prisma.prodFindingName.count();
+    const existing = await prisma.prodFindingName.findUnique({ where: { label: body.label.trim() } });
+    if (existing) {
+      const t = await prisma.prodFindingName.update({ where: { id: existing.id }, data: { isActive: true } });
+      return res.status(201).json(t);
+    }
+    const t = await prisma.prodFindingName.create({ data: { label: body.label.trim(), sortOrder: count } });
+    res.status(201).json(t);
+  })
+);
+router.patch(
+  "/finding-names/:id",
+  requireRole(...ADMIN),
+  asyncHandler(async (req, res) => {
+    const body = z.object({ label: z.string().min(1) }).parse(req.body);
+    const t = await prisma.prodFindingName.update({ where: { id: req.params.id }, data: { label: body.label.trim() } });
+    res.json(t);
+  })
+);
+router.delete(
+  "/finding-names/:id",
+  requireRole(...ADMIN),
+  asyncHandler(async (req, res) => {
+    await prisma.prodFindingName.update({ where: { id: req.params.id }, data: { isActive: false } });
+    res.json({ ok: true });
+  })
+);
+
+/* ------------------------- Work-type names (master) ------------------------ */
+// Admin-managed list of Meenakari/Setting work-type reference tags (Enamel,
+// Polish, Stone Setting, …) — purely a record of what the labour was for,
+// offered in the reconcile dropdown. Same pattern as sub-item/finding names.
+router.post(
+  "/work-type-names",
+  requireRole(...ADMIN),
+  asyncHandler(async (req, res) => {
+    const body = z.object({ label: z.string().min(1) }).parse(req.body);
+    const count = await prisma.prodWorkTypeName.count();
+    const existing = await prisma.prodWorkTypeName.findUnique({ where: { label: body.label.trim() } });
+    if (existing) {
+      const t = await prisma.prodWorkTypeName.update({ where: { id: existing.id }, data: { isActive: true } });
+      return res.status(201).json(t);
+    }
+    const t = await prisma.prodWorkTypeName.create({ data: { label: body.label.trim(), sortOrder: count } });
+    res.status(201).json(t);
+  })
+);
+router.patch(
+  "/work-type-names/:id",
+  requireRole(...ADMIN),
+  asyncHandler(async (req, res) => {
+    const body = z.object({ label: z.string().min(1) }).parse(req.body);
+    const t = await prisma.prodWorkTypeName.update({ where: { id: req.params.id }, data: { label: body.label.trim() } });
+    res.json(t);
+  })
+);
+router.delete(
+  "/work-type-names/:id",
+  requireRole(...ADMIN),
+  asyncHandler(async (req, res) => {
+    await prisma.prodWorkTypeName.update({ where: { id: req.params.id }, data: { isActive: false } });
+    res.json({ ok: true });
+  })
+);
+
 /* ------------------------------- Karigars --------------------------------- */
 const karigarSchema = z.object({
   name: z.string().min(1),
@@ -111,6 +185,8 @@ const karigarSchema = z.object({
   defaultWastagePct: z.number().nullable().optional(),
   defaultRatePerGm: z.number().nullable().optional(),
   defaultFlatLabour: z.number().nullable().optional(),
+  openingBalance: z.number().optional(),
+  openingBalanceDate: z.coerce.date().optional(),
 });
 router.post(
   "/karigars",
@@ -128,6 +204,10 @@ router.post(
         defaultWastagePct: body.defaultWastagePct ?? null,
         defaultRatePerGm: body.defaultRatePerGm ?? null,
         defaultFlatLabour: body.defaultFlatLabour ?? null,
+        openingBalance: body.openingBalance ?? 0,
+        // Real as-of date, not a sentinel — defaults to today when a balance
+        // is actually set, so the ledger row shows a genuine date.
+        openingBalanceDate: body.openingBalance ? (body.openingBalanceDate ?? new Date()) : null,
       },
     });
     res.status(201).json({ id: k.id });
@@ -138,6 +218,7 @@ router.patch(
   requireRole(...ADMIN),
   asyncHandler(async (req, res) => {
     const body = karigarSchema.partial().parse(req.body);
+    const existing = body.openingBalance !== undefined ? await prisma.karigar.findUnique({ where: { id: req.params.id }, select: { openingBalanceDate: true } }) : null;
     await prisma.karigar.update({
       where: { id: req.params.id },
       data: {
@@ -147,8 +228,91 @@ router.patch(
         ...(body.defaultWastagePct !== undefined ? { defaultWastagePct: body.defaultWastagePct } : {}),
         ...(body.defaultRatePerGm !== undefined ? { defaultRatePerGm: body.defaultRatePerGm } : {}),
         ...(body.defaultFlatLabour !== undefined ? { defaultFlatLabour: body.defaultFlatLabour } : {}),
+        ...(body.openingBalance !== undefined ? { openingBalance: body.openingBalance } : {}),
+        ...(body.openingBalanceDate !== undefined
+          ? { openingBalanceDate: body.openingBalanceDate }
+          : body.openingBalance !== undefined
+          ? { openingBalanceDate: body.openingBalance ? (existing?.openingBalanceDate ?? new Date()) : null }
+          : {}),
       },
     });
+    res.json({ ok: true });
+  })
+);
+
+/* --------------------------- Job Card Series (master) ---------------------- */
+// Admin-managed job-card numbering series (Settings) — e.g. "N" starting at
+// 001, "P" starting at 001, each effective from a given date. The client
+// picks one when creating a job card; numbers within a series always run in
+// order (SerialSequence, keyed by series id, is the atomic counter).
+const seriesSchema = z.object({
+  name: z.string().min(1),
+  startAt: z.number().int().positive(),
+  padWidth: z.number().int().min(1).max(10).optional(),
+  effectiveFrom: z.coerce.date(),
+});
+router.get(
+  "/job-card-series",
+  requireRole(...ADMIN),
+  asyncHandler(async (_req, res) => {
+    const rows = await prisma.prodJobCardSeries.findMany({ where: { isActive: true }, orderBy: { createdAt: "asc" } });
+    res.json(rows);
+  })
+);
+router.post(
+  "/job-card-series",
+  requireRole(...ADMIN),
+  asyncHandler(async (req, res) => {
+    const body = seriesSchema.parse(req.body);
+    const padWidth = body.padWidth ?? String(body.startAt).length;
+    const created = await prisma.prodJobCardSeries.create({
+      data: { name: body.name.trim(), startAt: body.startAt, padWidth, effectiveFrom: body.effectiveFrom },
+    });
+    // Seed the atomic counter so the first number issued equals startAt.
+    await prisma.serialSequence.upsert({
+      where: { bucketKey: `jobcard-series-${created.id}` },
+      create: { bucketKey: `jobcard-series-${created.id}`, lastValue: body.startAt - 1 },
+      update: {},
+    });
+    res.status(201).json(created);
+  })
+);
+router.patch(
+  "/job-card-series/:id",
+  requireRole(...ADMIN),
+  asyncHandler(async (req, res) => {
+    const body = seriesSchema.partial().parse(req.body);
+    // Changing startAt after numbers have already been issued would collide
+    // with what's already out there — only allow it while the counter is
+    // still untouched (i.e. no job card has used this series yet).
+    if (body.startAt != null) {
+      const seq = await prisma.serialSequence.findUnique({ where: { bucketKey: `jobcard-series-${req.params.id}` } });
+      const series = await prisma.prodJobCardSeries.findUnique({ where: { id: req.params.id } });
+      if (seq && series && seq.lastValue !== series.startAt - 1) {
+        throw badRequest("This series has already issued numbers — Start By can no longer be changed");
+      }
+      await prisma.serialSequence.upsert({
+        where: { bucketKey: `jobcard-series-${req.params.id}` },
+        create: { bucketKey: `jobcard-series-${req.params.id}`, lastValue: body.startAt - 1 },
+        update: { lastValue: body.startAt - 1 },
+      });
+    }
+    const updated = await prisma.prodJobCardSeries.update({
+      where: { id: req.params.id },
+      data: {
+        ...(body.name != null ? { name: body.name.trim() } : {}),
+        ...(body.startAt != null ? { startAt: body.startAt, padWidth: body.padWidth ?? String(body.startAt).length } : {}),
+        ...(body.effectiveFrom != null ? { effectiveFrom: body.effectiveFrom } : {}),
+      },
+    });
+    res.json(updated);
+  })
+);
+router.delete(
+  "/job-card-series/:id",
+  requireRole(...ADMIN),
+  asyncHandler(async (req, res) => {
+    await prisma.prodJobCardSeries.update({ where: { id: req.params.id }, data: { isActive: false } });
     res.json({ ok: true });
   })
 );

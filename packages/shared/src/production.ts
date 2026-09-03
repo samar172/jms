@@ -66,6 +66,7 @@ export interface LabourEntry {
   amount: number;
   note: string;
   purity?: string;
+  date: string;
 }
 
 export interface Assignment {
@@ -115,6 +116,23 @@ export interface BulkStockIssue {
   karigar: string;
   purity: string;
   weight: number;
+  date: string;
+  note: string;
+}
+
+// The reverse of BulkStockIssue — a karigar hands bulk-made findings
+// (Wire/Push Clip/Kadi/…) back to the store, off metal they were already
+// holding. This is the karigar's ONLY ledger credit for that metal — it is
+// deliberately not tied to any job card (see buildLedger, which skips Fitting
+// stage entirely for this reason: crediting there too would double-count).
+export interface BulkStockReceipt {
+  id: string;
+  karigar: string;
+  purity: string;
+  weight: number;
+  label: string;
+  wastagePercent: number | null;
+  wastageWeight: number | null;
   date: string;
   note: string;
 }
@@ -288,6 +306,133 @@ export function wastageLines(jc: JobCard): WastageLine[] {
   return rows;
 }
 
+// Per-line labour detail for the costing breakdown (stage / karigar / basis / ₹).
+export interface LabourLine {
+  stage: StageName;
+  karigar: string;
+  basis: LabourBasis;
+  qty: number;
+  rate: number;
+  amount: number;
+  note: string;
+  date: string;
+}
+
+export function labourLines(jc: JobCard): LabourLine[] {
+  const rows: LabourLine[] = [];
+  jc.stages.forEach((st) =>
+    st.assignments.forEach((a) =>
+      a.labour.forEach((l) => {
+        rows.push({ stage: st.stage, karigar: a.karigar, basis: l.basis, qty: l.qty, rate: l.rate, amount: l.amount, note: l.note, date: l.date });
+      })
+    )
+  );
+  return rows;
+}
+
+// The karigar-side labour ledger — every labour entry this karigar has ever
+// earned, across every job card, newest first. Unlike the metal ledger
+// (buildLedger), this always includes every stage — labour is what the
+// karigar is actually paid, regardless of whether that stage's metal is
+// tracked in his ledger (Meenakari/Setting/Fitting deliberately aren't, see
+// buildLedger — but he's still paid for the work).
+export interface LabourLedgerRow extends LabourLine {
+  jobCardId: string;
+}
+
+export function buildLabourLedger(jobCards: JobCard[]): Record<string, LabourLedgerRow[]> {
+  const byKarigar: Record<string, LabourLedgerRow[]> = {};
+  jobCards.forEach((jc) => {
+    labourLines(jc).forEach((l) => {
+      (byKarigar[l.karigar] ??= []).push({ ...l, jobCardId: jc.id });
+    });
+  });
+  Object.values(byKarigar).forEach((rows) => rows.sort((a, b) => (b.date || "").localeCompare(a.date || "")));
+  return byKarigar;
+}
+
+// Named metal line items — Casting sub-items (Ghat/Otla/Chain/…) and Fitting
+// findings (Wire/Push Clip/Kadi/…), the two places a job card records metal
+// under a specific name rather than just a bulk weight. Drives the "Metal"
+// section of the printed job-card sheet (description / wt / purity / pure).
+export interface MetalLine {
+  stage: StageName;
+  karigar: string;
+  name: string;
+  pieces: number | null;
+  weightG: number;
+  purity: string;
+  pureG: number;
+}
+
+export function metalLines(jc: JobCard, tiers: PurityTier[]): MetalLine[] {
+  const rows: MetalLine[] = [];
+  jc.stages.forEach((st) =>
+    st.assignments.forEach((a) => {
+      a.subItems.forEach((s) => {
+        const w = s.weightG ?? 0;
+        rows.push({
+          stage: st.stage,
+          karigar: a.karigar,
+          name: s.name,
+          pieces: s.pieces,
+          weightG: w,
+          purity: jc.targetPurity,
+          pureG: +(w * factorFor(jc.targetPurity, tiers)).toFixed(3),
+        });
+      });
+      a.issues.forEach((i) => {
+        if (!i.label || i.label.startsWith("Wastage")) return;
+        const w = i.returnedWeight ?? 0;
+        const purity = i.returnedPurity ?? jc.targetPurity;
+        rows.push({
+          stage: st.stage,
+          karigar: a.karigar,
+          name: i.label,
+          pieces: i.pieceCount,
+          weightG: w,
+          purity,
+          pureG: +(w * factorFor(purity, tiers)).toFixed(3),
+        });
+      });
+    })
+  );
+  return rows;
+}
+
+// Per-line stone detail for the costing breakdown (stage / karigar / issued / returned / net).
+export interface StoneLine {
+  stage: StageName;
+  karigar: string;
+  type: string;
+  qtyIssued: string;
+  valueIssued: number;
+  qtyReturned: string;
+  valueReturned: number;
+  netValue: number;
+}
+
+export function stoneLines(jc: JobCard): StoneLine[] {
+  const rows: StoneLine[] = [];
+  jc.stages.forEach((st) =>
+    st.assignments.forEach((a) =>
+      a.stones.forEach((s) => {
+        rows.push({
+          stage: st.stage,
+          karigar: a.karigar,
+          type: s.type,
+          qtyIssued: s.qtyIssued,
+          valueIssued: s.valueIssued,
+          qtyReturned: s.qtyReturned,
+          valueReturned: s.valueReturned,
+          netValue: +((s.valueIssued || 0) - (s.valueReturned || 0)).toFixed(2),
+        });
+      })
+    )
+  );
+  return rows;
+}
+
 export function activeStageInfo(jc: JobCard): { stage: StageName | null; status: StageStatus | null } {
   const inProg = jc.stages.find((s) => s.status === "In Progress");
   if (inProg) return { stage: inProg.stage, status: inProg.status };
@@ -332,8 +477,10 @@ export function jcTotals(jc: JobCard, tiers: PurityTier[]): JcTotals {
 /* ============================== KARIGAR LEDGER (§6) ============================== */
 
 export type LedgerType =
+  | "Opening Balance"
   | "Issue (Dr)"
   | "Return (Cr)"
+  | "Bulk Receive (Cr)"
   | "Dust Return (Cr)"
   | "Wastage Deduction (Cr)";
 
@@ -349,12 +496,34 @@ export interface LedgerRow {
   balance: number;
 }
 
+export interface KarigarOpeningBalance {
+  karigar: string;
+  balance: number; // pure-eq grams, signed — positive = karigar owes, negative = store owes karigar
+  date: string; // as-of date, shown as the ledger row's own date
+}
+
 export function buildLedger(
   jobCards: JobCard[],
   tiers: PurityTier[],
-  bulkIssues: BulkStockIssue[]
+  bulkIssues: BulkStockIssue[],
+  bulkReceipts: BulkStockReceipt[] = [],
+  openingBalances: KarigarOpeningBalance[] = []
 ): Record<string, LedgerRow[]> {
   const rows: Omit<LedgerRow, "balance">[] = [];
+  const pure = pureTierLabel(tiers);
+  (openingBalances || []).forEach((o) => {
+    if (!o.balance) return;
+    rows.push({
+      date: o.date,
+      karigar: o.karigar,
+      stage: "Opening Balance",
+      jobCardId: "—",
+      type: "Opening Balance",
+      weight: Math.abs(o.balance),
+      purity: pure,
+      pureEq: o.balance,
+    });
+  });
   (bulkIssues || []).forEach((b) => {
     rows.push({
       date: b.date,
@@ -367,8 +536,43 @@ export function buildLedger(
       pureEq: b.weight * factorFor(b.purity, tiers),
     });
   });
+  (bulkReceipts || []).forEach((b) => {
+    rows.push({
+      date: b.date,
+      karigar: b.karigar,
+      stage: b.label ? `Bulk Receive — ${b.label}` : "Bulk Receive",
+      jobCardId: "—",
+      type: "Bulk Receive (Cr)",
+      weight: b.weight,
+      purity: b.purity,
+      pureEq: b.weight * factorFor(b.purity, tiers),
+    });
+    // Same wastage-% formula as Casting/Fitting job-card output — always
+    // credited at pure (24K/100%), never this receipt's own purity.
+    if (b.wastageWeight) {
+      const wastagePurity = pureTierLabel(tiers);
+      rows.push({
+        date: b.date,
+        karigar: b.karigar,
+        stage: b.label ? `Bulk Receive — ${b.label} (wastage)` : "Bulk Receive (wastage)",
+        jobCardId: "—",
+        type: "Wastage Deduction (Cr)",
+        weight: b.wastageWeight,
+        purity: wastagePurity,
+        pureEq: b.wastageWeight * factorFor(wastagePurity, tiers),
+      });
+    }
+  });
   jobCards.forEach((jc) => {
     jc.stages.forEach((stage) => {
+      // Fitting findings are credited to the karigar exclusively via
+      // BulkStockReceipt (bulk, ahead of any specific job card) — crediting
+      // them again here, per job card, would double-count the same metal.
+      // Meenakari and Setting draw the piece itself from the job card (that
+      // part of the flow is unchanged) but the karigar is only ever paid
+      // labour for the work — the gold/metal is the job's, not theirs to be
+      // credited or debited against, so neither stage touches the ledger.
+      if (stage.stage === "Fitting" || stage.stage === "Meenakari" || stage.stage === "Setting") return;
       stage.assignments.forEach((a) => {
         a.issues.forEach((issue) => {
           if (!issue.fromBulkStock && issue.issuedWeight != null && issue.purity != null) {
@@ -434,7 +638,7 @@ export function buildLedger(
     if (!byKarigar[r.karigar]) byKarigar[r.karigar] = [];
     const prev = byKarigar[r.karigar];
     const prevBal = prev.length ? prev[prev.length - 1].balance : 0;
-    const delta = r.type === "Issue (Dr)" ? r.pureEq : -r.pureEq;
+    const delta = r.type === "Issue (Dr)" || r.type === "Opening Balance" ? r.pureEq : -r.pureEq;
     prev.push({ ...r, balance: prevBal + delta });
   });
   return byKarigar;

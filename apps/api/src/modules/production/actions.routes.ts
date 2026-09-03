@@ -150,6 +150,9 @@ router.post(
         ratePerGm: z.number().nullable().optional(),
         flatLabourAmount: z.number().nullable().optional(),
         pieceCount: z.number().int().nullable().optional(),
+        // Pure reference — which kind of work this was (Enamel/Polish/Stone
+        // Setting/…), from the ProdWorkTypeName master. No effect on the math.
+        workType: z.string().optional(),
       })
       .parse(req.body);
     const issue = await prisma.prodMaterialIssue.findUnique({
@@ -164,7 +167,14 @@ router.post(
     let labourId: string | null = issue.labourEntryId;
     let labourAmt = 0;
     if (body.wastagePercent != null) {
-      labourAmt = computeLabourAmount("Wastage %", body.returnedWeight, body.wastagePercent, body.returnedPurity, tierList, base);
+      // Wastage is always priced at pure (24K/100%), never the stage's actual
+      // working purity — same rule as Casting (writeCastOutput). The karigar's
+      // holding is pure; what they lose is lost off that pure holding, no
+      // matter what alloy the piece itself is being built in.
+      const pureTier = tierList.find((t) => t.percent === 100);
+      labourAmt = pureTier
+        ? computeLabourAmount("Wastage %", body.returnedWeight, body.wastagePercent, pureTier.label, tierList, base)
+        : 0;
       const l = await prisma.prodLabourEntry.create({
         data: {
           assignmentId: issue.assignmentId,
@@ -172,8 +182,8 @@ router.post(
           qty: body.returnedWeight,
           rate: body.wastagePercent,
           amount: labourAmt,
-          purityId: await purityIdFor(body.returnedPurity),
-          note: `${body.wastagePercent}% wastage × ${body.returnedWeight.toFixed(3)}g recovered @${body.returnedPurity} (auto-charged on reconcile)`,
+          purityId: pureTier?.id ?? null,
+          note: `${body.wastagePercent}% wastage × ${body.returnedWeight.toFixed(3)}g recovered @${body.returnedPurity}, priced @${pureTier?.label ?? "pure"} (auto-charged on reconcile)`,
         },
       });
       labourId = l.id;
@@ -215,6 +225,7 @@ router.post(
         returnDate: new Date(),
         pieceCount: body.pieceCount ?? issue.pieceCount,
         labourEntryId: labourId,
+        ...(body.workType !== undefined ? { label: body.workType || null } : {}),
       },
     });
     await logActivity(
@@ -272,6 +283,7 @@ router.post(
         ratePerGm: z.number().nullable().optional(),
         flatLabourAmount: z.number().nullable().optional(),
         pieceCount: z.number().int().nullable().optional(),
+        workType: z.string().optional(),
       })
       .parse(req.body);
     const issue = await prisma.prodMaterialIssue.findUnique({
@@ -302,6 +314,7 @@ router.post(
         dustWeight: body.dustWeight,
         pieceCount: body.pieceCount ?? issue.pieceCount,
         labourEntryId: labourId,
+        ...(body.workType !== undefined ? { label: body.workType || null } : {}),
       },
     });
     await logActivity(issue.assignment.stage.jobCardId, `${issue.assignment.stage.stageName} output corrected — ${gm(body.returnedWeight)} @ ${body.returnedPurity}`);
@@ -374,6 +387,14 @@ async function writeCastOutput(body: z.infer<typeof castBody>, jcId: string, sta
   const totalWeight = rows.length ? +rows.reduce((s, r) => s + (r.weightG ?? 0), 0).toFixed(3) : body.returnedWeight;
   const totalPieces = rows.length ? rows.reduce((s, r) => s + (r.pieces || 0), 0) : body.pieceCount;
   const wastageWeight = +(totalWeight * (body.wastagePercent / 100)).toFixed(3);
+  const [tierList, base] = await Promise.all([tiers(), baseRate()]);
+  // The karigar draws bulk stock at pure (24K/100%) — casting it down to the
+  // job's alloy purity is a deliberate dilution, but what's actually LOST in
+  // the melt/pour comes straight off that pure holding. Price wastage at the
+  // pure tier, not the job's target purity, or it reads discounted by the
+  // alloy factor (e.g. only 76% of its real value at 18K).
+  const pureTier = tierList.find((t) => t.percent === 100);
+
   await prisma.prodMaterialIssue.create({
     data: {
       assignmentId: body.assignmentId,
@@ -391,6 +412,28 @@ async function writeCastOutput(body: z.infer<typeof castBody>, jcId: string, sta
       wastageWeight,
     },
   });
+
+  // Wastage here is silver actually lost in the melt/pour — price it the same
+  // way Meenakari/Setting do on reconcile (Wastage % labour basis), so it
+  // shows up in wastageValue instead of always reading ₹0 for Casting. Clear
+  // any prior wastage row first so an edit re-derives instead of stacking.
+  await prisma.prodLabourEntry.deleteMany({ where: { assignmentId: body.assignmentId, basis: "WastagePct" } });
+  let wastageAmt = 0;
+  if (body.wastagePercent > 0 && pureTier) {
+    wastageAmt = computeLabourAmount("Wastage %", totalWeight, body.wastagePercent, pureTier.label, tierList, base);
+    await prisma.prodLabourEntry.create({
+      data: {
+        assignmentId: body.assignmentId,
+        basis: "WastagePct",
+        qty: totalWeight,
+        rate: body.wastagePercent,
+        amount: wastageAmt,
+        purityId: pureTier.id,
+        note: `${body.wastagePercent}% wastage on ${totalWeight.toFixed(3)}g output = ${wastageWeight.toFixed(3)}g, priced @ ${pureTier.label} pure (auto-charged on cast output)`,
+      },
+    });
+  }
+
   // Store the sub-item breakdown against this karigar's casting assignment.
   await prisma.prodSubItem.deleteMany({ where: { assignmentId: body.assignmentId } });
   if (rows.length) {
@@ -401,7 +444,8 @@ async function writeCastOutput(body: z.infer<typeof castBody>, jcId: string, sta
   await prisma.prodStage.update({ where: { id: stageId }, data: { status: "InProgress" } });
   await prisma.prodJobCard.update({ where: { id: jcId }, data: { pieceCount: totalPieces } });
   const rowLabel = rows.length ? ` [${rows.map((r) => `${r.pieces}×${r.name.trim()}`).join(", ")}]` : "";
-  await logActivity(jcId, `Casting output ${verb} — ${gm(totalWeight)} (${totalPieces} pcs)${rowLabel} + ${gm(wastageWeight)} wastage (${body.wastagePercent}%)`);
+  const wastageLabel = body.wastagePercent > 0 ? ` + ${gm(wastageWeight)} wastage (${body.wastagePercent}%${wastageAmt > 0 ? `, ${money(wastageAmt)}` : ""})` : "";
+  await logActivity(jcId, `Casting output ${verb} — ${gm(totalWeight)} (${totalPieces} pcs)${rowLabel}${wastageLabel}`);
 }
 
 router.post(
@@ -589,13 +633,20 @@ const findingBody = z.object({
   assignmentId: z.string().min(1),
   pieceCount: z.number().int().positive(),
   labourAmount: z.number().default(0),
-  findings: z.array(z.object({ type: z.string(), weight: z.number(), karat: z.string() })).default([]),
+  findings: z
+    .array(z.object({ type: z.string(), weight: z.number(), karat: z.string(), wastagePercent: z.number().default(0) }))
+    .default([]),
   items: z.array(z.object({ type: z.string(), amount: z.number(), carat: z.number().default(0) })).default([]),
 });
 
 // Writes the Fitting output (silver findings, flat items, labour) for an
 // assignment. Shared by the create route and the edit route.
 async function writeFindingOutput(body: z.infer<typeof findingBody>, jcId: string, stageId: string, verb: "recorded" | "edited") {
+  const [tierList, base] = await Promise.all([tiers(), baseRate()]);
+  const pureTier = tierList.find((t) => t.percent === 100);
+
+  let totalWastageWeight = 0;
+  let totalWastageAmt = 0;
   for (const f of body.findings) {
     await prisma.prodMaterialIssue.create({
       data: {
@@ -611,6 +662,45 @@ async function writeFindingOutput(body: z.infer<typeof findingBody>, jcId: strin
         label: f.type || null,
       },
     });
+
+    // Wastage is per-finding and dynamic (each finding can carry its own %),
+    // but always priced at pure (24K/100%) — never the finding's own karat.
+    // Tracked via its own zero-weight issue row (so it doesn't inflate the
+    // piece's accumulated weight — nothing physical was added), paired with
+    // a "Wastage %" labour entry scoped to that finding for the ₹ cost.
+    if (f.wastagePercent > 0 && f.weight > 0 && pureTier) {
+      const wastageWeight = +(f.weight * (f.wastagePercent / 100)).toFixed(3);
+      const wastageAmt = computeLabourAmount("Wastage %", f.weight, f.wastagePercent, pureTier.label, tierList, base);
+      totalWastageWeight += wastageWeight;
+      totalWastageAmt += wastageAmt;
+      await prisma.prodMaterialIssue.create({
+        data: {
+          assignmentId: body.assignmentId,
+          purityId: null,
+          issueDate: new Date(),
+          status: "Reconciled",
+          returnedWeight: 0,
+          returnedPurityId: pureTier.id,
+          dustWeight: 0,
+          returnDate: new Date(),
+          fromBulkStock: true,
+          label: `Wastage — ${f.type || "Finding"}`,
+          wastagePercent: f.wastagePercent,
+          wastageWeight,
+        },
+      });
+      await prisma.prodLabourEntry.create({
+        data: {
+          assignmentId: body.assignmentId,
+          basis: "WastagePct",
+          qty: f.weight,
+          rate: f.wastagePercent,
+          amount: wastageAmt,
+          purityId: pureTier.id,
+          note: `${f.wastagePercent}% wastage on ${f.weight.toFixed(3)}g ${f.type || "finding"} (@${f.karat}) = ${wastageWeight.toFixed(3)}g, priced @ ${pureTier.label} pure (auto-charged on finding output)`,
+        },
+      });
+    }
   }
   for (const it of body.items) {
     await prisma.prodStoneEntry.create({
@@ -628,9 +718,11 @@ async function writeFindingOutput(body: z.infer<typeof findingBody>, jcId: strin
       data: { assignmentId: body.assignmentId, basis: "Flat", qty: 1, rate: body.labourAmount, amount: body.labourAmount, note: "Flat labour (Fitting)" },
     });
   }
+
   await prisma.prodStage.update({ where: { id: stageId }, data: { status: "InProgress" } });
   await prisma.prodJobCard.update({ where: { id: jcId }, data: { pieceCount: body.pieceCount } });
-  await logActivity(jcId, `Fitting output ${verb} (${body.pieceCount} pcs), labour ${money(body.labourAmount)}`);
+  const wastageLabel = totalWastageWeight > 0 ? ` + ${gm(+totalWastageWeight.toFixed(3))} wastage (${money(totalWastageAmt)})` : "";
+  await logActivity(jcId, `Fitting output ${verb} (${body.pieceCount} pcs), labour ${money(body.labourAmount)}${wastageLabel}`);
 }
 
 router.post(

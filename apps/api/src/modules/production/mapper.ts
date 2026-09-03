@@ -12,6 +12,7 @@ import type {
   IssueStatus,
   LabourBasis,
   BulkStockIssue as EngineBulkStock,
+  BulkStockReceipt as EngineBulkReceipt,
 } from "@jms/shared";
 
 export function mapTier(t: { id: string; code: string; percent: Prisma.Decimal | number }): EnginePurityTier {
@@ -144,6 +145,7 @@ export function mapJobCard(jc: FullJobCard): EngineJobCard {
           amount: Number(l.amount),
           note: l.note,
           purity: l.purity?.code ?? undefined,
+          date: iso(l.createdAt),
         })),
         subItems: a.subItems.map((s) => ({
           id: s.id,
@@ -171,6 +173,30 @@ export function mapBulkIssue(b: {
     purity: b.purity.code,
     weight: Number(b.weightGrams),
     date: iso(b.issueDate),
+    note: b.note,
+  };
+}
+
+export function mapBulkReceipt(b: {
+  id: string;
+  karigar: { name: string };
+  purity: { code: string };
+  weightGrams: Prisma.Decimal | number;
+  label: string;
+  wastagePercent: Prisma.Decimal | number | null;
+  wastageWeight: Prisma.Decimal | number | null;
+  receiptDate: Date;
+  note: string;
+}): EngineBulkReceipt {
+  return {
+    id: b.id,
+    karigar: b.karigar.name,
+    purity: b.purity.code,
+    weight: Number(b.weightGrams),
+    label: b.label,
+    wastagePercent: num(b.wastagePercent),
+    wastageWeight: num(b.wastageWeight),
+    date: iso(b.receiptDate),
     note: b.note,
   };
 }
