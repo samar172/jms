@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   Inbox,
   History,
+  Palette,
 } from "lucide-react";
 import type { Role } from "@jms/shared";
 import { useAuth } from "@/lib/auth-context";
@@ -43,6 +44,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/job-cards", label: "Job Cards (जॉब कार्ड)", icon: ClipboardList },
       { href: "/products", label: "Item Master (आइटम)", icon: Gem },
+      { href: "/mood-board", label: "Sketch / Mood Board", icon: Palette },
       { href: "/visual-search", label: "Visual Search", icon: Camera },
     ],
   },
