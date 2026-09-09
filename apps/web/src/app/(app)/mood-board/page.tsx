@@ -4,90 +4,131 @@ import { useEffect, useRef, useState } from "react";
 import { useItemMasters, uploadItemImage, type ItemMaster } from "@/lib/production";
 import { ApiError } from "@/lib/api";
 
-type Tool = "pen" | "line" | "rect" | "circle" | "text";
+type Tool = "pen" | "brush" | "eraser" | "line" | "rect" | "circle" | "text";
 type Pt = { x: number; y: number };
-type Obj =
-  | { type: "pen"; color: string; width: number; points: Pt[] }
-  | { type: "line" | "rect" | "circle"; color: string; width: number; a: Pt; b: Pt }
-  | { type: "text"; color: string; size: number; at: Pt; text: string };
+type Free = { type: "pen" | "brush" | "eraser"; color: string; width: number; points: Pt[] };
+type Shape = { type: "line" | "rect" | "circle"; color: string; width: number; fill: boolean; a: Pt; b: Pt };
+type Text = { type: "text"; color: string; size: number; at: Pt; text: string };
+type Obj = Free | Shape | Text;
 
 const CW = 1000;
 const CH = 640;
-const COLORS = ["#111827", "#dc2626", "#2563eb", "#16a34a", "#d97706", "#7c3aed", "#ffffff"];
+const COLORS = ["#111827", "#dc2626", "#2563eb", "#16a34a", "#d97706", "#7c3aed", "#e11d90", "#ffffff"];
+const BOARDS = [
+  { key: "#ffffff", label: "White" },
+  { key: "#0b0b0f", label: "Black" },
+  { key: "#f6f0de", label: "Cream" },
+];
 
 export default function MoodBoardPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const layerRef = useRef<HTMLCanvasElement | null>(null); // offscreen drawing layer
   const bgRef = useRef<HTMLImageElement | null>(null);
+
   const [objects, setObjects] = useState<Obj[]>([]);
+  const [redoStack, setRedoStack] = useState<Obj[]>([]);
   const [tool, setTool] = useState<Tool>("pen");
   const [color, setColor] = useState(COLORS[0]);
   const [width, setWidth] = useState(3);
+  const [fill, setFill] = useState(false);
+  const [bgOpacity, setBgOpacity] = useState(1);
+  const [board, setBoard] = useState(BOARDS[0].key);
+  const [grayscale, setGrayscale] = useState(false);
   const [hasBg, setHasBg] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
 
-  // Active-drawing scratch state (kept in refs to avoid re-render per move).
   const drawing = useRef(false);
   const startPt = useRef<Pt | null>(null);
   const penPts = useRef<Pt[]>([]);
 
-  function ctx() {
-    return canvasRef.current?.getContext("2d") ?? null;
+  function layer(): CanvasRenderingContext2D | null {
+    if (!layerRef.current) {
+      const c = document.createElement("canvas");
+      c.width = CW; c.height = CH;
+      layerRef.current = c;
+    }
+    return layerRef.current.getContext("2d");
   }
 
-  function paintObj(c: CanvasRenderingContext2D, o: Obj) {
-    c.strokeStyle = o.type === "text" ? "" : o.color;
-    if (o.type !== "text") {
-      c.lineWidth = o.width;
-      c.lineCap = "round";
-      c.lineJoin = "round";
-    }
-    if (o.type === "pen") {
-      c.beginPath();
-      o.points.forEach((p, i) => (i ? c.lineTo(p.x, p.y) : c.moveTo(p.x, p.y)));
-      c.stroke();
-    } else if (o.type === "line") {
-      c.beginPath(); c.moveTo(o.a.x, o.a.y); c.lineTo(o.b.x, o.b.y); c.stroke();
-    } else if (o.type === "rect") {
-      c.strokeRect(Math.min(o.a.x, o.b.x), Math.min(o.a.y, o.b.y), Math.abs(o.b.x - o.a.x), Math.abs(o.b.y - o.a.y));
-    } else if (o.type === "circle") {
-      c.beginPath();
-      c.ellipse((o.a.x + o.b.x) / 2, (o.a.y + o.b.y) / 2, Math.abs(o.b.x - o.a.x) / 2, Math.abs(o.b.y - o.a.y) / 2, 0, 0, Math.PI * 2);
-      c.stroke();
+  function paint(o: Obj, lc: CanvasRenderingContext2D) {
+    lc.save();
+    if (o.type === "eraser") {
+      lc.globalCompositeOperation = "destination-out";
+      lc.lineWidth = o.width * 2;
+      lc.lineCap = "round"; lc.lineJoin = "round";
+      lc.beginPath();
+      o.points.forEach((p, i) => (i ? lc.lineTo(p.x, p.y) : lc.moveTo(p.x, p.y)));
+      lc.stroke();
+    } else if (o.type === "pen" || o.type === "brush") {
+      lc.strokeStyle = o.color;
+      lc.globalAlpha = o.type === "brush" ? 0.35 : 1;
+      lc.lineWidth = o.type === "brush" ? o.width * 4 : o.width;
+      lc.lineCap = "round"; lc.lineJoin = "round";
+      lc.beginPath();
+      o.points.forEach((p, i) => (i ? lc.lineTo(p.x, p.y) : lc.moveTo(p.x, p.y)));
+      lc.stroke();
     } else if (o.type === "text") {
-      c.fillStyle = o.color;
-      c.font = `${o.size}px ui-sans-serif, system-ui, sans-serif`;
-      c.textBaseline = "top";
-      c.fillText(o.text, o.at.x, o.at.y);
+      lc.fillStyle = o.color;
+      lc.font = `${o.size}px ui-sans-serif, system-ui, sans-serif`;
+      lc.textBaseline = "top";
+      lc.fillText(o.text, o.at.x, o.at.y);
+    } else if (o.type === "line" || o.type === "rect" || o.type === "circle") {
+      lc.strokeStyle = o.color; lc.lineWidth = o.width; lc.lineCap = "round"; lc.lineJoin = "round";
+      const doFill = o.fill;
+      if (doFill) { lc.fillStyle = o.color; lc.globalAlpha = 0.25; }
+      if (o.type === "line") { lc.beginPath(); lc.moveTo(o.a.x, o.a.y); lc.lineTo(o.b.x, o.b.y); lc.stroke(); }
+      else if (o.type === "rect") {
+        const x = Math.min(o.a.x, o.b.x), y = Math.min(o.a.y, o.b.y), w = Math.abs(o.b.x - o.a.x), h = Math.abs(o.b.y - o.a.y);
+        if (doFill) { lc.fillRect(x, y, w, h); lc.globalAlpha = 1; }
+        lc.strokeRect(x, y, w, h);
+      } else {
+        lc.beginPath();
+        lc.ellipse((o.a.x + o.b.x) / 2, (o.a.y + o.b.y) / 2, Math.abs(o.b.x - o.a.x) / 2, Math.abs(o.b.y - o.a.y) / 2, 0, 0, Math.PI * 2);
+        if (doFill) { lc.fill(); lc.globalAlpha = 1; }
+        lc.stroke();
+      }
     }
+    lc.restore();
   }
 
   function redraw(extra?: Obj) {
-    const c = ctx();
-    if (!c) return;
-    c.fillStyle = "#ffffff";
+    const c = canvasRef.current?.getContext("2d");
+    const lc = layer();
+    if (!c || !lc) return;
+    // Base board + faded (optionally grayscale) reference.
+    c.save();
+    c.fillStyle = board;
     c.fillRect(0, 0, CW, CH);
     const img = bgRef.current;
     if (img) {
       const scale = Math.min(CW / img.width, CH / img.height);
       const w = img.width * scale, h = img.height * scale;
+      c.globalAlpha = bgOpacity;
+      c.filter = grayscale ? "grayscale(1)" : "none";
       c.drawImage(img, (CW - w) / 2, (CH - h) / 2, w, h);
     }
-    objects.forEach((o) => paintObj(c, o));
-    if (extra) paintObj(c, extra);
+    c.restore();
+    // Drawing layer (transparent), then composite over the base.
+    lc.clearRect(0, 0, CW, CH);
+    lc.globalCompositeOperation = "source-over";
+    objects.forEach((o) => paint(o, lc));
+    if (extra) paint(extra, lc);
+    c.drawImage(layerRef.current!, 0, 0);
   }
 
-  useEffect(() => { redraw(); }, [objects, hasBg]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { redraw(); }, [objects, hasBg, bgOpacity, board, grayscale]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function toCanvas(e: React.PointerEvent): Pt {
     const rect = canvasRef.current!.getBoundingClientRect();
     return { x: ((e.clientX - rect.left) / rect.width) * CW, y: ((e.clientY - rect.top) / rect.height) * CH };
   }
+  function commit(o: Obj) { setObjects((prev) => [...prev, o]); setRedoStack([]); }
 
   function onDown(e: React.PointerEvent) {
     const p = toCanvas(e);
     if (tool === "text") {
       const text = window.prompt("Text:");
-      if (text) setObjects((o) => [...o, { type: "text", color, size: Math.max(14, width * 6), at: p, text }]);
+      if (text) commit({ type: "text", color, size: Math.max(14, width * 6), at: p, text });
       return;
     }
     drawing.current = true;
@@ -95,31 +136,27 @@ export default function MoodBoardPage() {
     penPts.current = [p];
     canvasRef.current?.setPointerCapture(e.pointerId);
   }
-
   function onMove(e: React.PointerEvent) {
     if (!drawing.current) return;
     const p = toCanvas(e);
-    if (tool === "pen") {
+    if (tool === "pen" || tool === "brush" || tool === "eraser") {
       penPts.current.push(p);
-      redraw({ type: "pen", color, width, points: penPts.current });
+      redraw({ type: tool, color, width, points: penPts.current });
     } else {
-      redraw({ type: tool as "line" | "rect" | "circle", color, width, a: startPt.current!, b: p });
+      redraw({ type: tool as Shape["type"], color, width, fill, a: startPt.current!, b: p });
     }
   }
-
   function onUp(e: React.PointerEvent) {
     if (!drawing.current) return;
     drawing.current = false;
     const p = toCanvas(e);
-    if (tool === "pen") {
-      const pts = penPts.current;
-      if (pts.length > 1) setObjects((o) => [...o, { type: "pen", color, width, points: pts }]);
+    if (tool === "pen" || tool === "brush" || tool === "eraser") {
+      if (penPts.current.length > 1) commit({ type: tool, color, width, points: penPts.current });
     } else {
       const a = startPt.current!;
-      if (a.x !== p.x || a.y !== p.y) setObjects((o) => [...o, { type: tool as "line" | "rect" | "circle", color, width, a, b: p }]);
+      if (a.x !== p.x || a.y !== p.y) commit({ type: tool as Shape["type"], color, width, fill, a, b: p });
     }
-    penPts.current = [];
-    startPt.current = null;
+    penPts.current = []; startPt.current = null;
   }
 
   function onUploadBg(e: React.ChangeEvent<HTMLInputElement>) {
@@ -135,8 +172,9 @@ export default function MoodBoardPage() {
     reader.readAsDataURL(file);
   }
 
-  function undo() { setObjects((o) => o.slice(0, -1)); }
-  function clearAll() { setObjects([]); }
+  function undo() { setObjects((o) => { if (!o.length) return o; setRedoStack((r) => [...r, o[o.length - 1]]); return o.slice(0, -1); }); }
+  function redo() { setRedoStack((r) => { if (!r.length) return r; setObjects((o) => [...o, r[r.length - 1]]); return r.slice(0, -1); }); }
+  function clearAll() { if (objects.length && !window.confirm("Clear all drawing?")) return; setObjects([]); setRedoStack([]); }
 
   function download() {
     const url = canvasRef.current!.toDataURL("image/png");
@@ -146,6 +184,8 @@ export default function MoodBoardPage() {
 
   const TOOLS: { key: Tool; label: string }[] = [
     { key: "pen", label: "Pen" },
+    { key: "brush", label: "Brush" },
+    { key: "eraser", label: "Eraser" },
     { key: "line", label: "Line" },
     { key: "rect", label: "Box" },
     { key: "circle", label: "Circle" },
@@ -156,7 +196,7 @@ export default function MoodBoardPage() {
     <div className="flex flex-col">
       <div className="mb-3">
         <h1 className="text-[18px] font-semibold text-slate-900">Sketch / Mood Board</h1>
-        <p className="text-[12px] text-slate-500">Upload a reference image, sketch your ideas over it, then save it onto a design.</p>
+        <p className="text-[12px] text-slate-500">Upload a reference, fade it, and sketch your ideas over it — then save onto a design.</p>
       </div>
 
       <div className="flex flex-wrap items-center gap-2 mb-2 bg-white border border-slate-200 rounded-md p-2">
@@ -167,7 +207,7 @@ export default function MoodBoardPage() {
         <span className="w-px h-6 bg-slate-200" />
         {TOOLS.map((t) => (
           <button key={t.key} onClick={() => setTool(t.key)}
-            className={`h-8 px-3 rounded text-[12px] border ${tool === t.key ? "bg-slate-900 text-white border-slate-900" : "border-slate-200 text-slate-700 hover:bg-slate-50"}`}>
+            className={`h-8 px-2.5 rounded text-[12px] border ${tool === t.key ? "bg-slate-900 text-white border-slate-900" : "border-slate-200 text-slate-700 hover:bg-slate-50"}`}>
             {t.label}
           </button>
         ))}
@@ -179,12 +219,33 @@ export default function MoodBoardPage() {
               style={{ background: c }} />
           ))}
         </div>
-        <label className="flex items-center gap-1.5 text-[12px] text-slate-600">
-          Size
+        <label className="flex items-center gap-1.5 text-[12px] text-slate-600">Size
           <input type="range" min={1} max={20} value={width} onChange={(e) => setWidth(Number(e.target.value))} />
         </label>
+        <label className="flex items-center gap-1.5 text-[12px] text-slate-600">
+          <input type="checkbox" checked={fill} onChange={(e) => setFill(e.target.checked)} /> Fill shapes
+        </label>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 mb-2 bg-white border border-slate-200 rounded-md p-2">
+        <label className="flex items-center gap-1.5 text-[12px] text-slate-600">Fade reference
+          <input type="range" min={0} max={100} value={Math.round(bgOpacity * 100)} onChange={(e) => setBgOpacity(Number(e.target.value) / 100)} disabled={!hasBg} />
+        </label>
+        <label className="flex items-center gap-1.5 text-[12px] text-slate-600">
+          <input type="checkbox" checked={grayscale} onChange={(e) => setGrayscale(e.target.checked)} disabled={!hasBg} /> B&amp;W reference
+        </label>
         <span className="w-px h-6 bg-slate-200" />
-        <button onClick={undo} className="h-8 px-3 rounded border border-slate-200 text-[12px] text-slate-700 hover:bg-slate-50">Undo</button>
+        <span className="text-[12px] text-slate-600">Board</span>
+        <div className="flex items-center gap-1">
+          {BOARDS.map((b) => (
+            <button key={b.key} onClick={() => setBoard(b.key)} title={b.label}
+              className={`w-6 h-6 rounded border ${board === b.key ? "ring-2 ring-offset-1 ring-blue-500" : "border-slate-300"}`}
+              style={{ background: b.key }} />
+          ))}
+        </div>
+        <span className="w-px h-6 bg-slate-200" />
+        <button onClick={undo} disabled={!objects.length} className="h-8 px-3 rounded border border-slate-200 text-[12px] text-slate-700 hover:bg-slate-50 disabled:opacity-40">Undo</button>
+        <button onClick={redo} disabled={!redoStack.length} className="h-8 px-3 rounded border border-slate-200 text-[12px] text-slate-700 hover:bg-slate-50 disabled:opacity-40">Redo</button>
         <button onClick={clearAll} className="h-8 px-3 rounded border border-slate-200 text-[12px] text-slate-700 hover:bg-slate-50">Clear</button>
         <div className="ml-auto flex gap-2">
           <button onClick={download} className="h-8 px-3 rounded border border-slate-200 text-[12px] text-slate-700 hover:bg-slate-50">Download</button>
