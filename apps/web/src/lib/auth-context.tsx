@@ -10,6 +10,9 @@ export interface AuthUser {
   email?: string;
   role: Role;
   karigarId: string | null;
+  appRoleId?: string | null;
+  roleName?: string;
+  isSuperAdmin?: boolean;
 }
 
 interface AuthContextValue {

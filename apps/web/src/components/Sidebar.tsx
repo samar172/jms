@@ -11,6 +11,9 @@ import {
   Settings,
   BookOpen,
   UserCog,
+  ShieldCheck,
+  Inbox,
+  History,
 } from "lucide-react";
 import type { Role } from "@jms/shared";
 import { useAuth } from "@/lib/auth-context";
@@ -30,7 +33,10 @@ interface NavGroup {
 const NAV_GROUPS: NavGroup[] = [
   {
     label: "Overview",
-    items: [{ href: "/dashboard", label: "Dashboard (डैशबोर्ड)", icon: LayoutDashboard }],
+    items: [
+      { href: "/dashboard", label: "Dashboard (डैशबोर्ड)", icon: LayoutDashboard },
+      { href: "/requests", label: "Change Requests", icon: Inbox },
+    ],
   },
   {
     label: "Production (उत्पादन)",
@@ -49,6 +55,8 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/settings", label: "Settings (सेटिंग)", icon: Settings, roles: ["SUPER_ADMIN"] },
       { href: "/users", label: "Users & Roles", icon: UserCog, roles: ["SUPER_ADMIN"] },
+      { href: "/roles", label: "Roles & Permissions", icon: ShieldCheck, roles: ["SUPER_ADMIN"] },
+      { href: "/audit", label: "Audit Log", icon: History, roles: ["SUPER_ADMIN", "MANAGER", "AUDITOR"] },
     ],
   },
 ];

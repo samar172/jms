@@ -16,6 +16,29 @@ export interface TokenUser {
   role: Role;
   name: string;
   karigarId: string | null;
+  appRoleId: string | null;
+  roleName: string;
+  isSuperAdmin: boolean;
+}
+
+/** Build the token payload from a user row that has its appRole relation loaded. */
+function toTokenUser(user: {
+  id: string;
+  role: Role;
+  name: string;
+  karigarId: string | null;
+  appRoleId: string | null;
+  appRole: { name: string; isSuperAdmin: boolean } | null;
+}): TokenUser {
+  return {
+    id: user.id,
+    role: user.role,
+    name: user.name,
+    karigarId: user.karigarId,
+    appRoleId: user.appRoleId,
+    roleName: user.appRole?.name ?? user.role,
+    isSuperAdmin: user.appRole?.isSuperAdmin ?? false,
+  };
 }
 
 function signAccessToken(user: TokenUser) {
@@ -31,7 +54,10 @@ function signRefreshToken(user: TokenUser) {
 }
 
 export async function login(email: string, password: string, ipAddress: string | null) {
-  const user = await prisma.user.findUnique({ where: { email } });
+  const user = await prisma.user.findUnique({
+    where: { email },
+    include: { appRole: true },
+  });
   if (!user || !user.isActive) {
     throw unauthorized("Invalid email or password");
   }
@@ -61,12 +87,7 @@ export async function login(email: string, password: string, ipAddress: string |
     data: { failedLoginCount: 0, lockedUntil: null },
   });
 
-  const tokenUser: TokenUser = {
-    id: user.id,
-    role: user.role,
-    name: user.name,
-    karigarId: user.karigarId,
-  };
+  const tokenUser: TokenUser = toTokenUser(user);
 
   await recordAudit(prisma, {
     userId: user.id,
@@ -92,15 +113,13 @@ export async function refresh(refreshToken: string) {
     throw unauthorized("Invalid or expired refresh token");
   }
 
-  const user = await prisma.user.findUnique({ where: { id: payload.id } });
+  const user = await prisma.user.findUnique({
+    where: { id: payload.id },
+    include: { appRole: true },
+  });
   if (!user || !user.isActive) throw unauthorized();
 
-  const tokenUser: TokenUser = {
-    id: user.id,
-    role: user.role,
-    name: user.name,
-    karigarId: user.karigarId,
-  };
+  const tokenUser: TokenUser = toTokenUser(user);
 
   return {
     accessToken: signAccessToken(tokenUser),

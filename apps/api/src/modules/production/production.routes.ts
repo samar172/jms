@@ -1,9 +1,10 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../../db";
-import { requireAuth, requireRole } from "../../middleware/auth";
+import { requireAuth, requireRole, requirePermission } from "../../middleware/auth";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, notFound } from "../../utils/httpError";
+import { recordAudit } from "../../services/audit";
 import {
   jcTotals,
   grossWeight,
@@ -391,6 +392,53 @@ router.post(
     });
     res.status(201).json({ id: jc.id, jobNo: jc.jobNo });
   })
+);
+
+/**
+ * Delete a whole job card. Gated by the job_cards:DELETE permission, which a
+ * super-admin grants to a role (Manager, etc.) on the Roles page. Cascades to
+ * every stage/assignment/issue/labour/stone/activity row (schema onDelete).
+ *
+ * An immutable audit row is written FIRST — who deleted it, when, and a snapshot
+ * of what was deleted — so the record survives the cascade that removes the card.
+ */
+router.delete(
+  "/job-cards/:jobNo",
+  requireAuth,
+  requirePermission("job_cards", "DELETE"),
+  asyncHandler(async (req, res) => {
+    const jc = await prisma.prodJobCard.findUnique({
+      where: { jobNo: req.params.jobNo },
+      include: {
+        itemMaster: { select: { designName: true, serialNo: true } },
+        createdBy: { select: { name: true } },
+        _count: { select: { stages: true } },
+      },
+    });
+    if (!jc) throw notFound("Job card not found");
+
+    // Snapshot for the audit trail BEFORE the row (and its children) are gone.
+    await recordAudit(prisma, {
+      userId: req.user!.id,
+      action: "DELETE",
+      entityType: "ProdJobCard",
+      entityId: jc.id,
+      before: {
+        jobNo: jc.jobNo,
+        status: jc.status,
+        item: jc.itemMaster?.designName ?? null,
+        serialNo: jc.itemMaster?.serialNo ?? null,
+        stages: jc._count.stages,
+        createdBy: jc.createdBy?.name ?? null,
+        cardCreatedAt: jc.createdAt,
+      },
+      ipAddress: req.ip ?? null,
+    });
+
+    await prisma.prodJobCard.delete({ where: { id: jc.id } });
+
+    res.json({ ok: true, jobNo: jc.jobNo, deletedBy: req.user!.name, deletedAt: new Date().toISOString() });
+  }),
 );
 
 router.get(

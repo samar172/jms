@@ -2,6 +2,8 @@
 
 import { use, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { usePermissions } from "@/lib/permissions";
 import {
   useJobCard, useProdKarigars, useProdSettings,
   assignKarigar, castOutput, editCastOutput, issueMaterial, reconcile, editReconcile, cancelReconcile, jadaiOutput, editJadaiOutput, kundanOutput, editKundanOutput, findingOutput, editFindingOutput,
@@ -11,7 +13,7 @@ import {
 import type { Stage, Assignment, MaterialIssue, StoneEntry, SubItem } from "@jms/shared";
 import { wastageLines, labourLines, stoneLines } from "@jms/shared";
 import { StatusPill } from "../page";
-import { openAuthenticated } from "@/lib/api";
+import { openAuthenticated, apiFetch, ApiError } from "@/lib/api";
 
 const money = (v: number) => `₹ ${Math.round(v).toLocaleString("en-IN")}`;
 const gm = (v: number | null | undefined) => (v == null ? "—" : `${v.toFixed(3)} g`);
@@ -21,8 +23,23 @@ export default function JobCardDetailPage({ params }: { params: Promise<{ id: st
   const { data, mutate } = useJobCard(id);
   const { data: karigars } = useProdKarigars();
   const { data: settings } = useProdSettings();
+  const router = useRouter();
+  const perms = usePermissions();
   const [reopenOpen, setReopenOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function deleteJobCard() {
+    if (!window.confirm(`Delete job card ${id}? This removes all its stages, work and ledger effect. This cannot be undone.`)) return;
+    setDeleting(true);
+    try {
+      await apiFetch(`/api/production/job-cards/${encodeURIComponent(id)}`, { method: "DELETE" });
+      router.push("/job-cards");
+    } catch (e) {
+      alert(e instanceof ApiError ? e.message : "Could not delete the job card.");
+      setDeleting(false);
+    }
+  }
 
   if (!data || !settings) return <div className="text-slate-400 p-4 text-sm">Loading…</div>;
   const jc = data.jobCard;
@@ -58,6 +75,11 @@ export default function JobCardDetailPage({ params }: { params: Promise<{ id: st
           ) : (
             <button onClick={() => setReopenOpen(true)} className="h-8 px-3 rounded border border-amber-300 text-amber-800 text-[12px] font-medium hover:bg-amber-50">
               Reopen (Audited)
+            </button>
+          )}
+          {perms.can("job_cards", "DELETE") && (
+            <button onClick={deleteJobCard} disabled={deleting} className="h-8 px-3 rounded border border-rose-300 text-rose-700 text-[12px] font-medium hover:bg-rose-50 disabled:opacity-50">
+              {deleting ? "Deleting…" : "Delete"}
             </button>
           )}
         </div>

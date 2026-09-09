@@ -5,13 +5,18 @@ import { useApi } from "@/lib/hooks";
 import { apiFetch, ApiError } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 
-const ROLES = ["SUPER_ADMIN", "MANAGER", "COSTING", "STORE", "PRODUCTION", "SALES", "KARIGAR", "AUDITOR"] as const;
+interface RoleOption {
+  id: string;
+  name: string;
+}
 
 interface UserRow {
   id: string;
   email: string;
   name: string;
-  role: (typeof ROLES)[number];
+  role: string;
+  appRoleId: string | null;
+  appRole: { id: string; name: string } | null;
   isActive: boolean;
   karigarId: string | null;
   createdAt: string;
@@ -19,11 +24,12 @@ interface UserRow {
 
 export default function UsersPage() {
   const { data: users, mutate } = useApi<UserRow[]>("/api/users");
+  const { data: roles } = useApi<RoleOption[]>("/api/roles");
   const [showAdd, setShowAdd] = useState(false);
   const [tempPassword, setTempPassword] = useState<{ email: string; password: string } | null>(null);
 
-  async function updateRole(id: string, role: string) {
-    await apiFetch(`/api/users/${id}`, { method: "PATCH", body: { role } });
+  async function updateRole(id: string, appRoleId: string) {
+    await apiFetch(`/api/users/${id}`, { method: "PATCH", body: { appRoleId } });
     await mutate();
   }
 
@@ -68,6 +74,7 @@ export default function UsersPage() {
       {showAdd && (
         <div className="console-panel p-3.5 mb-3.5">
           <AddUserForm
+            roles={roles ?? []}
             onCreated={(res) => {
               setShowAdd(false);
               if (res.temporaryPassword) setTempPassword({ email: res.email, password: res.temporaryPassword });
@@ -97,10 +104,15 @@ export default function UsersPage() {
                   <td className="font-medium text-ink">{u.name}</td>
                   <td className="text-ink2">{u.email}</td>
                   <td>
-                    <select className="console-field w-auto" value={u.role} onChange={(e) => updateRole(u.id, e.target.value)}>
-                      {ROLES.map((r) => (
-                        <option key={r} value={r}>
-                          {r.replace(/_/g, " ")}
+                    <select
+                      className="console-field w-auto"
+                      value={u.appRoleId ?? ""}
+                      onChange={(e) => updateRole(u.id, e.target.value)}
+                    >
+                      {!u.appRoleId && <option value="">— unassigned —</option>}
+                      {(roles ?? []).map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.name.replace(/_/g, " ")}
                         </option>
                       ))}
                     </select>
@@ -138,15 +150,17 @@ export default function UsersPage() {
 }
 
 function AddUserForm({
+  roles,
   onCreated,
   onCancel,
 }: {
+  roles: RoleOption[];
   onCreated: (res: { email: string; temporaryPassword?: string }) => void;
   onCancel: () => void;
 }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<(typeof ROLES)[number]>("SALES");
+  const [appRoleId, setAppRoleId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -157,7 +171,7 @@ function AddUserForm({
     try {
       const res = await apiFetch<{ email: string; temporaryPassword?: string }>("/api/users", {
         method: "POST",
-        body: { name, email, role },
+        body: { name, email, appRoleId: appRoleId || roles[0]?.id },
       });
       onCreated(res);
     } catch (err) {
@@ -179,10 +193,11 @@ function AddUserForm({
       </div>
       <div>
         <label className="console-field-label">Role</label>
-        <select className="console-field" value={role} onChange={(e) => setRole(e.target.value as typeof role)}>
-          {ROLES.map((r) => (
-            <option key={r} value={r}>
-              {r.replace(/_/g, " ")}
+        <select className="console-field" value={appRoleId} onChange={(e) => setAppRoleId(e.target.value)}>
+          <option value="">— select role —</option>
+          {roles.map((r) => (
+            <option key={r.id} value={r.id}>
+              {r.name.replace(/_/g, " ")}
             </option>
           ))}
         </select>

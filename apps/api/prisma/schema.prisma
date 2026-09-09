@@ -63,6 +63,73 @@ model User {
   notificationReads NotificationRead[]
   costingEdits     CostingEditLog[] @relation("CostingEditBy")
   createdProdJobCards ProdJobCard[] @relation("ProdJobCardCreatedBy")
+
+  // RBAC: a user may be assigned a custom AppRole. The legacy `role` enum above
+  // is kept during the transition and backfilled from it; code reads appRole.
+  appRoleId    String?
+  appRole      AppRole?  @relation(fields: [appRoleId], references: [id])
+  changeRequestsMade     ChangeRequest[] @relation("ChangeRequestRequester")
+  changeRequestsReviewed ChangeRequest[] @relation("ChangeRequestReviewer")
+}
+
+/// A named role with a matrix of resource×action permissions. Replaces the fixed
+/// `Role` enum as the source of truth for authorization; the enum lives on only
+/// for backward compatibility during the migration.
+model AppRole {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  description  String?
+  isSystem     Boolean  @default(false) // seeded built-in; cannot be deleted
+  isSuperAdmin Boolean  @default(false) // bypasses every permission check
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  permissions RolePermission[]
+  users       User[]
+}
+
+/// One granted permission: presence of a (role, resource, action) row = allowed.
+model RolePermission {
+  id       String  @id @default(cuid())
+  roleId   String
+  role     AppRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  resource String // one of RESOURCES in @jms/shared
+  action   String // VIEW | ADD | UPDATE | DELETE
+
+  @@unique([roleId, resource, action])
+  @@index([roleId])
+}
+
+enum ChangeRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  APPLIED
+  CANCELLED
+}
+
+/// An employee's request to add/update/delete something they lack permission to
+/// do directly. Approvals are manual: a SUPER_ADMIN reviews, then makes the
+/// change themselves and marks the request applied. No change is auto-applied.
+model ChangeRequest {
+  id          String              @id @default(cuid())
+  requesterId String
+  requester   User                @relation("ChangeRequestRequester", fields: [requesterId], references: [id])
+  resource    String // e.g. "rates", "job_cards"
+  targetId    String? // affected record id; null for an ADD
+  action      String // ADD | UPDATE | DELETE
+  summary     String // human-readable one-line ask
+  details     String? // free text / proposed values
+  status      ChangeRequestStatus @default(PENDING)
+  reviewerId  String?
+  reviewer    User?               @relation("ChangeRequestReviewer", fields: [reviewerId], references: [id])
+  reviewNote  String?
+  decidedAt   DateTime?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@index([status])
+  @@index([requesterId])
 }
 
 enum AuditAction {

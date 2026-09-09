@@ -4,6 +4,7 @@ import { asyncHandler } from "../../utils/asyncHandler";
 import { requireAuth } from "../../middleware/auth";
 import { prisma } from "../../db";
 import * as authService from "./auth.service";
+import { getRoleInfo, resolveAppRoleId } from "../../services/permissions";
 
 const router = Router();
 
@@ -60,9 +61,27 @@ router.get(
   asyncHandler(async (req, res) => {
     const user = await prisma.user.findUnique({
       where: { id: req.user!.id },
-      select: { id: true, email: true, name: true, role: true, karigarId: true },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        karigarId: true,
+        appRoleId: true,
+        appRole: { select: { name: true, isSuperAdmin: true } },
+      },
     });
-    res.json(user);
+
+    // Effective permissions for the caller's role, for the UI to gate on.
+    const appRoleId = await resolveAppRoleId(user?.appRoleId, req.user!.id);
+    const info = appRoleId ? await getRoleInfo(appRoleId) : null;
+
+    res.json({
+      ...user,
+      roleName: user?.appRole?.name ?? user?.role,
+      isSuperAdmin: info?.isSuperAdmin ?? false,
+      permissions: info ? [...info.permissions] : [],
+    });
   })
 );
 
