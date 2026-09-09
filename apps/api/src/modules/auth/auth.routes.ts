@@ -46,6 +46,21 @@ router.post(
   })
 );
 
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8, "New password must be at least 8 characters"),
+});
+
+router.post(
+  "/change-password",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const { currentPassword, newPassword } = changePasswordSchema.parse(req.body);
+    await authService.changePassword(req.user!.id, currentPassword, newPassword, req.ip ?? null);
+    res.json({ ok: true });
+  })
+);
+
 router.post("/logout", (_req, res) => {
   res.clearCookie(authService.REFRESH_COOKIE_NAME, {
     httpOnly: true,

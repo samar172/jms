@@ -109,15 +109,19 @@ export function Topbar({ onMenuClick }: { title?: string; onMenuClick?: () => vo
         )}
       </div>
       {user && (
-        <div className="hidden sm:flex items-center gap-2">
+        <button
+          onClick={() => router.push("/profile")}
+          title="My Profile"
+          className="hidden sm:flex items-center gap-2 rounded-md px-1.5 py-1 hover:bg-slate-100"
+        >
           <div className="w-[26px] h-[26px] rounded-[5px] bg-accent text-white flex items-center justify-center text-[11px] font-semibold">
             {user.name.charAt(0)}
           </div>
-          <div className="text-xs leading-tight">
+          <div className="text-xs leading-tight text-left">
             <div className="font-medium text-ink">{user.name}</div>
-            <div className="text-mute">{user.role.replace(/_/g, " ")}</div>
+            <div className="text-mute">{(user.roleName ?? user.role).replace(/_/g, " ")}</div>
           </div>
-        </div>
+        </button>
       )}
       <button
         className="text-ink2 hover:text-err-tx"

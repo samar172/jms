@@ -128,5 +128,34 @@ export async function refresh(refreshToken: string) {
   };
 }
 
+/** Self-service password change: the signed-in user changes their own password. */
+export async function changePassword(
+  userId: string,
+  currentPassword: string,
+  newPassword: string,
+  ipAddress: string | null,
+) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw unauthorized();
+
+  const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+  if (!valid) throw unauthorized("Current password is incorrect");
+
+  const passwordHash = await bcrypt.hash(newPassword, 12);
+  await prisma.user.update({
+    where: { id: userId },
+    data: { passwordHash, failedLoginCount: 0, lockedUntil: null },
+  });
+
+  await recordAudit(prisma, {
+    userId,
+    action: "UPDATE",
+    entityType: "User",
+    entityId: userId,
+    after: { event: "password_changed_self" },
+    ipAddress,
+  });
+}
+
 export const REFRESH_COOKIE_NAME = "jms_refresh";
 export const REFRESH_COOKIE_MAX_AGE_MS = REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000;
