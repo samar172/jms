@@ -474,6 +474,37 @@ router.post(
   })
 );
 
+// Deleted job cards, reconstructed from the immutable audit trail (the rows
+// themselves are gone). Read-only history of what was deleted, by whom, when.
+router.get(
+  "/job-cards-deleted",
+  requireAuth,
+  requirePermission("job_cards", "VIEW"),
+  asyncHandler(async (_req, res) => {
+    const rows = await prisma.auditLog.findMany({
+      where: { entityType: "ProdJobCard", action: "DELETE" },
+      include: { user: { select: { name: true } } },
+      orderBy: { createdAt: "desc" },
+      take: 500,
+    });
+    res.json(
+      rows.map((r) => {
+        const b = (r.beforeJson ?? {}) as Record<string, unknown>;
+        return {
+          jobNo: (b.jobNo as string) ?? "—",
+          item: (b.item as string) ?? null,
+          serialNo: (b.serialNo as string) ?? null,
+          status: (b.status as string) ?? null,
+          stages: (b.stages as number) ?? null,
+          cardCreatedBy: (b.createdBy as string) ?? null,
+          deletedBy: r.user?.name ?? "—",
+          deletedAt: r.createdAt.toISOString(),
+        };
+      }),
+    );
+  }),
+);
+
 /**
  * Delete a whole job card. Gated by the job_cards:DELETE permission, which a
  * super-admin grants to a role (Manager, etc.) on the Roles page. Cascades to
@@ -553,7 +584,7 @@ router.get(
         category: row.itemMaster.category.name,
         designCode: row.itemMaster.designCode,
         estGrossWeight: Number(row.itemMaster.grossWeightG),
-        images: row.itemMaster.images.map((im) => ({ url: im.thumbnailUrl ?? im.url })),
+        images: row.itemMaster.images.map((im) => ({ url: im.thumbnailUrl ?? im.url, fullUrl: im.url })),
       },
       activity: row.activity.map((a) => ({ date: a.date.toISOString().slice(0, 10), text: a.text })),
       reversals: row.reversals.map((r) => ({

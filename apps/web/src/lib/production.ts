@@ -86,7 +86,7 @@ export interface JobCardDetail {
   jobCard: JobCard;
   tiers: PurityTier[];
   baseRate: number;
-  item: { id: string; name: string; category: string; designCode: string | null; estGrossWeight: number; images: { url: string }[] };
+  item: { id: string; name: string; category: string; designCode: string | null; estGrossWeight: number; images: { url: string; fullUrl: string }[] };
   activity: { date: string; text: string }[];
   reversals: { date: string; reason: string; approvedBy: string }[];
   totals: JcTotals & {
@@ -106,6 +106,19 @@ export const useItemMasters = (archived = false) =>
   useApi<ItemMaster[]>(`/api/production/item-masters${archived ? "?archived=1" : ""}`);
 export const useProdKarigars = () => useApi<ProdKarigar[]>("/api/production/karigars");
 export const useJobCards = () => useApi<JobCardListRow[]>("/api/production/job-cards");
+
+export interface DeletedJobCard {
+  jobNo: string;
+  item: string | null;
+  serialNo: string | null;
+  status: string | null;
+  stages: number | null;
+  cardCreatedBy: string | null;
+  deletedBy: string;
+  deletedAt: string;
+}
+export const useDeletedJobCards = () =>
+  useApi<DeletedJobCard[]>("/api/production/job-cards-deleted");
 
 export interface ItemMasterDetail {
   id: string;

@@ -28,6 +28,7 @@ export default function JobCardDetailPage({ params }: { params: Promise<{ id: st
   const [reopenOpen, setReopenOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [lightbox, setLightbox] = useState(false);
 
   async function deleteJobCard() {
     if (!window.confirm(`Delete job card ${id}? This removes all its stages, work and ledger effect. This cannot be undone.`)) return;
@@ -95,9 +96,15 @@ export default function JobCardDetailPage({ params }: { params: Promise<{ id: st
 
         <div className="lg:col-span-1 space-y-4 sticky top-4">
           {data.item.images[0]?.url && (
-            <div className="bg-white border border-slate-200 rounded-md overflow-hidden">
+            <div className="bg-slate-100 border border-slate-200 rounded-md overflow-hidden">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={data.item.images[0].url} alt={data.item.name} className="w-full aspect-square object-cover" />
+              <img
+                src={data.item.images[0].fullUrl || data.item.images[0].url}
+                alt={data.item.name}
+                onClick={() => setLightbox(true)}
+                className="w-full aspect-square object-contain cursor-zoom-in"
+                title="Click to enlarge"
+              />
             </div>
           )}
           <JobDetailsPanel jobNo={jc.id} dueDate={jc.dueDate} pieceCount={jc.pieceCount} notes={jc.notes} onSaved={refresh} />
@@ -124,6 +131,19 @@ export default function JobCardDetailPage({ params }: { params: Promise<{ id: st
 
       {reopenOpen && <ReopenModal onClose={() => setReopenOpen(false)} onDone={async (reason, by) => { await reopenJobCard(jc.id, { reason, approvedBy: by }); setReopenOpen(false); refresh(); }} />}
       {exportOpen && <ExportPdfModal jobNo={jc.id} onClose={() => setExportOpen(false)} />}
+
+      {lightbox && data.item.images[0] && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-6 cursor-zoom-out" onClick={() => setLightbox(false)}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={data.item.images[0].fullUrl || data.item.images[0].url}
+            alt={data.item.name}
+            className="max-w-full max-h-full object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <button onClick={() => setLightbox(false)} className="absolute top-4 right-4 h-9 w-9 rounded-full bg-white/20 text-white text-[16px] hover:bg-white/30">✕</button>
+        </div>
+      )}
     </div>
   );
 }

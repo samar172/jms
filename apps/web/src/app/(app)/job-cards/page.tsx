@@ -2,15 +2,16 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useJobCards, useItemMasters, useProdSettings, createJobCard, type JobCardListRow } from "@/lib/production";
+import { useJobCards, useItemMasters, useProdSettings, useDeletedJobCards, createJobCard, type JobCardListRow } from "@/lib/production";
 import { resolveMediaUrl } from "@/lib/api";
 
-const TABS = ["all", "Draft", "In Production", "On Hold", "Reconciliation", "Closed"];
+const TABS = ["all", "Draft", "In Production", "On Hold", "Reconciliation", "Closed", "Deleted"];
 const today = () => new Date().toISOString().slice(0, 10);
 
 export default function JobCardsPage() {
   const router = useRouter();
   const { data: jobCards, mutate } = useJobCards();
+  const { data: deleted } = useDeletedJobCards();
   const [activeTab, setActiveTab] = useState("all");
   const [query, setQuery] = useState("");
   const [showNew, setShowNew] = useState(false);
@@ -51,7 +52,7 @@ export default function JobCardsPage() {
           {TABS.map((t) => (
             <button key={t} onClick={() => setActiveTab(t)}
               className={`px-2.5 h-8 text-[12px] border-b-2 -mb-px ${activeTab === t ? "border-blue-800 text-blue-900 font-medium" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
-              {t === "all" ? "All" : t} <span className="text-slate-400 ml-1">{counts[t] || 0}</span>
+              {t === "all" ? "All" : t} <span className="text-slate-400 ml-1">{t === "Deleted" ? (deleted?.length ?? 0) : (counts[t] || 0)}</span>
             </button>
           ))}
         </div>
@@ -61,6 +62,32 @@ export default function JobCardsPage() {
         </div>
       </div>
 
+      {activeTab === "Deleted" ? (
+        <div className="flex-1 overflow-auto bg-white border border-slate-200 rounded-md">
+          <table className="w-full border-collapse">
+            <thead className="sticky top-0 bg-slate-50 z-10">
+              <tr className="h-9 border-b border-slate-200 text-left">
+                {["Job No.", "Item", "Stages", "Deleted by", "Deleted at"].map((h) => (
+                  <th key={h} className="px-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {!deleted && <tr><td colSpan={5} className="py-10 text-center text-[13px] text-slate-400">Loading…</td></tr>}
+              {deleted?.length === 0 && <tr><td colSpan={5} className="py-14 text-center text-[13px] text-slate-500">No job cards have been deleted.</td></tr>}
+              {deleted?.map((d, i) => (
+                <tr key={i} className="border-b border-slate-100 h-12">
+                  <td className="px-3 text-[12px] mono text-slate-700 font-medium">{d.jobNo}</td>
+                  <td className="px-3 text-[12px] text-slate-800">{d.item ?? "—"}{d.serialNo && <span className="text-[10px] text-slate-400 ml-1">{d.serialNo}</span>}</td>
+                  <td className="px-3 text-[12px] mono text-slate-600">{d.stages ?? "—"}</td>
+                  <td className="px-3 text-[12px] text-slate-700">{d.deletedBy}</td>
+                  <td className="px-3 text-[12px] mono text-slate-500">{new Date(d.deletedAt).toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
       <div className="flex-1 overflow-auto bg-white border border-slate-200 rounded-md">
         <table className="w-full border-collapse">
           <thead className="sticky top-0 bg-slate-50 z-10">
@@ -102,6 +129,7 @@ export default function JobCardsPage() {
           </tbody>
         </table>
       </div>
+      )}
 
       {showNew && <NewJobCardModal onClose={() => setShowNew(false)} onCreated={(jobNo) => { setShowNew(false); mutate(); router.push(`/job-cards/${jobNo}`); }} />}
     </div>
