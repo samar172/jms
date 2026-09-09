@@ -56,6 +56,7 @@ export default function KarigarLedgerPage() {
         {/* Karigar list */}
         <div className="w-72 shrink-0 bg-white border border-slate-200 rounded-md overflow-hidden">
           <div className="p-2.5 border-b border-slate-100 space-y-2">
+            <button onClick={() => setKarigarForm({ mode: "new" })} className="h-8 w-full rounded bg-blue-800 text-white text-[12px] font-medium hover:bg-blue-900">+ New Karigar</button>
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search karigar…" className="h-7 w-full px-2 rounded border border-slate-200 text-[12px] outline-none focus:border-blue-400" />
             <div className="flex flex-wrap gap-1">
               {SPECS.map((s) => (
@@ -174,6 +175,12 @@ export default function KarigarLedgerPage() {
                 </table>
               </div>
             )}
+          </div>
+        )}
+        {!active && (
+          <div className="flex-1 bg-white border border-slate-200 rounded-md p-12 text-center">
+            <p className="text-[13px] text-slate-500">No karigars yet.</p>
+            <button onClick={() => setKarigarForm({ mode: "new" })} className="mt-3 h-8 px-4 rounded bg-blue-800 text-white text-[12px] font-medium hover:bg-blue-900">+ Add your first karigar</button>
           </div>
         )}
       </div>
