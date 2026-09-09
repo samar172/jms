@@ -3,8 +3,9 @@
 import { use, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useItemMaster, useProdSettings, createJobCard, updateItemMaster, uploadItemImage, deleteItemImage } from "@/lib/production";
-import { resolveMediaUrl } from "@/lib/api";
+import { useItemMaster, useProdSettings, createJobCard, updateItemMaster, uploadItemImage, deleteItemImage, archiveItemMaster, unarchiveItemMaster, deleteItemMaster } from "@/lib/production";
+import { resolveMediaUrl, ApiError } from "@/lib/api";
+import { usePermissions } from "@/lib/permissions";
 import { StatusPill } from "../../job-cards/page";
 
 export default function ItemMasterDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -12,14 +13,37 @@ export default function ItemMasterDetailPage({ params }: { params: Promise<{ id:
   const router = useRouter();
   const { data: item, mutate } = useItemMaster(id);
   const { data: settings } = useProdSettings();
+  const perms = usePermissions();
   const [editing, setEditing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [pickingSeries, setPickingSeries] = useState(false);
+  const [lightbox, setLightbox] = useState(false);
+  const [busy, setBusy] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
   if (!item) return <div className="text-slate-400 p-4 text-sm">Loading…</div>;
 
   const open = item.jobCards.filter((j) => j.status !== "Closed").length;
+  const canDelete = item.jobCards.length === 0;
+
+  async function archive() {
+    setBusy(true);
+    try { await archiveItemMaster(item!.id); await mutate(); }
+    catch (e) { alert(e instanceof ApiError ? e.message : "Could not archive."); }
+    finally { setBusy(false); }
+  }
+  async function unarchive() {
+    setBusy(true);
+    try { await unarchiveItemMaster(item!.id); await mutate(); }
+    catch (e) { alert(e instanceof ApiError ? e.message : "Could not restore."); }
+    finally { setBusy(false); }
+  }
+  async function deleteDesign() {
+    if (!window.confirm(`Permanently delete design ${item!.name}? This cannot be undone.`)) return;
+    setBusy(true);
+    try { await deleteItemMaster(item!.id); router.push("/products"); }
+    catch (e) { alert(e instanceof ApiError ? e.message : "Could not delete."); setBusy(false); }
+  }
 
   async function onPickImage(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -52,24 +76,48 @@ export default function ItemMasterDetailPage({ params }: { params: Promise<{ id:
         <div>
           <h1 className="text-[20px] font-semibold text-slate-900 flex items-center gap-2">
             <span className="mono text-blue-800">{item.serialNo}</span> {item.name}
+            {item.isArchived && <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-200 text-slate-600 uppercase tracking-wide">Archived</span>}
           </h1>
           <p className="text-[12px] text-slate-500">{item.category}{item.designCode ? ` · ${item.designCode}` : ""} · {item.targetPurity} · est. {item.estGrossWeight}g</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <button onClick={() => setPickingSeries(true)} className="h-8 px-3 rounded bg-blue-800 text-white text-[12px] font-medium hover:bg-blue-900">
             <span className="font-bold">+</span> Create Job Card
           </button>
           <button onClick={() => setEditing((v) => !v)} className="h-8 px-3 rounded border border-slate-200 text-[12px] text-slate-700 hover:bg-slate-50">{editing ? "Cancel" : "Edit"}</button>
+          {perms.can("items", "UPDATE") && (
+            item.isArchived ? (
+              <button onClick={unarchive} disabled={busy} className="h-8 px-3 rounded border border-emerald-300 text-emerald-700 text-[12px] font-medium hover:bg-emerald-50 disabled:opacity-50">Restore</button>
+            ) : (
+              <button onClick={archive} disabled={busy} className="h-8 px-3 rounded border border-slate-200 text-[12px] text-slate-700 hover:bg-slate-50 disabled:opacity-50">Archive</button>
+            )
+          )}
+          {perms.can("items", "DELETE") && (
+            <button
+              onClick={deleteDesign}
+              disabled={busy || !canDelete}
+              title={canDelete ? "Delete this design" : "Has job cards — archive instead"}
+              className="h-8 px-3 rounded border border-rose-300 text-rose-700 text-[12px] font-medium hover:bg-rose-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Delete
+            </button>
+          )}
         </div>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-4 items-start">
         <div className="lg:col-span-1 space-y-3">
-          <div className="bg-white border border-slate-200 rounded-md overflow-hidden aspect-square flex items-center justify-center relative group">
+          <div className="bg-slate-100 border border-slate-200 rounded-md overflow-hidden aspect-square flex items-center justify-center relative group">
             {item.images[0]?.url ? (
               <>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={resolveMediaUrl(item.images[0].url)} alt={item.name} className="w-full h-full object-cover" />
+                <img
+                  src={resolveMediaUrl(item.images[0].fullUrl || item.images[0].url)}
+                  alt={item.name}
+                  onClick={() => setLightbox(true)}
+                  className="w-full h-full object-contain cursor-zoom-in"
+                  title="Click to enlarge"
+                />
                 <button
                   onClick={() => removeImage(item.images[0].id)}
                   className="absolute top-2 right-2 h-6 w-6 rounded-full bg-slate-900/60 text-white text-[12px] opacity-0 group-hover:opacity-100 transition-opacity hover:bg-rose-600"
@@ -121,6 +169,19 @@ export default function ItemMasterDetailPage({ params }: { params: Promise<{ id:
       {pickingSeries && (
         <SeriesPickModal itemMasterId={item.id} jobCardSeries={settings?.jobCardSeries ?? []} onClose={() => setPickingSeries(false)}
           onCreated={(jobNo) => { setPickingSeries(false); router.push(`/job-cards/${jobNo}`); }} />
+      )}
+
+      {lightbox && item.images[0] && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-6 cursor-zoom-out" onClick={() => setLightbox(false)}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={resolveMediaUrl(item.images[0].fullUrl || item.images[0].url)}
+            alt={item.name}
+            className="max-w-full max-h-full object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <button onClick={() => setLightbox(false)} className="absolute top-4 right-4 h-9 w-9 rounded-full bg-white/20 text-white text-[16px] hover:bg-white/30">✕</button>
+        </div>
       )}
     </div>
   );

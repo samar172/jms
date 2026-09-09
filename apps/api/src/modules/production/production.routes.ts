@@ -93,8 +93,10 @@ router.get(
 router.get(
   "/item-masters",
   requireAuth,
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
+    const archived = req.query.archived === "1" || req.query.archived === "true";
     const items = await prisma.product.findMany({
+      where: { isArchived: archived },
       include: {
         category: true,
         purity: true,
@@ -114,7 +116,9 @@ router.get(
         estGrossWeight: Number(p.grossWeightG),
         notes: p.description ?? "",
         imageUrl: p.images[0]?.thumbnailUrl ?? p.images[0]?.url ?? null,
+        imageFullUrl: p.images[0]?.url ?? null,
         jobCardCount: p._count.prodJobCards,
+        isArchived: p.isArchived,
       }))
     );
   })
@@ -148,7 +152,8 @@ router.get(
       targetPurity: p.purity.code,
       estGrossWeight: Number(p.grossWeightG),
       notes: p.description ?? "",
-      images: p.images.map((im) => ({ id: im.id, url: im.thumbnailUrl ?? im.url, isPrimary: im.isPrimary })),
+      isArchived: p.isArchived,
+      images: p.images.map((im) => ({ id: im.id, url: im.thumbnailUrl ?? im.url, fullUrl: im.url, isPrimary: im.isPrimary })),
       jobCards: p.prodJobCards.map((jc) => ({
         id: jc.jobNo,
         status: JOB_STATUS_LABEL[jc.status] ?? jc.status,
@@ -157,6 +162,81 @@ router.get(
         createdAt: iso(jc.createdAt),
       })),
     });
+  })
+);
+
+/** Resolve an item master by id or serialNo. */
+async function findItemByKey(key: string) {
+  return prisma.product.findFirst({
+    where: { OR: [{ id: key }, { serialNo: key }] },
+    include: { _count: { select: { prodJobCards: true } } },
+  });
+}
+
+// Archive a design → moves it to the Archived tab (hidden from the main list).
+// The alternative to deleting a design that still has job cards.
+router.patch(
+  "/item-masters/:key/archive",
+  requireAuth,
+  requirePermission("items", "UPDATE"),
+  asyncHandler(async (req, res) => {
+    const p = await findItemByKey(req.params.key);
+    if (!p) throw notFound("Item master not found");
+    await prisma.product.update({ where: { id: p.id }, data: { isArchived: true, archivedAt: new Date() } });
+    await recordAudit(prisma, {
+      userId: req.user!.id, action: "UPDATE", entityType: "Product", entityId: p.id,
+      after: { event: "archived", designName: p.designName }, ipAddress: req.ip ?? null,
+    });
+    res.json({ ok: true });
+  })
+);
+
+router.patch(
+  "/item-masters/:key/unarchive",
+  requireAuth,
+  requirePermission("items", "UPDATE"),
+  asyncHandler(async (req, res) => {
+    const p = await findItemByKey(req.params.key);
+    if (!p) throw notFound("Item master not found");
+    await prisma.product.update({ where: { id: p.id }, data: { isArchived: false, archivedAt: null } });
+    await recordAudit(prisma, {
+      userId: req.user!.id, action: "UPDATE", entityType: "Product", entityId: p.id,
+      after: { event: "unarchived", designName: p.designName }, ipAddress: req.ip ?? null,
+    });
+    res.json({ ok: true });
+  })
+);
+
+// Permanently delete a design — ONLY when it has no job cards. Otherwise the
+// caller must archive it instead (its job cards/history must not be destroyed).
+router.delete(
+  "/item-masters/:key",
+  requireAuth,
+  requirePermission("items", "DELETE"),
+  asyncHandler(async (req, res) => {
+    const p = await findItemByKey(req.params.key);
+    if (!p) throw notFound("Item master not found");
+    if (p._count.prodJobCards > 0) {
+      throw badRequest(
+        `This design has ${p._count.prodJobCards} job card(s) and cannot be deleted. Archive it instead.`,
+      );
+    }
+
+    // Audit BEFORE deletion (who/when/what), then remove images and the design.
+    await recordAudit(prisma, {
+      userId: req.user!.id, action: "DELETE", entityType: "Product", entityId: p.id,
+      before: { serialNo: p.serialNo, designName: p.designName }, ipAddress: req.ip ?? null,
+    });
+    try {
+      await prisma.$transaction([
+        prisma.productImage.deleteMany({ where: { productId: p.id } }),
+        prisma.product.delete({ where: { id: p.id } }),
+      ]);
+    } catch {
+      // A lingering estimate/order/legacy reference blocks a hard delete.
+      throw badRequest("This design is referenced elsewhere and cannot be deleted. Archive it instead.");
+    }
+    res.json({ ok: true, deletedBy: req.user!.name, deletedAt: new Date().toISOString() });
   })
 );
 

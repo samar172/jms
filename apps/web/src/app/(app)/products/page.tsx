@@ -8,7 +8,8 @@ import { resolveMediaUrl } from "@/lib/api";
 const CATEGORIES = ["Necklace Set", "Ring", "Earrings", "Bangles", "Anklets", "Coin / Idol", "Chain", "Toe Ring", "Bracelet", "Pendant"];
 
 export default function ItemMasterPage() {
-  const { data: items, mutate } = useItemMasters();
+  const [tab, setTab] = useState<"active" | "archived">("active");
+  const { data: items, mutate } = useItemMasters(tab === "archived");
   const [showNew, setShowNew] = useState(false);
 
   return (
@@ -22,13 +23,31 @@ export default function ItemMasterPage() {
         <button onClick={() => setShowNew(true)} className="h-8 px-3 rounded bg-blue-800 text-white text-[12px] font-medium hover:bg-blue-900">+ New Design</button>
       </div>
 
+      <div className="flex items-center gap-1 mb-3 border-b border-slate-200">
+        {(["active", "archived"] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`px-3 h-8 text-[12px] border-b-2 -mb-px ${tab === t ? "border-blue-800 text-blue-900 font-medium" : "border-transparent text-slate-500 hover:text-slate-700"}`}
+          >
+            {t === "active" ? "Active" : "Archived"}
+          </button>
+        ))}
+      </div>
+
+      {items?.length === 0 && (
+        <div className="py-12 text-center text-[13px] text-slate-400">
+          {tab === "archived" ? "No archived designs." : "No designs yet."}
+        </div>
+      )}
+
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
         {items?.map((it) => (
           <Link key={it.id} href={it.serialNo ? `/products/${it.serialNo}` : "#"} className="bg-white border border-slate-200 rounded-md overflow-hidden hover:border-slate-300 hover:shadow-sm transition">
-            <div className="aspect-square bg-slate-50 flex items-center justify-center overflow-hidden">
-              {it.imageUrl ? (
+            <div className="aspect-square bg-slate-100 flex items-center justify-center overflow-hidden">
+              {(it.imageFullUrl || it.imageUrl) ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={resolveMediaUrl(it.imageUrl)} alt={it.name} className="w-full h-full object-cover" />
+                <img src={resolveMediaUrl(it.imageFullUrl || it.imageUrl!)} alt={it.name} loading="lazy" className="w-full h-full object-contain" />
               ) : <span className="text-slate-300 text-[11px]">No image</span>}
             </div>
             <div className="p-2.5">

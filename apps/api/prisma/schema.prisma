@@ -410,6 +410,11 @@ model Product {
   customerId     String?
   customer       Customer?     @relation(fields: [customerId], references: [id])
   status         ProductStatus @default(DESIGN)
+  // Archived designs are hidden from the Item Master list and live in the
+  // Archived tab. Archiving is the alternative to deleting a design that still
+  // has job cards (which must not be destroyed). Reversible (un-archive).
+  isArchived     Boolean       @default(false)
+  archivedAt     DateTime?
   clonedFromId   String?
 
   createdById    String

@@ -47,7 +47,9 @@ export interface ItemMaster {
   estGrossWeight: number;
   notes: string;
   imageUrl: string | null;
+  imageFullUrl: string | null;
   jobCardCount: number;
+  isArchived: boolean;
 }
 
 export interface ProdKarigar {
@@ -100,7 +102,8 @@ export interface JobCardDetail {
 }
 
 export const useProdSettings = () => useApi<ProdSettings>("/api/production/settings");
-export const useItemMasters = () => useApi<ItemMaster[]>("/api/production/item-masters");
+export const useItemMasters = (archived = false) =>
+  useApi<ItemMaster[]>(`/api/production/item-masters${archived ? "?archived=1" : ""}`);
 export const useProdKarigars = () => useApi<ProdKarigar[]>("/api/production/karigars");
 export const useJobCards = () => useApi<JobCardListRow[]>("/api/production/job-cards");
 
@@ -113,7 +116,8 @@ export interface ItemMasterDetail {
   targetPurity: string;
   estGrossWeight: number;
   notes: string;
-  images: { id: string; url: string; isPrimary: boolean }[];
+  isArchived: boolean;
+  images: { id: string; url: string; fullUrl: string; isPrimary: boolean }[];
   jobCards: { id: string; status: string; pieceCount: number | null; dueDate: string; createdAt: string }[];
 }
 export const useItemMaster = (key: string | null) =>
@@ -218,6 +222,10 @@ export const uploadItemImage = (itemId: string, file: File) => {
   return apiFetch(`/api/products/${itemId}/images`, { method: "POST", body: form, isForm: true });
 };
 export const deleteItemImage = (imageId: string) => apiFetch(`/api/products/images/${imageId}`, { method: "DELETE" });
+
+export const archiveItemMaster = (key: string) => patch(`/item-masters/${key}/archive`);
+export const unarchiveItemMaster = (key: string) => patch(`/item-masters/${key}/unarchive`);
+export const deleteItemMaster = (key: string) => del(`/item-masters/${key}`);
 
 export const STAGE_HI: Record<string, string> = {
   Casting: "ढलाई",
