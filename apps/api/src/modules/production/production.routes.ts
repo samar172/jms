@@ -412,6 +412,7 @@ router.get(
           itemName: row.itemMaster.designName,
           category: row.itemMaster.category.name,
           thumbnailUrl: row.itemMaster.images[0]?.thumbnailUrl ?? row.itemMaster.images[0]?.url ?? null,
+          imageFullUrl: row.itemMaster.images[0]?.url ?? null,
           status: jc.status,
           pieceCount: jc.pieceCount,
           dueDate: jc.dueDate,

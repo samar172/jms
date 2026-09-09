@@ -318,3 +318,19 @@ body {
     display: none !important;
   }
 }
+
+/* ---- Legibility: darker, less-faded, less-thin text (user request) ----
+   Secondary text across the app used slate-400/500, which read as faded and
+   thin on light backgrounds. Shift the muted greys one step darker and render
+   text a touch heavier. Very-light hints (slate-300 dashes/dividers) are left
+   alone. Overrides win over Tailwind's layered utilities. */
+.text-slate-400 { color: #64748b !important; } /* was slate-400 -> slate-500 */
+.text-slate-500 { color: #475569 !important; } /* was slate-500 -> slate-600 */
+.text-slate-600 { color: #334155 !important; } /* was slate-600 -> slate-700 */
+
+:root { --color-mute: #64748b; --color-ink2: #334155; }
+
+body {
+  -webkit-font-smoothing: auto;   /* heavier than the default 'antialiased' — less thin */
+  -moz-osx-font-smoothing: auto;
+}

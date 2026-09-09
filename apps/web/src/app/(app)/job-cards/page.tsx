@@ -15,6 +15,7 @@ export default function JobCardsPage() {
   const [activeTab, setActiveTab] = useState("all");
   const [query, setQuery] = useState("");
   const [showNew, setShowNew] = useState(false);
+  const [preview, setPreview] = useState<{ url: string; x: number; y: number } | null>(null);
 
   const rows = jobCards ?? [];
   const counts = useMemo(() => {
@@ -107,7 +108,15 @@ export default function JobCardsPage() {
               return (
                 <tr key={r.id} onClick={() => router.push(`/job-cards/${r.id}`)} className="border-b border-slate-100 cursor-pointer h-12 hover:bg-slate-50">
                   <td className="px-3">
-                    <div className="w-8 h-8 rounded bg-slate-50 border border-slate-200 overflow-hidden flex items-center justify-center shrink-0">
+                    <div
+                      className="w-8 h-8 rounded bg-slate-50 border border-slate-200 overflow-hidden flex items-center justify-center shrink-0"
+                      onMouseEnter={(e) => {
+                        const src = r.imageFullUrl || r.thumbnailUrl;
+                        if (src) setPreview({ url: resolveMediaUrl(src), x: e.clientX, y: e.clientY });
+                      }}
+                      onMouseMove={(e) => setPreview((p) => (p ? { ...p, x: e.clientX, y: e.clientY } : p))}
+                      onMouseLeave={() => setPreview(null)}
+                    >
                       {r.thumbnailUrl
                         // eslint-disable-next-line @next/next/no-img-element
                         ? <img src={resolveMediaUrl(r.thumbnailUrl)} alt={r.itemName} className="w-full h-full object-cover" />
@@ -129,6 +138,19 @@ export default function JobCardsPage() {
           </tbody>
         </table>
       </div>
+      )}
+
+      {preview && (
+        <div
+          className="fixed z-50 pointer-events-none rounded-lg shadow-2xl border border-slate-200 bg-white p-1"
+          style={{
+            left: Math.min(preview.x + 16, (typeof window !== "undefined" ? window.innerWidth : 1200) - 288),
+            top: Math.min(preview.y + 16, (typeof window !== "undefined" ? window.innerHeight : 800) - 288),
+          }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={preview.url} alt="preview" className="w-64 h-64 object-contain" />
+        </div>
       )}
 
       {showNew && <NewJobCardModal onClose={() => setShowNew(false)} onCreated={(jobNo) => { setShowNew(false); mutate(); router.push(`/job-cards/${jobNo}`); }} />}
