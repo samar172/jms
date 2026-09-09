@@ -14,6 +14,12 @@ export default function JobCardsPage() {
   const { data: deleted } = useDeletedJobCards();
   const [activeTab, setActiveTab] = useState("all");
   const [query, setQuery] = useState("");
+  const [cat, setCat] = useState("all");
+  const [stage, setStage] = useState("all");
+  const [series, setSeries] = useState("all");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [overdueOnly, setOverdueOnly] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [preview, setPreview] = useState<{ url: string; x: number; y: number } | null>(null);
 
@@ -25,14 +31,36 @@ export default function JobCardsPage() {
   }, [rows]);
   const overdue = rows.filter((r) => r.status !== "Closed" && r.dueDate && r.dueDate < today()).length;
 
+  const catOptions = useMemo(
+    () => Array.from(new Set(rows.map((r) => r.category).filter(Boolean))).sort(),
+    [rows],
+  );
+  const stageOptions = useMemo(
+    () => Array.from(new Set(rows.map((r) => r.activeStage).filter((s): s is string => !!s))).sort(),
+    [rows],
+  );
+  const seriesOptions = useMemo(
+    () => Array.from(new Set(rows.map((r) => r.series).filter((s): s is string => !!s))).sort(),
+    [rows],
+  );
+
   const visible = rows.filter((r) => {
     if (activeTab !== "all" && r.status !== activeTab) return false;
+    if (cat !== "all" && r.category !== cat) return false;
+    if (stage !== "all" && r.activeStage !== stage) return false;
+    if (series !== "all" && r.series !== series) return false;
+    if (fromDate && (r.createdAt || "") < fromDate) return false;
+    if (toDate && (r.createdAt || "") > toDate) return false;
+    if (overdueOnly && !(r.status !== "Closed" && r.dueDate && r.dueDate < today())) return false;
     if (query.trim()) {
       const q = query.toLowerCase();
       return r.id.toLowerCase().includes(q) || r.itemName.toLowerCase().includes(q);
     }
     return true;
   });
+  const activeFilters =
+    cat !== "all" || stage !== "all" || series !== "all" || overdueOnly ||
+    !!fromDate || !!toDate || query.trim().length > 0;
 
   return (
     <div className="flex-1 flex flex-col">
@@ -57,10 +85,45 @@ export default function JobCardsPage() {
             </button>
           ))}
         </div>
-        <div className="mt-2">
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter by job no., item…"
-            className="h-7 w-72 px-2 rounded border border-slate-200 text-[12px] outline-none focus:border-blue-400" />
-        </div>
+        {activeTab !== "Deleted" && (
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter by job no., item…"
+              className="h-7 w-64 px-2 rounded border border-slate-200 text-[12px] outline-none focus:border-blue-400" />
+            <select value={cat} onChange={(e) => setCat(e.target.value)} className="h-7 px-2 rounded border border-slate-200 text-[12px]">
+              <option value="all">All categories</option>
+              {catOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <select value={stage} onChange={(e) => setStage(e.target.value)} className="h-7 px-2 rounded border border-slate-200 text-[12px]">
+              <option value="all">All stages</option>
+              {stageOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+            {seriesOptions.length > 0 && (
+              <select value={series} onChange={(e) => setSeries(e.target.value)} className="h-7 px-2 rounded border border-slate-200 text-[12px]">
+                <option value="all">All series</option>
+                {seriesOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            )}
+            <label className="flex items-center gap-1 text-[12px] text-slate-600">
+              From
+              <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)}
+                className="h-7 px-1.5 rounded border border-slate-200 text-[12px]" />
+            </label>
+            <label className="flex items-center gap-1 text-[12px] text-slate-600">
+              To
+              <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)}
+                className="h-7 px-1.5 rounded border border-slate-200 text-[12px]" />
+            </label>
+            <label className="flex items-center gap-1.5 text-[12px] text-slate-600">
+              <input type="checkbox" checked={overdueOnly} onChange={(e) => setOverdueOnly(e.target.checked)} />
+              Overdue only
+            </label>
+            {activeFilters && (
+              <button onClick={() => { setQuery(""); setCat("all"); setStage("all"); setSeries("all"); setFromDate(""); setToDate(""); setOverdueOnly(false); }}
+                className="h-7 px-2.5 rounded border border-slate-200 text-[12px] text-slate-600 hover:bg-slate-50">Clear</button>
+            )}
+            <span className="text-[11px] text-slate-400 ml-auto">{visible.length} of {rows.length}</span>
+          </div>
+        )}
       </div>
 
       {activeTab === "Deleted" ? (

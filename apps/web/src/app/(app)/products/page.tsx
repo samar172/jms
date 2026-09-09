@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import { useItemMasters, useProdSettings, createItemMaster } from "@/lib/production";
 import { resolveMediaUrl } from "@/lib/api";
@@ -11,6 +11,35 @@ export default function ItemMasterPage() {
   const [tab, setTab] = useState<"active" | "archived">("active");
   const { data: items, mutate } = useItemMasters(tab === "archived");
   const [showNew, setShowNew] = useState(false);
+  const [query, setQuery] = useState("");
+  const [cat, setCat] = useState("all");
+  const [purity, setPurity] = useState("all");
+  const [onlyWithJobs, setOnlyWithJobs] = useState(false);
+
+  const catOptions = useMemo(
+    () => Array.from(new Set((items ?? []).map((i) => i.category).filter(Boolean))).sort(),
+    [items],
+  );
+  const purityOptions = useMemo(
+    () => Array.from(new Set((items ?? []).map((i) => i.targetPurity).filter(Boolean))).sort(),
+    [items],
+  );
+
+  const filtered = (items ?? []).filter((it) => {
+    if (cat !== "all" && it.category !== cat) return false;
+    if (purity !== "all" && it.targetPurity !== purity) return false;
+    if (onlyWithJobs && it.jobCardCount === 0) return false;
+    if (query.trim()) {
+      const q = query.toLowerCase();
+      return (
+        it.name.toLowerCase().includes(q) ||
+        (it.serialNo ?? "").toLowerCase().includes(q) ||
+        (it.designCode ?? "").toLowerCase().includes(q)
+      );
+    }
+    return true;
+  });
+  const activeFilters = cat !== "all" || purity !== "all" || onlyWithJobs || query.trim().length > 0;
 
   return (
     <div className="flex flex-col">
@@ -35,14 +64,44 @@ export default function ItemMasterPage() {
         ))}
       </div>
 
-      {items?.length === 0 && (
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search name, serial or design code…"
+          className="h-8 w-64 px-2 rounded border border-slate-200 text-[12px] outline-none focus:border-blue-400"
+        />
+        <select value={cat} onChange={(e) => setCat(e.target.value)} className="h-8 px-2 rounded border border-slate-200 text-[12px]">
+          <option value="all">All categories</option>
+          {catOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select value={purity} onChange={(e) => setPurity(e.target.value)} className="h-8 px-2 rounded border border-slate-200 text-[12px]">
+          <option value="all">All purities</option>
+          {purityOptions.map((p) => <option key={p} value={p}>{p}</option>)}
+        </select>
+        <label className="flex items-center gap-1.5 text-[12px] text-slate-600">
+          <input type="checkbox" checked={onlyWithJobs} onChange={(e) => setOnlyWithJobs(e.target.checked)} />
+          Has job cards
+        </label>
+        {activeFilters && (
+          <button
+            onClick={() => { setQuery(""); setCat("all"); setPurity("all"); setOnlyWithJobs(false); }}
+            className="h-8 px-2.5 rounded border border-slate-200 text-[12px] text-slate-600 hover:bg-slate-50"
+          >
+            Clear
+          </button>
+        )}
+        <span className="text-[11px] text-slate-400 ml-auto">{filtered.length} of {items?.length ?? 0}</span>
+      </div>
+
+      {filtered.length === 0 && (
         <div className="py-12 text-center text-[13px] text-slate-400">
-          {tab === "archived" ? "No archived designs." : "No designs yet."}
+          {activeFilters ? "No designs match these filters." : tab === "archived" ? "No archived designs." : "No designs yet."}
         </div>
       )}
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-        {items?.map((it) => (
+        {filtered.map((it) => (
           <Link key={it.id} href={it.serialNo ? `/products/${it.serialNo}` : "#"} className="bg-white border border-slate-200 rounded-md overflow-hidden hover:border-slate-300 hover:shadow-sm transition">
             <div className="aspect-square bg-slate-100 flex items-center justify-center overflow-hidden">
               {(it.imageFullUrl || it.imageUrl) ? (

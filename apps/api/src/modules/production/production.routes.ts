@@ -397,6 +397,7 @@ router.get(
       prisma.prodJobCard.findMany({
         include: {
           ...jobCardInclude,
+          series: true,
           itemMaster: { include: { images: { where: { isActive: true, isPrimary: true }, take: 1 }, category: true } },
         },
         orderBy: { createdAt: "desc" },
@@ -411,6 +412,8 @@ router.get(
           id: jc.id,
           itemName: row.itemMaster.designName,
           category: row.itemMaster.category.name,
+          series: row.series?.name ?? null,
+          createdAt: jc.createdAt,
           thumbnailUrl: row.itemMaster.images[0]?.thumbnailUrl ?? row.itemMaster.images[0]?.url ?? null,
           imageFullUrl: row.itemMaster.images[0]?.url ?? null,
           status: jc.status,

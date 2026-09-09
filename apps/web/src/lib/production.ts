@@ -71,6 +71,8 @@ export interface JobCardListRow {
   id: string;
   itemName: string;
   category: string;
+  series: string | null;
+  createdAt: string;
   thumbnailUrl: string | null;
   imageFullUrl: string | null;
   status: string;
