@@ -473,6 +473,9 @@ function StageCard({ jobNo, stage, pieceCount, targetPurity, karigars, settings,
         <div className="flex items-center gap-2">
           <span className="font-semibold text-[13px] text-slate-900">{stage.stage} ({STAGE_HI[stage.stage]})</span>
           <StatusPill status={stage.status} />
+          {stage.stage === "Jadai" && pieceCount != null && (
+            <span className="text-[11px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-medium">{pieceCount} pcs issued</span>
+          )}
           {labourTotal > 0 && <span className="text-[11px] mono text-slate-500">{money(labourTotal)}</span>}
         </div>
         <div className="flex items-center gap-2">
@@ -535,6 +538,7 @@ function StageCard({ jobNo, stage, pieceCount, targetPurity, karigars, settings,
                   {i.fromBulkStock
                     ? (i.label || "Bulk output")
                     : `Issued ${gm(i.issuedWeight)} @ ${i.purity}`}
+                  {i.pieceCount != null && <span className="text-slate-500 font-medium"> · {i.pieceCount} pcs</span>}
                   {i.status === "Reconciled" && ` → ${gm(i.returnedWeight)} @ ${i.returnedPurity}${i.dustWeight ? `, dust ${gm(i.dustWeight)}` : ""}${i.wastageWeight ? `, wastage ${gm(i.wastageWeight)}` : ""}`}
                   {!i.fromBulkStock && i.label ? ` (${i.label})` : ""}
                 </span>
