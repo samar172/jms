@@ -272,15 +272,25 @@ router.post(
     const body = seriesSchema.parse(req.body);
     const startAt = body.startAt ?? 1;
     const padWidth = body.padWidth ?? String(startAt).length;
-    let created;
-    try {
-      created = await prisma.prodJobCardSeries.create({
-        data: { name: body.name, startAt, padWidth, effectiveFrom: body.effectiveFrom ?? new Date() },
+
+    // The name is globally unique, but "Remove" only soft-deletes (isActive=
+    // false) to preserve any job cards under it. So a previously removed series
+    // still holds its name and is hidden from the list. Re-adding that name
+    // revives it (bringing its history back) rather than colliding.
+    const existing = await prisma.prodJobCardSeries.findUnique({ where: { name: body.name } });
+    if (existing) {
+      if (existing.isActive) throw badRequest(`A job-card series named "${body.name}" already exists`);
+      const revived = await prisma.prodJobCardSeries.update({
+        where: { id: existing.id },
+        data: { isActive: true, effectiveFrom: body.effectiveFrom ?? new Date() },
       });
-    } catch (e) {
-      if (isDuplicate(e)) throw badRequest(`A job-card series named "${body.name}" already exists`);
-      throw e;
+      res.status(201).json(revived);
+      return;
     }
+
+    const created = await prisma.prodJobCardSeries.create({
+      data: { name: body.name, startAt, padWidth, effectiveFrom: body.effectiveFrom ?? new Date() },
+    });
     res.status(201).json(created);
   })
 );
@@ -325,7 +335,14 @@ router.delete(
   "/job-card-series/:id",
   requirePermission("settings", "DELETE"),
   asyncHandler(async (req, res) => {
-    await prisma.prodJobCardSeries.update({ where: { id: req.params.id }, data: { isActive: false } });
+    // Fully remove a series that has no job cards (frees its name); only
+    // soft-delete when job cards exist, to preserve their history.
+    const count = await prisma.prodJobCard.count({ where: { seriesId: req.params.id } });
+    if (count > 0) {
+      await prisma.prodJobCardSeries.update({ where: { id: req.params.id }, data: { isActive: false } });
+    } else {
+      await prisma.prodJobCardSeries.delete({ where: { id: req.params.id } });
+    }
     res.json({ ok: true });
   })
 );
