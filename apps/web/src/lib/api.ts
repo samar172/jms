@@ -122,4 +122,29 @@ export async function openAuthenticated(path: string): Promise<void> {
   }
 }
 
+/** Fetch an authenticated file and save it (Content-Disposition filename wins). */
+export async function downloadAuthenticated(path: string, fallbackName: string): Promise<void> {
+  const doFetch = async (): Promise<Response> =>
+    fetch(`${API_URL}${path}`, {
+      credentials: "include",
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    });
+  let res = await doFetch();
+  if (res.status === 401) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) res = await doFetch();
+  }
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new ApiError(res.status, (data && "error" in data && String(data.error)) || "Download failed");
+  }
+  const cd = res.headers.get("Content-Disposition");
+  const name = cd?.match(/filename="?([^"]+)"?/)?.[1] ?? fallbackName;
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = name; a.click();
+  URL.revokeObjectURL(url);
+}
+
 export { refreshAccessToken, API_URL };

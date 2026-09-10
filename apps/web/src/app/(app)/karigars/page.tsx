@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useProdKarigars, useLedger, useLabourLedger, useProdSettings, issueBulkStock, recordBulkReceipt, createKarigar, updateKarigar, type ProdKarigar } from "@/lib/production";
+import { usePermissions } from "@/lib/permissions";
 
 const SPEC_OPTS = ["Casting", "Meenakari", "Jadai", "Kundan", "Setting", "Fitting"];
 
@@ -18,6 +19,7 @@ function defaultRateLabel(k: ProdKarigar): string | null {
 }
 
 export default function KarigarLedgerPage() {
+  const perms = usePermissions();
   const { data: karigars, mutate: mutateKarigars } = useProdKarigars();
   const { data: ledger, mutate: mutateLedger } = useLedger();
   const { data: labourLedger } = useLabourLedger();
@@ -56,7 +58,9 @@ export default function KarigarLedgerPage() {
         {/* Karigar list */}
         <div className="w-72 shrink-0 bg-white border border-slate-200 rounded-md overflow-hidden">
           <div className="p-2.5 border-b border-slate-100 space-y-2">
-            <button onClick={() => setKarigarForm({ mode: "new" })} className="h-8 w-full rounded bg-blue-800 text-white text-[12px] font-medium hover:bg-blue-900">+ New Karigar</button>
+            {perms.can("karigars", "ADD") && (
+              <button onClick={() => setKarigarForm({ mode: "new" })} className="h-8 w-full rounded bg-blue-800 text-white text-[12px] font-medium hover:bg-blue-900">+ New Karigar</button>
+            )}
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search karigar…" className="h-7 w-full px-2 rounded border border-slate-200 text-[12px] outline-none focus:border-blue-400" />
             <div className="flex flex-wrap gap-1">
               {SPECS.map((s) => (
@@ -88,12 +92,16 @@ export default function KarigarLedgerPage() {
               <div>
                 <h1 className="text-[16px] font-semibold text-slate-900 flex items-center gap-2">
                   {active.name} — {active.specialization}
-                  <button onClick={() => setKarigarForm({ mode: "edit", k: active })} className="text-[11px] text-blue-700 hover:underline font-normal">Edit</button>
+                  {perms.can("karigars", "UPDATE") && (
+                    <button onClick={() => setKarigarForm({ mode: "edit", k: active })} className="text-[11px] text-blue-700 hover:underline font-normal">Edit</button>
+                  )}
                 </h1>
                 <p className="text-[11px] text-slate-500 mt-0.5">{active.contact ? `${active.contact} · ` : ""}Running pure-silver-equivalent account · labour earned {money(active.labourEarned)}</p>
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={() => setKarigarForm({ mode: "new" })} className="h-7 px-2.5 rounded border border-slate-200 text-[11px] text-slate-700 hover:bg-slate-50">+ New Karigar</button>
+                {perms.can("karigars", "ADD") && (
+                  <button onClick={() => setKarigarForm({ mode: "new" })} className="h-7 px-2.5 rounded border border-slate-200 text-[11px] text-slate-700 hover:bg-slate-50">+ New Karigar</button>
+                )}
                 <button onClick={() => setShowBulk(true)} className="h-7 px-2.5 rounded bg-blue-800 text-white text-[11px] font-medium hover:bg-blue-900">+ Issue Bulk Stock</button>
                 <button onClick={() => setShowReceipt(true)} className="h-7 px-2.5 rounded bg-emerald-700 text-white text-[11px] font-medium hover:bg-emerald-800">+ Receive Bulk Findings</button>
               </div>
@@ -180,7 +188,9 @@ export default function KarigarLedgerPage() {
         {!active && (
           <div className="flex-1 bg-white border border-slate-200 rounded-md p-12 text-center">
             <p className="text-[13px] text-slate-500">No karigars yet.</p>
-            <button onClick={() => setKarigarForm({ mode: "new" })} className="mt-3 h-8 px-4 rounded bg-blue-800 text-white text-[12px] font-medium hover:bg-blue-900">+ Add your first karigar</button>
+            {perms.can("karigars", "ADD") && (
+              <button onClick={() => setKarigarForm({ mode: "new" })} className="mt-3 h-8 px-4 rounded bg-blue-800 text-white text-[12px] font-medium hover:bg-blue-900">+ Add your first karigar</button>
+            )}
           </div>
         )}
       </div>

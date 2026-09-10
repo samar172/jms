@@ -5,17 +5,16 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../../db";
-import { requireRole } from "../../middleware/auth";
+import { requirePermission } from "../../middleware/auth";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest } from "../../utils/httpError";
 
 const router = Router();
-const ADMIN = ["SUPER_ADMIN", "MANAGER"] as const;
 
 /* ------------------------------- Settings --------------------------------- */
 router.patch(
   "/settings",
-  requireRole(...ADMIN),
+  requirePermission("settings", "UPDATE"),
   asyncHandler(async (req, res) => {
     const body = z.object({ baseRate: z.number().positive().optional(), defaultRates: z.record(z.any()).optional() }).parse(req.body);
     if (body.baseRate != null) {
@@ -32,7 +31,7 @@ router.patch(
 const tierSchema = z.object({ label: z.string().min(1), percent: z.number().min(0).max(100) });
 router.post(
   "/purity-tiers",
-  requireRole(...ADMIN),
+  requirePermission("settings", "ADD"),
   asyncHandler(async (req, res) => {
     const body = tierSchema.parse(req.body);
     const t = await prisma.purityTier.create({ data: { code: body.label, percent: body.percent, purityFactor: body.percent / 100 } });
@@ -41,7 +40,7 @@ router.post(
 );
 router.patch(
   "/purity-tiers/:id",
-  requireRole(...ADMIN),
+  requirePermission("settings", "UPDATE"),
   asyncHandler(async (req, res) => {
     const body = tierSchema.partial().parse(req.body);
     const t = await prisma.purityTier.update({
@@ -56,7 +55,7 @@ router.patch(
 );
 router.delete(
   "/purity-tiers/:id",
-  requireRole(...ADMIN),
+  requirePermission("settings", "DELETE"),
   asyncHandler(async (req, res) => {
     // Soft-remove — a tier may be referenced by history; hide it from pickers.
     await prisma.purityTier.update({ where: { id: req.params.id }, data: { isActive: false } });
@@ -69,7 +68,7 @@ router.delete(
 // across all job cards and offered in the casting output dropdown.
 router.post(
   "/sub-item-names",
-  requireRole(...ADMIN),
+  requirePermission("settings", "ADD"),
   asyncHandler(async (req, res) => {
     const body = z.object({ label: z.string().min(1) }).parse(req.body);
     const count = await prisma.prodSubItemName.count();
@@ -85,7 +84,7 @@ router.post(
 );
 router.patch(
   "/sub-item-names/:id",
-  requireRole(...ADMIN),
+  requirePermission("settings", "UPDATE"),
   asyncHandler(async (req, res) => {
     const body = z.object({ label: z.string().min(1) }).parse(req.body);
     const t = await prisma.prodSubItemName.update({ where: { id: req.params.id }, data: { label: body.label.trim() } });
@@ -94,7 +93,7 @@ router.patch(
 );
 router.delete(
   "/sub-item-names/:id",
-  requireRole(...ADMIN),
+  requirePermission("settings", "DELETE"),
   asyncHandler(async (req, res) => {
     // Soft-remove — historical sub-items store the label as text, so hiding the
     // master entry never breaks past records.
@@ -109,7 +108,7 @@ router.delete(
 // pattern as sub-item names above.
 router.post(
   "/finding-names",
-  requireRole(...ADMIN),
+  requirePermission("settings", "ADD"),
   asyncHandler(async (req, res) => {
     const body = z.object({ label: z.string().min(1) }).parse(req.body);
     const count = await prisma.prodFindingName.count();
@@ -124,7 +123,7 @@ router.post(
 );
 router.patch(
   "/finding-names/:id",
-  requireRole(...ADMIN),
+  requirePermission("settings", "UPDATE"),
   asyncHandler(async (req, res) => {
     const body = z.object({ label: z.string().min(1) }).parse(req.body);
     const t = await prisma.prodFindingName.update({ where: { id: req.params.id }, data: { label: body.label.trim() } });
@@ -133,7 +132,7 @@ router.patch(
 );
 router.delete(
   "/finding-names/:id",
-  requireRole(...ADMIN),
+  requirePermission("settings", "DELETE"),
   asyncHandler(async (req, res) => {
     await prisma.prodFindingName.update({ where: { id: req.params.id }, data: { isActive: false } });
     res.json({ ok: true });
@@ -146,7 +145,7 @@ router.delete(
 // offered in the reconcile dropdown. Same pattern as sub-item/finding names.
 router.post(
   "/work-type-names",
-  requireRole(...ADMIN),
+  requirePermission("settings", "ADD"),
   asyncHandler(async (req, res) => {
     const body = z.object({ label: z.string().min(1) }).parse(req.body);
     const count = await prisma.prodWorkTypeName.count();
@@ -161,7 +160,7 @@ router.post(
 );
 router.patch(
   "/work-type-names/:id",
-  requireRole(...ADMIN),
+  requirePermission("settings", "UPDATE"),
   asyncHandler(async (req, res) => {
     const body = z.object({ label: z.string().min(1) }).parse(req.body);
     const t = await prisma.prodWorkTypeName.update({ where: { id: req.params.id }, data: { label: body.label.trim() } });
@@ -170,7 +169,7 @@ router.patch(
 );
 router.delete(
   "/work-type-names/:id",
-  requireRole(...ADMIN),
+  requirePermission("settings", "DELETE"),
   asyncHandler(async (req, res) => {
     await prisma.prodWorkTypeName.update({ where: { id: req.params.id }, data: { isActive: false } });
     res.json({ ok: true });
@@ -190,7 +189,7 @@ const karigarSchema = z.object({
 });
 router.post(
   "/karigars",
-  requireRole(...ADMIN),
+  requirePermission("karigars", "ADD"),
   asyncHandler(async (req, res) => {
     const body = karigarSchema.parse(req.body);
     const count = await prisma.karigar.count();
@@ -215,7 +214,7 @@ router.post(
 );
 router.patch(
   "/karigars/:id",
-  requireRole(...ADMIN),
+  requirePermission("karigars", "UPDATE"),
   asyncHandler(async (req, res) => {
     const body = karigarSchema.partial().parse(req.body);
     const existing = body.openingBalance !== undefined ? await prisma.karigar.findUnique({ where: { id: req.params.id }, select: { openingBalanceDate: true } }) : null;
@@ -253,7 +252,7 @@ const seriesSchema = z.object({
 });
 router.get(
   "/job-card-series",
-  requireRole(...ADMIN),
+  requirePermission("settings", "VIEW"),
   asyncHandler(async (_req, res) => {
     const rows = await prisma.prodJobCardSeries.findMany({ where: { isActive: true }, orderBy: { createdAt: "asc" } });
     res.json(rows);
@@ -261,7 +260,7 @@ router.get(
 );
 router.post(
   "/job-card-series",
-  requireRole(...ADMIN),
+  requirePermission("settings", "ADD"),
   asyncHandler(async (req, res) => {
     const body = seriesSchema.parse(req.body);
     const padWidth = body.padWidth ?? String(body.startAt).length;
@@ -279,7 +278,7 @@ router.post(
 );
 router.patch(
   "/job-card-series/:id",
-  requireRole(...ADMIN),
+  requirePermission("settings", "UPDATE"),
   asyncHandler(async (req, res) => {
     const body = seriesSchema.partial().parse(req.body);
     // Changing startAt after numbers have already been issued would collide
@@ -310,7 +309,7 @@ router.patch(
 );
 router.delete(
   "/job-card-series/:id",
-  requireRole(...ADMIN),
+  requirePermission("settings", "DELETE"),
   asyncHandler(async (req, res) => {
     await prisma.prodJobCardSeries.update({ where: { id: req.params.id }, data: { isActive: false } });
     res.json({ ok: true });
@@ -320,7 +319,7 @@ router.delete(
 /* ----------------------------- Item Masters ------------------------------- */
 router.post(
   "/item-masters",
-  requireRole(...ADMIN),
+  requirePermission("items", "ADD"),
   asyncHandler(async (req, res) => {
     const body = z
       .object({
@@ -359,7 +358,7 @@ router.post(
 );
 router.patch(
   "/item-masters/:id",
-  requireRole(...ADMIN),
+  requirePermission("items", "UPDATE"),
   asyncHandler(async (req, res) => {
     const body = z
       .object({

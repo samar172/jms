@@ -15,6 +15,7 @@ import {
   Inbox,
   History,
   Palette,
+  DatabaseBackup,
 } from "lucide-react";
 import type { Role } from "@jms/shared";
 import { useAuth } from "@/lib/auth-context";
@@ -59,6 +60,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/users", label: "Users & Roles", icon: UserCog, roles: ["SUPER_ADMIN"] },
       { href: "/roles", label: "Roles & Permissions", icon: ShieldCheck, roles: ["SUPER_ADMIN"] },
       { href: "/audit", label: "Audit Log", icon: History, roles: ["SUPER_ADMIN", "MANAGER", "AUDITOR"] },
+      { href: "/backup", label: "Backup", icon: DatabaseBackup, roles: ["SUPER_ADMIN"] },
     ],
   },
 ];
