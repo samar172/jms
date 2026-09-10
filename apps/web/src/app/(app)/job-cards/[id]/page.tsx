@@ -8,6 +8,7 @@ import {
   useJobCard, useProdKarigars, useProdSettings,
   assignKarigar, castOutput, editCastOutput, issueMaterial, reconcile, editReconcile, cancelReconcile, jadaiOutput, editJadaiOutput, kundanOutput, editKundanOutput, findingOutput, editFindingOutput,
   issueStones, returnStones, editStone, removeStone, removeIssue, removeAssignment, clearAssignmentOutput, approveStage, unapproveStage, closeJobCard, reopenJobCard, toggleHold, updateJobCardMeta,
+  linkJobCard, unlinkJobCard,
   STAGE_HI, type JobCardDetail,
 } from "@/lib/production";
 import type { Stage, Assignment, MaterialIssue, StoneEntry, SubItem } from "@jms/shared";
@@ -108,6 +109,7 @@ export default function JobCardDetailPage({ params }: { params: Promise<{ id: st
             </div>
           )}
           <JobDetailsPanel jobNo={jc.id} dueDate={jc.dueDate} pieceCount={jc.pieceCount} notes={jc.notes} onSaved={refresh} />
+          <LinkedCards data={data} jobNo={jc.id} canEdit={perms.can("job_cards", "UPDATE")} onChange={refresh} />
           <CostingSummary data={data} onSaved={refresh} />
           <div className="bg-white border border-slate-200 rounded-md">
             <div className="px-4 py-2.5 text-[11px] uppercase tracking-wider text-slate-500 font-semibold border-b border-slate-100">Activity</div>
@@ -156,6 +158,67 @@ function SumRow({ label, value, strong }: { label: string; value: string; strong
     </div>
   );
 }
+function LinkedCards({ data, jobNo, canEdit, onChange }: { data: JobCardDetail; jobNo: string; canEdit: boolean; onChange: () => void }) {
+  const [adding, setAdding] = useState(false);
+  const [target, setTarget] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const c = data.combined;
+
+  async function add() {
+    if (!target.trim()) return;
+    setBusy(true); setError(null);
+    try { await linkJobCard(jobNo, target.trim()); setTarget(""); setAdding(false); onChange(); }
+    catch (e) { setError(e instanceof ApiError ? e.message : "Could not link."); }
+    finally { setBusy(false); }
+  }
+  async function remove(t: string) {
+    setBusy(true); setError(null);
+    try { await unlinkJobCard(jobNo, t); onChange(); }
+    catch (e) { setError(e instanceof ApiError ? e.message : "Could not unlink."); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-md">
+      <div className="px-4 py-2.5 flex items-center justify-between border-b border-slate-100">
+        <span className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">Linked Job Cards</span>
+        {canEdit && <button onClick={() => setAdding((v) => !v)} className="text-[11px] text-blue-700 hover:underline">{adding ? "Cancel" : "+ Link"}</button>}
+      </div>
+      <div className="p-3 space-y-2">
+        {adding && (
+          <div className="flex gap-2">
+            <input value={target} onChange={(e) => setTarget(e.target.value)} placeholder="Job no. e.g. N-015" className="h-8 flex-1 px-2 rounded border border-slate-200 text-[12px]" />
+            <button onClick={add} disabled={busy || !target.trim()} className="h-8 px-3 rounded bg-blue-800 text-white text-[12px] disabled:opacity-50">Link</button>
+          </div>
+        )}
+        {data.linked.length === 0 && !adding && <p className="text-[12px] text-slate-400">No linked job cards.</p>}
+        {data.linked.map((l) => (
+          <div key={l.jobNo} className="flex items-center justify-between border border-slate-100 rounded px-2.5 py-1.5">
+            <Link href={`/job-cards/${l.jobNo}`} className="text-[12px] min-w-0">
+              <span className="mono text-blue-800 font-medium">{l.jobNo}</span>
+              <span className="text-slate-600 ml-1.5">{l.itemName}</span>
+              <span className="text-[10px] text-slate-400 ml-1.5">{gm(l.grossWeight)} · {money(l.labour)}</span>
+            </Link>
+            {canEdit && <button onClick={() => remove(l.jobNo)} disabled={busy} title="Unlink" className="text-slate-400 hover:text-rose-600 text-[13px] shrink-0 ml-2">✕</button>}
+          </div>
+        ))}
+        {error && <p className="text-[11px] text-rose-600">{error}</p>}
+        {c && (
+          <div className="mt-1 pt-1 border-t border-slate-100">
+            <div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold px-3 pt-1.5 pb-0.5">Combined · {c.count} cards</div>
+            <SumRow label="Gross weight" value={gm(c.grossWeight)} />
+            <SumRow label="Pure equivalent" value={gm(c.pureEq)} />
+            <SumRow label="Labour" value={money(c.labour)} />
+            <SumRow label="Silver value" value={money(c.silverValue)} />
+            <SumRow label="Sale value (metal + stones)" value={money(c.saleValue)} strong />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function CostingSummary({ data, onSaved }: { data: JobCardDetail; onSaved: () => void }) {
   const t = data.totals;
   const Row = SumRow;

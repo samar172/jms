@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useJobCards, useItemMasters, useProdSettings, useDeletedJobCards, createJobCard, type JobCardListRow } from "@/lib/production";
-import { resolveMediaUrl } from "@/lib/api";
+import { resolveMediaUrl, ApiError } from "@/lib/api";
 
 const TABS = ["all", "Draft", "In Production", "On Hold", "Reconciliation", "Closed", "Deleted"];
 const today = () => new Date().toISOString().slice(0, 10);
@@ -245,21 +245,25 @@ function NewJobCardModal({ onClose, onCreated }: { onClose: () => void; onCreate
   const { data: settings } = useProdSettings();
   const [itemMasterId, setItemMasterId] = useState("");
   const [seriesId, setSeriesId] = useState("");
+  const [number, setNumber] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [pieceCount, setPieceCount] = useState("1");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const chosen = items?.find((i) => i.id === itemMasterId);
   const today = new Date().toISOString().slice(0, 10);
   const availableSeries = (settings?.jobCardSeries ?? []).filter((s) => s.effectiveFrom <= today);
+  const selName = availableSeries.find((s) => s.id === seriesId)?.name;
 
   async function submit() {
-    if (!itemMasterId || !seriesId) return;
-    setBusy(true);
+    if (!itemMasterId || !seriesId || !number.trim()) return;
+    setBusy(true); setError(null);
     try {
-      const jc = await createJobCard({ itemMasterId, seriesId, dueDate: dueDate || undefined, pieceCount: Number(pieceCount) || undefined, notes: notes || undefined });
+      const jc = await createJobCard({ itemMasterId, seriesId, number: number.trim(), dueDate: dueDate || undefined, pieceCount: Number(pieceCount) || undefined, notes: notes || undefined });
       onCreated(jc.jobNo);
-    } finally {
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not create the job card.");
       setBusy(false);
     }
   }
@@ -288,6 +292,11 @@ function NewJobCardModal({ onClose, onCreated }: { onClose: () => void; onCreate
             </select>
             {availableSeries.length === 0 && <p className="text-[11px] text-amber-700 mt-1">No effective series yet — add one in Settings first.</p>}
           </div>
+          <div>
+            <label className="block text-[11px] font-medium text-slate-600 mb-1">Job Card Number *</label>
+            <input className="w-full h-9 px-2 border border-slate-200 rounded text-[12px]" value={number} onChange={(e) => setNumber(e.target.value)} placeholder="e.g. 015" />
+            {selName && number.trim() && <p className="text-[11px] text-slate-500 mt-1">Full no.: <span className="mono font-medium text-slate-800">{selName}-{number.trim()}</span></p>}
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-[11px] font-medium text-slate-600 mb-1">Pieces</label>
@@ -302,10 +311,11 @@ function NewJobCardModal({ onClose, onCreated }: { onClose: () => void; onCreate
             <label className="block text-[11px] font-medium text-slate-600 mb-1">Notes</label>
             <input className="w-full h-9 px-2 border border-slate-200 rounded text-[12px]" value={notes} onChange={(e) => setNotes(e.target.value)} />
           </div>
+          {error && <p className="text-[11px] text-rose-600">{error}</p>}
         </div>
         <div className="px-4 py-3 border-t border-slate-100 flex justify-end gap-2">
           <button onClick={onClose} className="h-8 px-3 rounded border border-slate-200 text-[12px] text-slate-700 hover:bg-slate-50">Cancel</button>
-          <button disabled={!itemMasterId || !seriesId || busy} onClick={submit} className="h-8 px-3 rounded bg-blue-800 text-white text-[12px] font-medium hover:bg-blue-900 disabled:opacity-50">
+          <button disabled={!itemMasterId || !seriesId || !number.trim() || busy} onClick={submit} className="h-8 px-3 rounded bg-blue-800 text-white text-[12px] font-medium hover:bg-blue-900 disabled:opacity-50">
             {busy ? "Creating…" : "Create Job Card"}
           </button>
         </div>

@@ -433,13 +433,16 @@ router.get(
 const createSchema = z.object({
   itemMasterId: z.string().min(1),
   seriesId: z.string().min(1),
+  // Manual number entered by the user (no auto-increment). Combined with the
+  // series prefix to form the full job number, which must be unique.
+  number: z.string().trim().min(1, "Job card number is required").max(30),
   dueDate: z.coerce.date().optional(),
   pieceCount: z.number().int().positive().optional(),
   notes: z.string().optional(),
 });
 router.post(
   "/job-cards",
-  requireRole("SUPER_ADMIN", "MANAGER"),
+  requirePermission("job_cards", "ADD"),
   asyncHandler(async (req, res) => {
     const body = createSchema.parse(req.body);
     const item = await prisma.product.findUnique({ where: { id: body.itemMasterId } });
@@ -448,32 +451,39 @@ router.post(
     const series = await prisma.prodJobCardSeries.findUnique({ where: { id: body.seriesId } });
     if (!series || !series.isActive) throw badRequest("Unknown or inactive job card series — pick one in Settings first");
     if (series.effectiveFrom > new Date()) throw badRequest(`Series "${series.name}" is not effective yet (from ${series.effectiveFrom.toISOString().slice(0, 10)})`);
-    const num = await nextSequenceNumber(`jobcard-series-${series.id}`, series.padWidth);
-    const jobNo = `${series.name}-${num}`;
+    const jobNo = `${series.name}-${body.number}`;
 
-    const jc = await prisma.prodJobCard.create({
-      data: {
-        jobNo,
-        seriesId: series.id,
-        itemMasterId: item.id,
-        targetPurityId: item.purityId,
-        status: "InProduction",
-        pieceCount: body.pieceCount ?? null,
-        dueDate: body.dueDate ?? null,
-        notes: body.notes ?? "",
-        createdById: req.user!.id,
-        stages: {
-          create: STAGE_ORDER.map((stageName, i) => ({
-            stageName: stageName as never,
-            sequenceOrder: i,
-            status: "Pending",
-          })),
+    let jc;
+    try {
+      jc = await prisma.prodJobCard.create({
+        data: {
+          jobNo,
+          seriesId: series.id,
+          itemMasterId: item.id,
+          targetPurityId: item.purityId,
+          status: "InProduction",
+          pieceCount: body.pieceCount ?? null,
+          dueDate: body.dueDate ?? null,
+          notes: body.notes ?? "",
+          createdById: req.user!.id,
+          stages: {
+            create: STAGE_ORDER.map((stageName, i) => ({
+              stageName: stageName as never,
+              sequenceOrder: i,
+              status: "Pending",
+            })),
+          },
+          activity: {
+            create: { text: `Job card created from Item Master (${item.designName})` },
+          },
         },
-        activity: {
-          create: { text: `Job card created from Item Master (${item.designName})` },
-        },
-      },
-    });
+      });
+    } catch (e) {
+      if (typeof e === "object" && e !== null && (e as { code?: string }).code === "P2002") {
+        throw badRequest(`Job card ${jobNo} already exists — choose a different number`);
+      }
+      throw e;
+    }
     res.status(201).json({ id: jc.id, jobNo: jc.jobNo });
   })
 );
@@ -566,6 +576,8 @@ router.get(
         include: {
           ...jobCardInclude,
           itemMaster: { include: { images: true, category: true } },
+          linkedTo: { select: { jobNo: true } },
+          linkedFrom: { select: { jobNo: true } },
         },
       }),
       loadTiers(),
@@ -578,6 +590,44 @@ router.get(
     const effectiveSilverValue = jc.manualSilverValue ?? silverValue;
     const todaysRate = jc.todaysSilverRate ?? baseRate;
     const todaysSaleValue = +(t.pureEq * todaysRate + t.stonesConsumed).toFixed(2);
+
+    // Reference-linked job cards (union of both directions), with per-card totals
+    // and a combined summary so the whole set's record can be pulled at once.
+    const linkedJobNos = [...new Set([...row.linkedTo, ...row.linkedFrom].map((x) => x.jobNo))];
+    const linkedRows = linkedJobNos.length
+      ? await prisma.prodJobCard.findMany({
+          where: { jobNo: { in: linkedJobNos } },
+          include: { ...jobCardInclude, itemMaster: { include: { category: true } } },
+        })
+      : [];
+    const linkedFull = linkedRows.map((r2) => {
+      const jc2 = mapJobCard(r2);
+      const t2 = jcTotals(jc2, tiers);
+      return { jc2, t2, itemName: r2.itemMaster.designName };
+    });
+    const linked = linkedFull.map(({ jc2, t2, itemName }) => ({
+      jobNo: jc2.id,
+      itemName,
+      status: jc2.status,
+      grossWeight: grossWeight(jc2),
+      pureEq: t2.pureEq,
+      labour: t2.labour,
+      stonesConsumed: t2.stonesConsumed,
+    }));
+    const sum = (nums: number[]) => +nums.reduce((s, n) => s + n, 0).toFixed(3);
+    const combinedPureEq = sum([t.pureEq, ...linked.map((l) => l.pureEq)]);
+    const combinedStones = +[t.stonesConsumed, ...linked.map((l) => l.stonesConsumed)].reduce((s, n) => s + n, 0).toFixed(2);
+    const combined = linked.length
+      ? {
+          count: linked.length + 1,
+          grossWeight: sum([grossWeight(jc), ...linked.map((l) => l.grossWeight)]),
+          pureEq: combinedPureEq,
+          labour: +[t.labour, ...linked.map((l) => l.labour)].reduce((s, n) => s + n, 0).toFixed(2),
+          stonesConsumed: combinedStones,
+          silverValue: +(combinedPureEq * baseRate).toFixed(2),
+          saleValue: +(combinedPureEq * baseRate + combinedStones).toFixed(2),
+        }
+      : null;
     res.json({
       jobCard: jc,
       tiers,
@@ -607,7 +657,48 @@ router.get(
         productionRate: rateForLabel(jc.targetPurity, tiers, baseRate),
       },
       stonesByType: stonesByType(jc),
+      linked,
+      combined,
     });
+  })
+);
+
+// Link / unlink reference job cards. Bidirectional: linking A→B shows on both.
+const linkSchema = z.object({ targetJobNo: z.string().min(1) });
+router.post(
+  "/job-cards/:jobNo/links",
+  requirePermission("job_cards", "UPDATE"),
+  asyncHandler(async (req, res) => {
+    const { targetJobNo } = linkSchema.parse(req.body);
+    if (targetJobNo === req.params.jobNo) throw badRequest("A job card cannot be linked to itself");
+    const [self, target] = await Promise.all([
+      prisma.prodJobCard.findUnique({ where: { jobNo: req.params.jobNo }, select: { id: true } }),
+      prisma.prodJobCard.findUnique({ where: { jobNo: targetJobNo }, select: { id: true } }),
+    ]);
+    if (!self) throw notFound("Job card not found");
+    if (!target) throw badRequest(`No job card numbered "${targetJobNo}"`);
+    await prisma.prodJobCard.update({
+      where: { id: self.id },
+      data: { linkedTo: { connect: { id: target.id } } },
+    });
+    res.json({ ok: true });
+  })
+);
+router.delete(
+  "/job-cards/:jobNo/links/:targetJobNo",
+  requirePermission("job_cards", "UPDATE"),
+  asyncHandler(async (req, res) => {
+    const [self, target] = await Promise.all([
+      prisma.prodJobCard.findUnique({ where: { jobNo: req.params.jobNo }, select: { id: true } }),
+      prisma.prodJobCard.findUnique({ where: { jobNo: req.params.targetJobNo }, select: { id: true } }),
+    ]);
+    if (!self || !target) throw notFound("Job card not found");
+    // The link may live in either direction — clear both to fully unlink.
+    await prisma.prodJobCard.update({
+      where: { id: self.id },
+      data: { linkedTo: { disconnect: { id: target.id } }, linkedFrom: { disconnect: { id: target.id } } },
+    });
+    res.json({ ok: true });
   })
 );
 

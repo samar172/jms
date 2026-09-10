@@ -1404,6 +1404,12 @@ model ProdJobCard {
   activity  ProdActivity[]
   reversals ProdReversal[]
 
+  // Reference links between job cards (e.g. a necklace + earrings made together
+  // in different series). Symmetric in practice: the API unions both sides when
+  // showing a card's linked cards. Implicit join table `_JobCardLinks`.
+  linkedTo   ProdJobCard[] @relation("JobCardLinks")
+  linkedFrom ProdJobCard[] @relation("JobCardLinks")
+
   @@index([status])
 }
 

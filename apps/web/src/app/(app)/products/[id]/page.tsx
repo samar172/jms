@@ -194,15 +194,21 @@ function SeriesPickModal({ itemMasterId, jobCardSeries, onClose, onCreated }: {
   const today = new Date().toISOString().slice(0, 10);
   const availableSeries = jobCardSeries.filter((s) => s.effectiveFrom <= today);
   const [seriesId, setSeriesId] = useState("");
+  const [number, setNumber] = useState("");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const selName = availableSeries.find((s) => s.id === seriesId)?.name;
 
   async function submit() {
-    if (!seriesId) return;
-    setBusy(true);
+    if (!seriesId || !number.trim()) return;
+    setBusy(true); setError(null);
     try {
-      const jc = await createJobCard({ itemMasterId, seriesId });
+      const jc = await createJobCard({ itemMasterId, seriesId, number: number.trim() });
       onCreated(jc.jobNo);
-    } finally { setBusy(false); }
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not create the job card.");
+      setBusy(false);
+    }
   }
 
   return (
@@ -218,10 +224,16 @@ function SeriesPickModal({ itemMasterId, jobCardSeries, onClose, onCreated }: {
             </select>
             {availableSeries.length === 0 && <p className="text-[11px] text-amber-700 mt-1">No effective series yet — add one in Settings first.</p>}
           </div>
+          <div>
+            <label className="block text-[11px] font-medium text-slate-600 mb-1">Job Card Number *</label>
+            <input className="w-full h-9 px-2 border border-slate-200 rounded text-[12px]" value={number} onChange={(e) => setNumber(e.target.value)} placeholder="e.g. 015" />
+            {selName && number.trim() && <p className="text-[11px] text-slate-500 mt-1">Full no.: <span className="mono font-medium text-slate-800">{selName}-{number.trim()}</span></p>}
+          </div>
+          {error && <p className="text-[11px] text-rose-600">{error}</p>}
         </div>
         <div className="px-4 py-3 border-t border-slate-100 flex justify-end gap-2">
           <button onClick={onClose} className="h-8 px-3 rounded border border-slate-200 text-[12px]">Cancel</button>
-          <button disabled={!seriesId || busy} onClick={submit} className="h-8 px-3 rounded bg-blue-800 text-white text-[12px] font-medium disabled:opacity-50">{busy ? "Creating…" : "Create"}</button>
+          <button disabled={!seriesId || !number.trim() || busy} onClick={submit} className="h-8 px-3 rounded bg-blue-800 text-white text-[12px] font-medium disabled:opacity-50">{busy ? "Creating…" : "Create"}</button>
         </div>
       </div>
     </div>

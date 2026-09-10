@@ -102,6 +102,8 @@ export interface JobCardDetail {
     productionRate: number;
   };
   stonesByType: { type: string; carat: number; value: number }[];
+  linked: { jobNo: string; itemName: string; status: string; grossWeight: number; pureEq: number; labour: number; stonesConsumed: number }[];
+  combined: { count: number; grossWeight: number; pureEq: number; labour: number; stonesConsumed: number; silverValue: number; saleValue: number } | null;
 }
 
 export const useProdSettings = () => useApi<ProdSettings>("/api/production/settings");
@@ -147,7 +149,10 @@ export const useLabourLedger = () => useApi<Record<string, LabourLedgerRow[]>>("
 const post = (path: string, body?: unknown) => apiFetch(`/api/production${path}`, { method: "POST", body });
 const del = (path: string) => apiFetch(`/api/production${path}`, { method: "DELETE" });
 
-export const createJobCard = (body: { itemMasterId: string; seriesId: string; dueDate?: string; pieceCount?: number; notes?: string }) =>
+export const linkJobCard = (jobNo: string, targetJobNo: string) => post(`/job-cards/${jobNo}/links`, { targetJobNo });
+export const unlinkJobCard = (jobNo: string, targetJobNo: string) => del(`/job-cards/${jobNo}/links/${encodeURIComponent(targetJobNo)}`);
+
+export const createJobCard = (body: { itemMasterId: string; seriesId: string; number: string; dueDate?: string; pieceCount?: number; notes?: string }) =>
   post("/job-cards", body) as Promise<{ id: string; jobNo: string }>;
 export const issueBulkStock = (body: { karigarId: string; purityId: string; weightGrams: number; note?: string }) =>
   post("/bulk-stock", body);
