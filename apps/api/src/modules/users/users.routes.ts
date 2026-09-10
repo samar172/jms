@@ -122,6 +122,7 @@ const updateSchema = z.object({
   appRoleId: z.string().optional(),
   isActive: z.boolean().optional(),
   name: z.string().min(1).optional(),
+  email: z.string().email().optional(),
 });
 
 router.patch(
@@ -131,6 +132,12 @@ router.patch(
     if (!before) throw notFound("User not found");
     const body = updateSchema.parse(req.body);
 
+    // Safety: an admin must not lock themselves out by deactivating their own
+    // account (they'd be signed out with no way back in).
+    if (body.isActive === false && req.params.id === req.user!.id) {
+      throw badRequest("You cannot deactivate your own account");
+    }
+
     // Resolve role change (either field) into both columns; leave role alone
     // when the caller sent neither.
     const roleData =
@@ -138,21 +145,30 @@ router.patch(
         ? await resolveRoleInputs({ role: body.role, appRoleId: body.appRoleId })
         : null;
 
-    const user = await prisma.user.update({
-      where: { id: req.params.id },
-      data: {
-        isActive: body.isActive,
-        name: body.name,
-        ...(roleData ?? {}),
-      },
-      select: userSelect,
-    });
+    let user;
+    try {
+      user = await prisma.user.update({
+        where: { id: req.params.id },
+        data: {
+          isActive: body.isActive,
+          name: body.name,
+          email: body.email,
+          ...(roleData ?? {}),
+        },
+        select: userSelect,
+      });
+    } catch (e) {
+      if (typeof e === "object" && e !== null && (e as { code?: string }).code === "P2002") {
+        throw badRequest("That email address is already in use by another user");
+      }
+      throw e;
+    }
     await recordAudit(prisma, {
       userId: req.user!.id,
       action: "UPDATE",
       entityType: "User",
       entityId: user.id,
-      before: { role: before.role, isActive: before.isActive, name: before.name },
+      before: { role: before.role, isActive: before.isActive, name: before.name, email: before.email },
       after: user,
       ipAddress: req.ip ?? null,
     });

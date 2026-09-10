@@ -27,6 +27,7 @@ export default function UsersPage() {
   const { data: roles } = useApi<RoleOption[]>("/api/roles");
   const [showAdd, setShowAdd] = useState(false);
   const [tempPassword, setTempPassword] = useState<{ email: string; password: string } | null>(null);
+  const [editUser, setEditUser] = useState<UserRow | null>(null);
 
   async function updateRole(id: string, appRoleId: string) {
     await apiFetch(`/api/users/${id}`, { method: "PATCH", body: { appRoleId } });
@@ -127,7 +128,10 @@ export default function UsersPage() {
                     </button>
                   </td>
                   <td className="text-ink2">{formatDate(u.createdAt)}</td>
-                  <td className="text-right">
+                  <td className="text-right whitespace-nowrap">
+                    <button className="text-accent text-xs mr-3" onClick={() => setEditUser(u)}>
+                      Edit
+                    </button>
                     <button className="text-accent text-xs" onClick={() => resetPassword(u.id, u.email)}>
                       Reset Password
                     </button>
@@ -143,6 +147,53 @@ export default function UsersPage() {
               )}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {editUser && (
+        <EditUserModal user={editUser} onClose={() => setEditUser(null)} onSaved={() => { setEditUser(null); mutate(); }} />
+      )}
+    </div>
+  );
+}
+
+function EditUserModal({ user, onClose, onSaved }: { user: UserRow; onClose: () => void; onSaved: () => void }) {
+  const [name, setName] = useState(user.name);
+  const [email, setEmail] = useState(user.email);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save() {
+    setBusy(true); setError(null);
+    try {
+      await apiFetch(`/api/users/${user.id}`, { method: "PATCH", body: { name: name.trim(), email: email.trim() } });
+      onSaved();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not save.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50" onClick={onClose}>
+      <div className="bg-white rounded-lg w-[400px] max-w-[95vw] shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="px-4 py-3 border-b border-slate-100"><h2 className="text-[14px] font-semibold">Edit user</h2></div>
+        <div className="p-4 space-y-3">
+          <label className="block">
+            <span className="text-[12px] text-slate-600">Name</span>
+            <input value={name} onChange={(e) => setName(e.target.value)} className="mt-1 h-9 w-full px-2 rounded border border-slate-200 text-[13px]" />
+          </label>
+          <label className="block">
+            <span className="text-[12px] text-slate-600">Email</span>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="mt-1 h-9 w-full px-2 rounded border border-slate-200 text-[13px]" />
+          </label>
+          {error && <p className="text-[12px] text-rose-600">{error}</p>}
+        </div>
+        <div className="px-4 py-3 border-t border-slate-100 flex justify-end gap-2">
+          <button onClick={onClose} className="h-8 px-3 rounded border border-slate-200 text-[12px]">Cancel</button>
+          <button onClick={save} disabled={busy || !name.trim() || !email.trim()} className="h-8 px-3 rounded bg-blue-800 text-white text-[12px] font-medium disabled:opacity-50">
+            {busy ? "Saving…" : "Save"}
+          </button>
         </div>
       </div>
     </div>
