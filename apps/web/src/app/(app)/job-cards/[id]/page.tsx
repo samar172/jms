@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { usePermissions } from "@/lib/permissions";
 import {
-  useJobCard, useProdKarigars, useProdSettings,
+  useJobCard, useJobCards, useProdKarigars, useProdSettings,
   assignKarigar, castOutput, editCastOutput, issueMaterial, reconcile, editReconcile, cancelReconcile, jadaiOutput, editJadaiOutput, kundanOutput, editKundanOutput, findingOutput, editFindingOutput,
   issueStones, returnStones, editStone, removeStone, removeIssue, removeAssignment, clearAssignmentOutput, approveStage, unapproveStage, closeJobCard, reopenJobCard, toggleHold, updateJobCardMeta,
   linkJobCard, unlinkJobCard,
@@ -159,16 +159,21 @@ function SumRow({ label, value, strong }: { label: string; value: string; strong
   );
 }
 function LinkedCards({ data, jobNo, canEdit, onChange }: { data: JobCardDetail; jobNo: string; canEdit: boolean; onChange: () => void }) {
+  const { data: allCards } = useJobCards();
   const [adding, setAdding] = useState(false);
   const [target, setTarget] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const c = data.combined;
 
+  // Only existing job cards, excluding this one and those already linked.
+  const linkedSet = new Set(data.linked.map((l) => l.jobNo));
+  const options = (allCards ?? []).filter((x) => x.id !== jobNo && !linkedSet.has(x.id));
+
   async function add() {
-    if (!target.trim()) return;
+    if (!target) return;
     setBusy(true); setError(null);
-    try { await linkJobCard(jobNo, target.trim()); setTarget(""); setAdding(false); onChange(); }
+    try { await linkJobCard(jobNo, target); setTarget(""); setAdding(false); onChange(); }
     catch (e) { setError(e instanceof ApiError ? e.message : "Could not link."); }
     finally { setBusy(false); }
   }
@@ -188,19 +193,24 @@ function LinkedCards({ data, jobNo, canEdit, onChange }: { data: JobCardDetail; 
       <div className="p-3 space-y-2">
         {adding && (
           <div className="flex gap-2">
-            <input value={target} onChange={(e) => setTarget(e.target.value)} placeholder="Job no. e.g. N-015" className="h-8 flex-1 px-2 rounded border border-slate-200 text-[12px]" />
-            <button onClick={add} disabled={busy || !target.trim()} className="h-8 px-3 rounded bg-blue-800 text-white text-[12px] disabled:opacity-50">Link</button>
+            <select value={target} onChange={(e) => setTarget(e.target.value)} className="h-8 flex-1 px-2 rounded border border-slate-200 text-[12px]">
+              <option value="">Select a job card…</option>
+              {options.map((x) => <option key={x.id} value={x.id}>{x.id} · {x.itemName}</option>)}
+            </select>
+            <button onClick={add} disabled={busy || !target} className="h-8 px-3 rounded bg-blue-800 text-white text-[12px] disabled:opacity-50">Link</button>
           </div>
         )}
+        {adding && options.length === 0 && <p className="text-[11px] text-amber-700">No other job cards available to link.</p>}
         {data.linked.length === 0 && !adding && <p className="text-[12px] text-slate-400">No linked job cards.</p>}
         {data.linked.map((l) => (
-          <div key={l.jobNo} className="flex items-center justify-between border border-slate-100 rounded px-2.5 py-1.5">
-            <Link href={`/job-cards/${l.jobNo}`} className="text-[12px] min-w-0">
+          <div key={l.jobNo} className="flex items-center justify-between gap-2 border border-slate-100 rounded hover:border-blue-200 hover:bg-blue-50/40">
+            <Link href={`/job-cards/${l.jobNo}`} className="flex-1 min-w-0 px-2.5 py-1.5 text-[12px] flex items-center gap-1.5" title={`Open ${l.jobNo}`}>
               <span className="mono text-blue-800 font-medium">{l.jobNo}</span>
-              <span className="text-slate-600 ml-1.5">{l.itemName}</span>
-              <span className="text-[10px] text-slate-400 ml-1.5">{gm(l.grossWeight)} · {money(l.labour)}</span>
+              <span className="text-slate-600 truncate">{l.itemName}</span>
+              <span className="text-[10px] text-slate-400 shrink-0">{gm(l.grossWeight)} · {money(l.labour)}</span>
+              <span className="text-blue-400 ml-auto shrink-0">→</span>
             </Link>
-            {canEdit && <button onClick={() => remove(l.jobNo)} disabled={busy} title="Unlink" className="text-slate-400 hover:text-rose-600 text-[13px] shrink-0 ml-2">✕</button>}
+            {canEdit && <button onClick={() => remove(l.jobNo)} disabled={busy} title="Unlink" className="text-slate-400 hover:text-rose-600 text-[13px] shrink-0 pr-2">✕</button>}
           </div>
         ))}
         {error && <p className="text-[11px] text-rose-600">{error}</p>}
