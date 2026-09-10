@@ -6,6 +6,16 @@ import { useJobCards, useItemMasters, useProdSettings, useDeletedJobCards, creat
 import { resolveMediaUrl, ApiError } from "@/lib/api";
 
 const TABS = ["all", "Draft", "In Production", "On Hold", "Reconciliation", "Closed", "Deleted"];
+const COLS: { key: string; label: string; align?: string }[] = [
+  { key: "id", label: "Job No." },
+  { key: "itemName", label: "Item" },
+  { key: "stage", label: "Stage" },
+  { key: "dueDate", label: "Due Date" },
+  { key: "createdAt", label: "Created" },
+  { key: "linked", label: "Linked" },
+  { key: "grossWeightEst", label: "GW Est", align: "text-right" },
+  { key: "status", label: "Status" },
+];
 const today = () => new Date().toISOString().slice(0, 10);
 
 export default function JobCardsPage() {
@@ -20,6 +30,8 @@ export default function JobCardsPage() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [overdueOnly, setOverdueOnly] = useState(false);
+  const [sortKey, setSortKey] = useState<string>("createdAt");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [showNew, setShowNew] = useState(false);
   const [preview, setPreview] = useState<{ url: string; x: number; y: number } | null>(null);
 
@@ -61,6 +73,29 @@ export default function JobCardsPage() {
   const activeFilters =
     cat !== "all" || stage !== "all" || series !== "all" || overdueOnly ||
     !!fromDate || !!toDate || query.trim().length > 0;
+
+  function toggleSort(key: string) {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir("asc"); }
+  }
+  const sortVal = (r: JobCardListRow, key: string): string | number => {
+    switch (key) {
+      case "id": return r.id;
+      case "itemName": return r.itemName;
+      case "stage": return r.activeStage ?? "";
+      case "dueDate": return r.dueDate ?? "";
+      case "createdAt": return r.createdAt ?? "";
+      case "grossWeightEst": return r.grossWeightEst;
+      case "status": return r.status;
+      case "linked": return r.linked.length;
+      default: return "";
+    }
+  };
+  const sorted = [...visible].sort((a, b) => {
+    const av = sortVal(a, sortKey), bv = sortVal(b, sortKey);
+    const cmp = typeof av === "number" && typeof bv === "number" ? av - bv : String(av).localeCompare(String(bv));
+    return sortDir === "asc" ? cmp : -cmp;
+  });
 
   return (
     <div className="flex-1 flex flex-col">
@@ -157,16 +192,19 @@ export default function JobCardsPage() {
           <thead className="sticky top-0 bg-slate-50 z-10">
             <tr className="h-9 border-b border-slate-200 text-left">
               <th className="px-3 w-12"></th>
-              {["Job No.", "Item", "Stage", "Due Date", "GW Est", "Status"].map((h, i) => (
-                <th key={h} className={`px-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold ${i === 4 ? "text-right" : ""}`}>{h}</th>
+              {COLS.map((col) => (
+                <th key={col.key} onClick={() => toggleSort(col.key)}
+                  className={`px-3 text-[10px] uppercase tracking-wider font-semibold cursor-pointer select-none whitespace-nowrap ${sortKey === col.key ? "text-blue-700" : "text-slate-500 hover:text-slate-700"} ${col.align ?? ""}`}>
+                  {col.label}{sortKey === col.key ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
+                </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {visible.length === 0 && (
-              <tr><td colSpan={7} className="py-14 text-center text-[13px] text-slate-500">No job cards match these filters</td></tr>
+            {sorted.length === 0 && (
+              <tr><td colSpan={9} className="py-14 text-center text-[13px] text-slate-500">No job cards match these filters</td></tr>
             )}
-            {visible.map((r: JobCardListRow) => {
+            {sorted.map((r: JobCardListRow) => {
               const overdueRow = r.status !== "Closed" && r.dueDate && r.dueDate < today();
               return (
                 <tr key={r.id} onClick={() => router.push(`/job-cards/${r.id}`)} className="border-b border-slate-100 cursor-pointer h-12 hover:bg-slate-50">
@@ -193,6 +231,14 @@ export default function JobCardsPage() {
                   </td>
                   <td className="px-3 text-[12px] text-slate-700">{r.activeStage ?? <span className="text-slate-400">Not issued</span>}</td>
                   <td className={`px-3 text-[12px] mono ${overdueRow ? "text-rose-600 font-medium" : "text-slate-600"}`}>{r.dueDate || "—"}</td>
+                  <td className="px-3 text-[11px] mono text-slate-500 whitespace-nowrap">{r.createdAt || "—"}</td>
+                  <td className="px-3 text-[11px] whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                    {r.linked.length === 0
+                      ? <span className="text-slate-300">—</span>
+                      : r.linked.map((ln) => (
+                          <button key={ln} onClick={() => router.push(`/job-cards/${ln}`)} className="mono text-blue-700 hover:underline mr-1.5">{ln}</button>
+                        ))}
+                  </td>
                   <td className="px-3 text-[12px] text-right mono text-slate-700">{r.grossWeightEst}g</td>
                   <td className="px-3"><StatusPill status={r.status} /></td>
                 </tr>
