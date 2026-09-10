@@ -224,7 +224,7 @@ export const deleteFindingName = (id: string) => del(`/finding-names/${id}`);
 export const addWorkTypeName = (label: string) => post("/work-type-names", { label });
 export const updateWorkTypeName = (id: string, label: string) => patch(`/work-type-names/${id}`, { label });
 export const deleteWorkTypeName = (id: string) => del(`/work-type-names/${id}`);
-export const addJobCardSeries = (body: { name: string; startAt: number; padWidth?: number; effectiveFrom: string }) => post("/job-card-series", body);
+export const addJobCardSeries = (body: { name: string; startAt?: number; padWidth?: number; effectiveFrom?: string }) => post("/job-card-series", body);
 export const updateJobCardSeries = (id: string, body: { name?: string; startAt?: number; padWidth?: number; effectiveFrom?: string }) => patch(`/job-card-series/${id}`, body);
 export const deleteJobCardSeries = (id: string) => del(`/job-card-series/${id}`);
 export const createKarigar = (body: Record<string, unknown>) => post("/karigars", body);

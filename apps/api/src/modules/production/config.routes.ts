@@ -246,9 +246,11 @@ router.patch(
 // order (SerialSequence, keyed by series id, is the atomic counter).
 const seriesSchema = z.object({
   name: z.string().trim().min(1, "Series name (prefix) is required").max(10),
-  startAt: z.number().int().positive(),
+  // Numbers are entered by hand, so start/pad/effective are optional legacy
+  // fields kept only for existing rows — a series just needs a name now.
+  startAt: z.number().int().positive().optional(),
   padWidth: z.number().int().min(1).max(10).optional(),
-  effectiveFrom: z.coerce.date(),
+  effectiveFrom: z.coerce.date().optional(),
 });
 
 /** Prisma unique-constraint violation. */
@@ -268,22 +270,17 @@ router.post(
   requirePermission("settings", "ADD"),
   asyncHandler(async (req, res) => {
     const body = seriesSchema.parse(req.body);
-    const padWidth = body.padWidth ?? String(body.startAt).length;
+    const startAt = body.startAt ?? 1;
+    const padWidth = body.padWidth ?? String(startAt).length;
     let created;
     try {
       created = await prisma.prodJobCardSeries.create({
-        data: { name: body.name, startAt: body.startAt, padWidth, effectiveFrom: body.effectiveFrom },
+        data: { name: body.name, startAt, padWidth, effectiveFrom: body.effectiveFrom ?? new Date() },
       });
     } catch (e) {
       if (isDuplicate(e)) throw badRequest(`A job-card series named "${body.name}" already exists`);
       throw e;
     }
-    // Seed the atomic counter so the first number issued equals startAt.
-    await prisma.serialSequence.upsert({
-      where: { bucketKey: `jobcard-series-${created.id}` },
-      create: { bucketKey: `jobcard-series-${created.id}`, lastValue: body.startAt - 1 },
-      update: {},
-    });
     res.status(201).json(created);
   })
 );

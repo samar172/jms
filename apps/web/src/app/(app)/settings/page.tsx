@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useProdSettings, updateSettings, addTier, updateTier, deleteTier, addSubItemName, updateSubItemName, deleteSubItemName, addFindingName, updateFindingName, deleteFindingName, addWorkTypeName, updateWorkTypeName, deleteWorkTypeName, addJobCardSeries, deleteJobCardSeries, type ProdSettings, type JobCardSeries } from "@/lib/production";
+import { ApiError } from "@/lib/api";
 
 const RATE_LABELS: Record<string, string> = {
   castingWastagePct: "Casting wastage %",
@@ -185,18 +186,18 @@ function WorkTypeNameChip({ name, onChanged }: { name: { id: string; label: stri
 /* --------------------------- Job Card Series -------------------------------- */
 function JobCardSeriesSection({ series, onChanged }: { series: JobCardSeries[]; onChanged: () => void }) {
   const [name, setName] = useState("");
-  const [startAt, setStartAt] = useState("001");
-  const [effectiveFrom, setEffectiveFrom] = useState(new Date().toISOString().slice(0, 10));
   const [busy, setBusy] = useState(false);
-  const today = new Date().toISOString().slice(0, 10);
+  const [error, setError] = useState<string | null>(null);
 
   async function add() {
-    if (!name.trim() || !Number(startAt)) return;
-    setBusy(true);
+    if (!name.trim()) return;
+    setBusy(true); setError(null);
     try {
-      await addJobCardSeries({ name: name.trim(), startAt: Number(startAt), padWidth: startAt.length, effectiveFrom });
-      setName(""); setStartAt("001");
+      await addJobCardSeries({ name: name.trim() });
+      setName("");
       onChanged();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not add series.");
     } finally { setBusy(false); }
   }
 
@@ -204,21 +205,14 @@ function JobCardSeriesSection({ series, onChanged }: { series: JobCardSeries[]; 
     <div className="bg-white border border-slate-200 rounded-md mb-4">
       <div className="px-4 py-2.5 text-[11px] uppercase tracking-wider text-slate-500 font-semibold border-b border-slate-100">Job Card Series (जॉब कार्ड सीरीज़)</div>
       <div className="p-4">
-        <p className="text-[11px] text-slate-400 mb-2">Each series numbers independently (e.g. N-001, N-002 … alongside P-001, P-002 …). A series only shows up when creating a job card once its effective date has arrived.</p>
+        <p className="text-[11px] text-slate-400 mb-2">A series is just a prefix (e.g. N, P, C). When creating a job card you pick a series and type the number yourself (e.g. N-015).</p>
         <table className="w-full mb-3">
-          <thead><tr className="text-left text-[10px] uppercase tracking-wider text-slate-400"><th className="pb-1">Series Name</th><th className="pb-1">Start By</th><th className="pb-1">Effective</th><th className="pb-1">Status</th><th /></tr></thead>
+          <thead><tr className="text-left text-[10px] uppercase tracking-wider text-slate-400"><th className="pb-1">Series Name</th><th /></tr></thead>
           <tbody>
-            {series.length === 0 && <tr><td colSpan={5} className="py-2 text-[12px] text-slate-400">No series yet — add one below.</td></tr>}
+            {series.length === 0 && <tr><td colSpan={2} className="py-2 text-[12px] text-slate-400">No series yet — add one below.</td></tr>}
             {series.map((s) => (
               <tr key={s.id} className="border-t border-slate-50 h-9">
                 <td className="text-[12px] font-medium text-slate-900">{s.name}</td>
-                <td className="text-[12px] mono text-slate-600">{String(s.startAt).padStart(s.padWidth, "0")}</td>
-                <td className="text-[12px] mono text-slate-600">{s.effectiveFrom}</td>
-                <td className="text-[11px]">
-                  {s.effectiveFrom <= today
-                    ? <span className="text-emerald-700">Active</span>
-                    : <span className="text-amber-700">Starts {s.effectiveFrom}</span>}
-                </td>
                 <td className="text-right">
                   <button onClick={async () => { if (confirm(`Remove series "${s.name}"?`)) { await deleteJobCardSeries(s.id); onChanged(); } }} className="h-7 px-2 rounded border border-slate-200 text-[11px] text-rose-600 hover:bg-rose-50">Remove</button>
                 </td>
@@ -228,19 +222,12 @@ function JobCardSeriesSection({ series, onChanged }: { series: JobCardSeries[]; 
         </table>
         <div className="flex items-end gap-2">
           <div>
-            <label className="block text-[11px] font-medium text-slate-600 mb-1">Series Name</label>
-            <input placeholder="e.g. N" className="h-8 w-24 px-2 border border-slate-200 rounded text-[12px]" value={name} onChange={(e) => setName(e.target.value)} />
+            <label className="block text-[11px] font-medium text-slate-600 mb-1">Series Name (prefix)</label>
+            <input placeholder="e.g. N" className="h-8 w-40 px-2 border border-slate-200 rounded text-[12px]" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") add(); }} />
           </div>
-          <div>
-            <label className="block text-[11px] font-medium text-slate-600 mb-1">Start By</label>
-            <input placeholder="001" className="h-8 w-24 px-2 border border-slate-200 rounded text-[12px] mono" value={startAt} onChange={(e) => setStartAt(e.target.value.replace(/[^0-9]/g, ""))} />
-          </div>
-          <div>
-            <label className="block text-[11px] font-medium text-slate-600 mb-1">Effective</label>
-            <input type="date" className="h-8 px-2 border border-slate-200 rounded text-[12px]" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} />
-          </div>
-          <button disabled={!name.trim() || !Number(startAt) || busy} onClick={add} className="h-8 px-2.5 rounded bg-blue-800 text-white text-[11px] disabled:opacity-50">+ Add series</button>
+          <button disabled={!name.trim() || busy} onClick={add} className="h-8 px-2.5 rounded bg-blue-800 text-white text-[11px] disabled:opacity-50">+ Add series</button>
         </div>
+        {error && <p className="text-[11px] text-rose-600 mt-2">{error}</p>}
       </div>
     </div>
   );
