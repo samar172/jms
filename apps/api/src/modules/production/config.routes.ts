@@ -245,11 +245,16 @@ router.patch(
 // picks one when creating a job card; numbers within a series always run in
 // order (SerialSequence, keyed by series id, is the atomic counter).
 const seriesSchema = z.object({
-  name: z.string().min(1),
+  name: z.string().trim().min(1, "Series name (prefix) is required").max(10),
   startAt: z.number().int().positive(),
   padWidth: z.number().int().min(1).max(10).optional(),
   effectiveFrom: z.coerce.date(),
 });
+
+/** Prisma unique-constraint violation. */
+function isDuplicate(error: unknown): boolean {
+  return typeof error === "object" && error !== null && (error as { code?: string }).code === "P2002";
+}
 router.get(
   "/job-card-series",
   requirePermission("settings", "VIEW"),
@@ -264,9 +269,15 @@ router.post(
   asyncHandler(async (req, res) => {
     const body = seriesSchema.parse(req.body);
     const padWidth = body.padWidth ?? String(body.startAt).length;
-    const created = await prisma.prodJobCardSeries.create({
-      data: { name: body.name.trim(), startAt: body.startAt, padWidth, effectiveFrom: body.effectiveFrom },
-    });
+    let created;
+    try {
+      created = await prisma.prodJobCardSeries.create({
+        data: { name: body.name, startAt: body.startAt, padWidth, effectiveFrom: body.effectiveFrom },
+      });
+    } catch (e) {
+      if (isDuplicate(e)) throw badRequest(`A job-card series named "${body.name}" already exists`);
+      throw e;
+    }
     // Seed the atomic counter so the first number issued equals startAt.
     await prisma.serialSequence.upsert({
       where: { bucketKey: `jobcard-series-${created.id}` },
@@ -296,14 +307,20 @@ router.patch(
         update: { lastValue: body.startAt - 1 },
       });
     }
-    const updated = await prisma.prodJobCardSeries.update({
-      where: { id: req.params.id },
-      data: {
-        ...(body.name != null ? { name: body.name.trim() } : {}),
-        ...(body.startAt != null ? { startAt: body.startAt, padWidth: body.padWidth ?? String(body.startAt).length } : {}),
-        ...(body.effectiveFrom != null ? { effectiveFrom: body.effectiveFrom } : {}),
-      },
-    });
+    let updated;
+    try {
+      updated = await prisma.prodJobCardSeries.update({
+        where: { id: req.params.id },
+        data: {
+          ...(body.name != null ? { name: body.name } : {}),
+          ...(body.startAt != null ? { startAt: body.startAt, padWidth: body.padWidth ?? String(body.startAt).length } : {}),
+          ...(body.effectiveFrom != null ? { effectiveFrom: body.effectiveFrom } : {}),
+        },
+      });
+    } catch (e) {
+      if (isDuplicate(e)) throw badRequest(`A job-card series named "${body.name}" already exists`);
+      throw e;
+    }
     res.json(updated);
   })
 );
