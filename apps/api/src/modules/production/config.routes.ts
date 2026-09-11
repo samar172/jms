@@ -192,10 +192,17 @@ router.post(
   requirePermission("karigars", "ADD"),
   asyncHandler(async (req, res) => {
     const body = karigarSchema.parse(req.body);
-    const count = await prisma.karigar.count();
+    // Next code from the highest existing KR-### (deleting karigars leaves gaps,
+    // so count+1 would collide with an existing code).
+    const existingK = await prisma.karigar.findMany({ select: { code: true } });
+    let maxK = 0;
+    for (const e of existingK) {
+      const m = /^KR-(\d+)$/.exec(e.code);
+      if (m) maxK = Math.max(maxK, parseInt(m[1], 10));
+    }
     const k = await prisma.karigar.create({
       data: {
-        code: `KR-${String(count + 1).padStart(3, "0")}`,
+        code: `KR-${String(maxK + 1).padStart(3, "0")}`,
         name: body.name,
         specialization: body.specialization,
         contactNumber: body.contact ?? null,
@@ -369,8 +376,15 @@ router.post(
       const code = body.category.slice(0, 2).toUpperCase();
       category = await prisma.category.create({ data: { name: body.category, code: `${code}-${Date.now().toString().slice(-4)}` } });
     }
-    const count = await prisma.product.count();
-    const serialNo = `SLV-${String(count + 1).padStart(4, "0")}`;
+    // Next serial from the highest existing SLV-#### (NOT the count) — deleting a
+    // design leaves gaps, and count+1 would then collide with an existing serial.
+    const existing = await prisma.product.findMany({ select: { serialNo: true } });
+    let maxN = 0;
+    for (const e of existing) {
+      const m = /^SLV-(\d+)$/.exec(e.serialNo);
+      if (m) maxN = Math.max(maxN, parseInt(m[1], 10));
+    }
+    const serialNo = `SLV-${String(maxN + 1).padStart(4, "0")}`;
     const p = await prisma.product.create({
       data: {
         serialNo,
