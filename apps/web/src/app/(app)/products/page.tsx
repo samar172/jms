@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import { useItemMasters, useProdSettings, createItemMaster } from "@/lib/production";
-import { resolveMediaUrl } from "@/lib/api";
+import { resolveMediaUrl, ApiError } from "@/lib/api";
 
 const CATEGORIES = ["Necklace Set", "Ring", "Earrings", "Bangles", "Anklets", "Coin / Idol", "Chain", "Toe Ring", "Bracelet", "Pendant"];
 
@@ -135,14 +135,18 @@ function NewItemModal({ onClose, onDone }: { onClose: () => void; onDone: () => 
   const [estGrossWeight, setEst] = useState("");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function submit() {
     if (!name || !targetPurity) return;
-    setBusy(true);
+    setBusy(true); setError(null);
     try {
       await createItemMaster({ name, category, designCode: designCode || undefined, targetPurity, estGrossWeight: Number(estGrossWeight) || 0, notes: notes || undefined });
       onDone();
-    } finally { setBusy(false); }
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not create the design.");
+      setBusy(false);
+    }
   }
 
   return (
@@ -160,6 +164,7 @@ function NewItemModal({ onClose, onDone }: { onClose: () => void; onDone: () => 
             <Field label="Est. gross weight (g)"><input type="number" step="0.001" className="w-full h-9 px-2 border border-slate-200 rounded text-[12px] mono" value={estGrossWeight} onChange={(e) => setEst(e.target.value)} /></Field>
           </div>
           <Field label="Notes"><input className="w-full h-9 px-2 border border-slate-200 rounded text-[12px]" value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
+          {error && <p className="text-[12px] text-rose-600">{error}</p>}
         </div>
         <div className="px-4 py-3 border-t border-slate-100 flex justify-end gap-2">
           <button onClick={onClose} className="h-8 px-3 rounded border border-slate-200 text-[12px]">Cancel</button>
