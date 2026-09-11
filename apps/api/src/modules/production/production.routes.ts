@@ -5,6 +5,14 @@ import { requireAuth, requireRole, requirePermission } from "../../middleware/au
 import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, notFound } from "../../utils/httpError";
 import { recordAudit } from "../../services/audit";
+import { userCan, resolveAppRoleId } from "../../services/permissions";
+import type { Request } from "express";
+
+/** Whether the caller may see cost / margin figures (costing:VIEW). */
+async function canSeeCost(req: Request): Promise<boolean> {
+  const appRoleId = await resolveAppRoleId(req.user!.appRoleId, req.user!.id);
+  return userCan(appRoleId, "costing", "VIEW");
+}
 import {
   jcTotals,
   grossWeight,
@@ -61,7 +69,7 @@ async function loadAllEngineJobCards() {
 router.get(
   "/settings",
   requireAuth,
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
     const [tiers, baseRate, defaultRates, subItemNames, findingNames, workTypeNames, jobCardSeries] = await Promise.all([
       loadTiers(),
       loadBaseRate(),
@@ -71,9 +79,11 @@ router.get(
       prisma.prodWorkTypeName.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" }, select: { id: true, label: true } }),
       prisma.prodJobCardSeries.findMany({ where: { isActive: true }, orderBy: { createdAt: "asc" } }),
     ]);
+    // The silver base rate is cost data — hide it from roles without costing:VIEW.
+    const showCost = await canSeeCost(req);
     res.json({
       tiers,
-      baseRate,
+      baseRate: showCost ? baseRate : 0,
       defaultRates,
       subItemNames,
       findingNames,
@@ -93,6 +103,7 @@ router.get(
 router.get(
   "/item-masters",
   requireAuth,
+  requirePermission("items", "VIEW"),
   asyncHandler(async (req, res) => {
     const archived = req.query.archived === "1" || req.query.archived === "true";
     const items = await prisma.product.findMany({
@@ -130,6 +141,7 @@ const JOB_STATUS_LABEL: Record<string, string> = {
 router.get(
   "/item-masters/:key",
   requireAuth,
+  requirePermission("items", "VIEW"),
   asyncHandler(async (req, res) => {
     const key = req.params.key;
     const p = await prisma.product.findFirst({
@@ -244,6 +256,7 @@ router.delete(
 router.get(
   "/karigars",
   requireAuth,
+  requirePermission("karigars", "VIEW"),
   asyncHandler(async (_req, res) => {
     const [karigars, tiers, bulkRows, bulkReceiptRows, jobCards] = await Promise.all([
       prisma.karigar.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
@@ -428,6 +441,7 @@ router.delete(
 router.get(
   "/ledger",
   requireAuth,
+  requirePermission("karigars", "VIEW"),
   asyncHandler(async (_req, res) => {
     const [tiers, bulkRows, bulkReceiptRows, jobCards, karigars] = await Promise.all([
       loadTiers(),
@@ -451,6 +465,7 @@ router.get(
 router.get(
   "/labour-ledger",
   requireAuth,
+  requirePermission("karigars", "VIEW"),
   asyncHandler(async (_req, res) => {
     const jobCards = await loadAllEngineJobCards();
     res.json(buildLabourLedger(jobCards));
@@ -461,7 +476,9 @@ router.get(
 router.get(
   "/job-cards",
   requireAuth,
-  asyncHandler(async (_req, res) => {
+  requirePermission("job_cards", "VIEW"),
+  asyncHandler(async (req, res) => {
+    const showCost = await canSeeCost(req);
     const [rows, tiers] = await Promise.all([
       prisma.prodJobCard.findMany({
         include: {
@@ -494,7 +511,7 @@ router.get(
           grossWeightEst: Number(row.itemMaster.grossWeightG),
           grossWeight: grossWeight(jc),
           activeStage: t.activeStage,
-          labour: t.labour,
+          labour: showCost ? t.labour : 0,
           pureEq: t.pureEq,
         };
       })
@@ -641,6 +658,7 @@ router.delete(
 router.get(
   "/job-cards/:jobNo",
   requireAuth,
+  requirePermission("job_cards", "VIEW"),
   asyncHandler(async (req, res) => {
     const [row, tiers, baseRate] = await Promise.all([
       prisma.prodJobCard.findUnique({
@@ -662,6 +680,8 @@ router.get(
     const effectiveSilverValue = jc.manualSilverValue ?? silverValue;
     const todaysRate = jc.todaysSilverRate ?? baseRate;
     const todaysSaleValue = +(t.pureEq * todaysRate + t.stonesConsumed).toFixed(2);
+    const showCost = await canSeeCost(req);
+    const zc = (v: number) => (showCost ? v : 0);
 
     // Reference-linked job cards (union of both directions), with per-card totals
     // and a combined summary so the whole set's record can be pulled at once.
@@ -683,8 +703,8 @@ router.get(
       status: jc2.status,
       grossWeight: grossWeight(jc2),
       pureEq: t2.pureEq,
-      labour: t2.labour,
-      stonesConsumed: t2.stonesConsumed,
+      labour: zc(t2.labour),
+      stonesConsumed: zc(t2.stonesConsumed),
     }));
     const sum = (nums: number[]) => +nums.reduce((s, n) => s + n, 0).toFixed(3);
     const combinedPureEq = sum([t.pureEq, ...linked.map((l) => l.pureEq)]);
@@ -694,16 +714,16 @@ router.get(
           count: linked.length + 1,
           grossWeight: sum([grossWeight(jc), ...linked.map((l) => l.grossWeight)]),
           pureEq: combinedPureEq,
-          labour: +[t.labour, ...linked.map((l) => l.labour)].reduce((s, n) => s + n, 0).toFixed(2),
-          stonesConsumed: combinedStones,
-          silverValue: +(combinedPureEq * baseRate).toFixed(2),
-          saleValue: +(combinedPureEq * baseRate + combinedStones).toFixed(2),
+          labour: zc(+[t.labour, ...linked.map((l) => l.labour)].reduce((s, n) => s + n, 0).toFixed(2)),
+          stonesConsumed: zc(combinedStones),
+          silverValue: zc(+(combinedPureEq * baseRate).toFixed(2)),
+          saleValue: zc(+(combinedPureEq * baseRate + combinedStones).toFixed(2)),
         }
       : null;
     res.json({
       jobCard: jc,
       tiers,
-      baseRate,
+      baseRate: zc(baseRate),
       item: {
         id: row.itemMaster.id,
         name: row.itemMaster.designName,
@@ -720,13 +740,16 @@ router.get(
       })),
       totals: {
         ...t,
+        labour: zc(t.labour),
+        stonesConsumed: zc(t.stonesConsumed),
+        wastageValue: zc(t.wastageValue),
         grossWeight: grossWeight(jc),
         stonesNetCaratGrams: stonesNetCaratGrams(jc),
-        silverValue,
-        effectiveSilverValue,
-        todaysSaleValue,
-        estimatedCostToDate: +(t.labour + t.stonesConsumed + effectiveSilverValue).toFixed(2),
-        productionRate: rateForLabel(jc.targetPurity, tiers, baseRate),
+        silverValue: zc(silverValue),
+        effectiveSilverValue: zc(effectiveSilverValue),
+        todaysSaleValue: zc(todaysSaleValue),
+        estimatedCostToDate: zc(+(t.labour + t.stonesConsumed + effectiveSilverValue).toFixed(2)),
+        productionRate: zc(rateForLabel(jc.targetPurity, tiers, baseRate)),
       },
       stonesByType: stonesByType(jc),
       linked,
@@ -801,6 +824,7 @@ async function loadImageAsDataUri(url: string): Promise<string | null> {
 router.get(
   "/job-cards/:jobNo/pdf",
   requireAuth,
+  requirePermission("costing", "VIEW"),
   asyncHandler(async (req, res) => {
     const profitPct = Number(req.query.profitPct) || 0;
     const [row, tiers, baseRate] = await Promise.all([
