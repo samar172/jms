@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { Sidebar } from "@/components/Sidebar";
 import { Topbar } from "@/components/Topbar";
 import { CommandPalette } from "@/components/CommandPalette";
+import { PwaInstaller } from "@/components/PwaInstaller";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -38,6 +39,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <main className="flex-1 p-3.5 sm:px-[18px] sm:py-3.5">{children}</main>
       </div>
       <CommandPalette />
+      <PwaInstaller />
     </div>
   );
 }
