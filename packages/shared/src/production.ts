@@ -484,6 +484,8 @@ export type LedgerType =
   | "Dust Return (Cr)"
   | "Wastage Deduction (Cr)";
 
+export type LedgerSource = "opening" | "bulkIssue" | "bulkReceipt" | "jobcard";
+
 export interface LedgerRow {
   date: string;
   karigar: string;
@@ -494,6 +496,9 @@ export interface LedgerRow {
   purity: string;
   pureEq: number;
   balance: number;
+  // Where this row comes from, so the UI can edit/delete the right source.
+  sourceType: LedgerSource;
+  sourceId: string;
 }
 
 export interface KarigarOpeningBalance {
@@ -522,6 +527,8 @@ export function buildLedger(
       weight: Math.abs(o.balance),
       purity: pure,
       pureEq: o.balance,
+      sourceType: "opening",
+      sourceId: o.karigar,
     });
   });
   (bulkIssues || []).forEach((b) => {
@@ -534,6 +541,8 @@ export function buildLedger(
       weight: b.weight,
       purity: b.purity,
       pureEq: b.weight * factorFor(b.purity, tiers),
+      sourceType: "bulkIssue",
+      sourceId: b.id,
     });
   });
   (bulkReceipts || []).forEach((b) => {
@@ -546,6 +555,8 @@ export function buildLedger(
       weight: b.weight,
       purity: b.purity,
       pureEq: b.weight * factorFor(b.purity, tiers),
+      sourceType: "bulkReceipt",
+      sourceId: b.id,
     });
     // Same wastage-% formula as Casting/Fitting job-card output — always
     // credited at pure (24K/100%), never this receipt's own purity.
@@ -560,6 +571,8 @@ export function buildLedger(
         weight: b.wastageWeight,
         purity: wastagePurity,
         pureEq: b.wastageWeight * factorFor(wastagePurity, tiers),
+        sourceType: "bulkReceipt",
+        sourceId: b.id,
       });
     }
   });
@@ -585,6 +598,8 @@ export function buildLedger(
               weight: issue.issuedWeight,
               purity: issue.purity,
               pureEq: issue.issuedWeight * factorFor(issue.purity, tiers),
+              sourceType: "jobcard",
+              sourceId: jc.id,
             });
           }
           if (issue.status === "Reconciled") {
@@ -598,6 +613,8 @@ export function buildLedger(
                 weight: issue.returnedWeight,
                 purity: issue.returnedPurity,
                 pureEq: issue.returnedWeight * factorFor(issue.returnedPurity, tiers),
+                sourceType: "jobcard",
+                sourceId: jc.id,
               });
             }
             if (issue.dustWeight && issue.returnedPurity != null) {
@@ -610,6 +627,8 @@ export function buildLedger(
                 weight: issue.dustWeight,
                 purity: issue.returnedPurity,
                 pureEq: issue.dustWeight * factorFor(issue.returnedPurity, tiers),
+                sourceType: "jobcard",
+                sourceId: jc.id,
               });
             }
             if (issue.wastageWeight) {
@@ -623,6 +642,8 @@ export function buildLedger(
                 weight: issue.wastageWeight,
                 purity: wastagePurity,
                 pureEq: issue.wastageWeight * factorFor(wastagePurity, tiers),
+                sourceType: "jobcard",
+                sourceId: jc.id,
               });
             }
           }

@@ -355,6 +355,75 @@ router.post(
   })
 );
 
+// Edit / delete a Bulk Stock Issue ledger entry.
+router.patch(
+  "/bulk-stock/:id",
+  requirePermission("karigars", "UPDATE"),
+  asyncHandler(async (req, res) => {
+    const body = bulkSchema.partial().parse(req.body);
+    await prisma.bulkStockIssue.update({
+      where: { id: req.params.id },
+      data: {
+        ...(body.purityId != null ? { purityId: body.purityId } : {}),
+        ...(body.weightGrams != null ? { weightGrams: body.weightGrams } : {}),
+        ...(body.issueDate != null ? { issueDate: body.issueDate } : {}),
+        ...(body.note !== undefined ? { note: body.note } : {}),
+      },
+    });
+    await recordAudit(prisma, { userId: req.user!.id, action: "UPDATE", entityType: "BulkStockIssue", entityId: req.params.id, after: body, ipAddress: req.ip ?? null });
+    res.json({ ok: true });
+  })
+);
+router.delete(
+  "/bulk-stock/:id",
+  requirePermission("karigars", "DELETE"),
+  asyncHandler(async (req, res) => {
+    const before = await prisma.bulkStockIssue.findUnique({ where: { id: req.params.id }, include: { karigar: true } });
+    if (!before) throw notFound("Bulk stock issue not found");
+    await prisma.bulkStockIssue.delete({ where: { id: req.params.id } });
+    await recordAudit(prisma, { userId: req.user!.id, action: "DELETE", entityType: "BulkStockIssue", entityId: req.params.id, before: { karigar: before.karigar.name, weight: Number(before.weightGrams) }, ipAddress: req.ip ?? null });
+    res.json({ ok: true });
+  })
+);
+
+// Edit / delete a Bulk Stock Receipt ledger entry (recomputes wastage weight).
+router.patch(
+  "/bulk-receipt/:id",
+  requirePermission("karigars", "UPDATE"),
+  asyncHandler(async (req, res) => {
+    const body = bulkReceiptSchema.partial().parse(req.body);
+    const existing = await prisma.bulkStockReceipt.findUnique({ where: { id: req.params.id } });
+    if (!existing) throw notFound("Bulk receipt not found");
+    const weight = body.weightGrams ?? Number(existing.weightGrams);
+    const pct = body.wastagePercent ?? (existing.wastagePercent != null ? Number(existing.wastagePercent) : 0);
+    await prisma.bulkStockReceipt.update({
+      where: { id: req.params.id },
+      data: {
+        ...(body.purityId != null ? { purityId: body.purityId } : {}),
+        ...(body.weightGrams != null ? { weightGrams: body.weightGrams } : {}),
+        ...(body.label != null ? { label: body.label } : {}),
+        ...(body.receiptDate != null ? { receiptDate: body.receiptDate } : {}),
+        ...(body.note !== undefined ? { note: body.note } : {}),
+        wastagePercent: pct > 0 ? pct : null,
+        wastageWeight: pct > 0 ? +(weight * (pct / 100)).toFixed(3) : null,
+      },
+    });
+    await recordAudit(prisma, { userId: req.user!.id, action: "UPDATE", entityType: "BulkStockReceipt", entityId: req.params.id, after: body, ipAddress: req.ip ?? null });
+    res.json({ ok: true });
+  })
+);
+router.delete(
+  "/bulk-receipt/:id",
+  requirePermission("karigars", "DELETE"),
+  asyncHandler(async (req, res) => {
+    const before = await prisma.bulkStockReceipt.findUnique({ where: { id: req.params.id }, include: { karigar: true } });
+    if (!before) throw notFound("Bulk receipt not found");
+    await prisma.bulkStockReceipt.delete({ where: { id: req.params.id } });
+    await recordAudit(prisma, { userId: req.user!.id, action: "DELETE", entityType: "BulkStockReceipt", entityId: req.params.id, before: { karigar: before.karigar.name, weight: Number(before.weightGrams) }, ipAddress: req.ip ?? null });
+    res.json({ ok: true });
+  })
+);
+
 /* ------------------------------- Ledger ----------------------------------- */
 router.get(
   "/ledger",

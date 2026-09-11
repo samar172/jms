@@ -159,6 +159,10 @@ export const issueBulkStock = (body: { karigarId: string; purityId: string; weig
   post("/bulk-stock", body);
 export const recordBulkReceipt = (body: { karigarId: string; purityId: string; weightGrams: number; label?: string; wastagePercent?: number; note?: string }) =>
   post("/bulk-receipt", body);
+export const editBulkStock = (id: string, body: { purityId?: string; weightGrams?: number; note?: string }) => patch(`/bulk-stock/${id}`, body);
+export const deleteBulkStock = (id: string) => del(`/bulk-stock/${id}`);
+export const editBulkReceipt = (id: string, body: { purityId?: string; weightGrams?: number; label?: string; wastagePercent?: number; note?: string }) => patch(`/bulk-receipt/${id}`, body);
+export const deleteBulkReceipt = (id: string) => del(`/bulk-receipt/${id}`);
 export const assignKarigar = (jobNo: string, stageName: string, karigarId: string) =>
   post(`/job-cards/${jobNo}/assign`, { stageName, karigarId });
 export const issueMaterial = (assignmentId: string, body: { purity: string; issuedWeight: number; pieceCount?: number }) =>

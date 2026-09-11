@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useProdKarigars, useLedger, useLabourLedger, useProdSettings, issueBulkStock, recordBulkReceipt, createKarigar, updateKarigar, type ProdKarigar } from "@/lib/production";
+import { useProdKarigars, useLedger, useLabourLedger, useProdSettings, issueBulkStock, recordBulkReceipt, editBulkStock, deleteBulkStock, editBulkReceipt, deleteBulkReceipt, createKarigar, updateKarigar, type ProdKarigar } from "@/lib/production";
 import { usePermissions } from "@/lib/permissions";
 
 const SPEC_OPTS = ["Casting", "Meenakari", "Jadai", "Kundan", "Setting", "Fitting"];
@@ -31,12 +31,37 @@ export default function KarigarLedgerPage() {
   const [showReceipt, setShowReceipt] = useState(false);
   const [karigarForm, setKarigarForm] = useState<null | { mode: "new" | "edit"; k?: ProdKarigar }>(null);
   const [ledgerTab, setLedgerTab] = useState<"metal" | "labour">("metal");
+  const [bulkEdit, setBulkEdit] = useState<null | { id: string; initial: { purityId: string; weight: number; note: string } }>(null);
+  const [receiptEdit, setReceiptEdit] = useState<null | { id: string; initial: { purityId: string; weight: number; label: string; wastagePercent: number } }>(null);
 
   if (!karigars || !ledger || !settings) return <div className="text-slate-400 p-4 text-sm">Loading…</div>;
   const active = karigars.find((k) => k.id === selectedId) ?? karigars[0];
   const entries = active ? ledger[active.name] ?? [] : [];
   const labourEntries = active ? labourLedger?.[active.name] ?? [] : [];
   const closing = entries.length ? entries[entries.length - 1].balance : 0;
+  const tierId = (label: string) => settings.tiers.find((t) => t.label === label)?.id ?? "";
+  const refreshLedger = () => { mutateLedger(); mutateKarigars(); };
+
+  function openEditEntry(e: (typeof entries)[number]) {
+    if (e.sourceType === "bulkIssue") {
+      setBulkEdit({ id: e.sourceId, initial: { purityId: tierId(e.purity), weight: e.weight, note: "" } });
+    } else if (e.sourceType === "bulkReceipt") {
+      const receiveRow = entries.find((x) => x.sourceId === e.sourceId && x.type === "Bulk Receive (Cr)");
+      const wastageRow = entries.find((x) => x.sourceId === e.sourceId && x.type === "Wastage Deduction (Cr)");
+      const label = (receiveRow?.stage ?? e.stage).replace(/^Bulk Receive — /, "").replace(/ \(wastage\)$/, "").replace(/^Bulk Receive$/, "");
+      const w = receiveRow?.weight ?? e.weight;
+      const wastagePercent = wastageRow && w ? +((wastageRow.weight / w) * 100).toFixed(2) : 0;
+      setReceiptEdit({ id: e.sourceId, initial: { purityId: tierId(receiveRow?.purity ?? e.purity), weight: w, label, wastagePercent } });
+    } else if (e.sourceType === "opening" && active) {
+      setKarigarForm({ mode: "edit", k: active });
+    }
+  }
+  async function deleteEntry(e: (typeof entries)[number]) {
+    if (e.sourceType === "bulkIssue") { if (!confirm("Delete this bulk stock issue? The ledger will re-balance.")) return; await deleteBulkStock(e.sourceId); }
+    else if (e.sourceType === "bulkReceipt") { if (!confirm("Delete this bulk receipt? The ledger will re-balance.")) return; await deleteBulkReceipt(e.sourceId); }
+    else return;
+    refreshLedger();
+  }
   const totalOutstanding = karigars.reduce((s, k) => s + Math.max(0, k.balance), 0);
   const totalLabour = karigars.reduce((s, k) => s + k.labourEarned, 0);
 
@@ -133,24 +158,41 @@ export default function KarigarLedgerPage() {
                   <thead className="sticky top-0 bg-slate-50">
                     <tr className="h-8 text-left border-b border-slate-200">
                       {["Date", "Stage", "Job", "Type", "Weight", "Pure-eq", "Balance"].map((h) => <th key={h} className="px-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">{h}</th>)}
+                      <th className="px-3" />
                     </tr>
                   </thead>
                   <tbody>
-                    {entries.length === 0 && <tr><td colSpan={7} className="py-10 text-center text-[12px] text-slate-400">No transactions yet — issue bulk stock to start.</td></tr>}
+                    {entries.length === 0 && <tr><td colSpan={8} className="py-10 text-center text-[12px] text-slate-400">No transactions yet — issue bulk stock to start.</td></tr>}
                     {entries.map((e, i) => (
                       <tr key={i} className="border-b border-slate-50 h-8">
                         <td className="px-3 text-[11px] mono text-slate-500">{e.date}</td>
                         <td className="px-3 text-[11px] text-slate-600">{e.stage}</td>
-                        <td className="px-3 text-[11px] mono text-blue-800">{e.jobCardId}</td>
+                        <td className="px-3 text-[11px] mono text-blue-800">
+                          {e.sourceType === "jobcard" && e.jobCardId !== "—"
+                            ? <Link href={`/job-cards/${e.jobCardId}`} className="hover:underline" title="Edit on the job card">{e.jobCardId}</Link>
+                            : e.jobCardId}
+                        </td>
                         <td className={`px-3 text-[11px] ${e.type.includes("Dr") ? "text-rose-600" : "text-emerald-700"}`}>{e.type}</td>
                         <td className="px-3 text-[11px] mono text-slate-700">{e.weight.toFixed(3)} @ {e.purity}</td>
                         <td className="px-3 text-[11px] mono text-slate-500">{e.pureEq.toFixed(3)}</td>
                         <td className="px-3 text-[11px] mono font-semibold text-slate-900">{e.balance.toFixed(3)}</td>
+                        <td className="px-3 text-right whitespace-nowrap">
+                          {(e.sourceType === "bulkIssue" || e.sourceType === "bulkReceipt") ? (
+                            <>
+                              {perms.can("karigars", "UPDATE") && <button onClick={() => openEditEntry(e)} className="text-[11px] text-blue-700 hover:underline mr-2">Edit</button>}
+                              {perms.can("karigars", "DELETE") && <button onClick={() => deleteEntry(e)} className="text-[11px] text-rose-600 hover:underline">Delete</button>}
+                            </>
+                          ) : e.sourceType === "opening" && perms.can("karigars", "UPDATE") ? (
+                            <button onClick={() => openEditEntry(e)} className="text-[11px] text-blue-700 hover:underline">Edit</button>
+                          ) : e.sourceType === "jobcard" && e.jobCardId !== "—" ? (
+                            <Link href={`/job-cards/${e.jobCardId}`} className="text-[11px] text-slate-400 hover:text-blue-700">on job card →</Link>
+                          ) : null}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                   {entries.length > 0 && (
-                    <tfoot><tr className="h-8 bg-slate-50 border-t border-slate-200"><td colSpan={6} className="px-3 text-[11px] text-right font-semibold text-slate-600">Closing balance</td><td className="px-3 text-[11px] mono font-bold text-slate-900">{gm(closing)}</td></tr></tfoot>
+                    <tfoot><tr className="h-8 bg-slate-50 border-t border-slate-200"><td colSpan={6} className="px-3 text-[11px] text-right font-semibold text-slate-600">Closing balance</td><td className="px-3 text-[11px] mono font-bold text-slate-900">{gm(closing)}</td><td /></tr></tfoot>
                   )}
                 </table>
               </div>
@@ -197,15 +239,23 @@ export default function KarigarLedgerPage() {
 
       {showBulk && active && (
         <BulkStockModal karigar={active} tiers={settings.tiers} onClose={() => setShowBulk(false)}
-          onDone={async (purityId, weight, note) => { await issueBulkStock({ karigarId: active.id, purityId, weightGrams: weight, note }); setShowBulk(false); mutateLedger(); }} />
+          onDone={async (purityId, weight, note) => { await issueBulkStock({ karigarId: active.id, purityId, weightGrams: weight, note }); setShowBulk(false); refreshLedger(); }} />
       )}
       {showReceipt && active && (
         <BulkReceiptModal karigar={active} tiers={settings.tiers} findingNames={settings.findingNames ?? []} defaultWastagePct={settings.defaultRates.fittingWastagePct} baseRate={settings.baseRate} onClose={() => setShowReceipt(false)}
-          onDone={async (purityId, weight, label, wastagePercent, note) => { await recordBulkReceipt({ karigarId: active.id, purityId, weightGrams: weight, label, wastagePercent, note }); setShowReceipt(false); mutateLedger(); }} />
+          onDone={async (purityId, weight, label, wastagePercent, note) => { await recordBulkReceipt({ karigarId: active.id, purityId, weightGrams: weight, label, wastagePercent, note }); setShowReceipt(false); refreshLedger(); }} />
+      )}
+      {bulkEdit && active && (
+        <BulkStockModal karigar={active} tiers={settings.tiers} initial={bulkEdit.initial} editing onClose={() => setBulkEdit(null)}
+          onDone={async (purityId, weight, note) => { await editBulkStock(bulkEdit.id, { purityId, weightGrams: weight, note }); setBulkEdit(null); refreshLedger(); }} />
+      )}
+      {receiptEdit && active && (
+        <BulkReceiptModal karigar={active} tiers={settings.tiers} findingNames={settings.findingNames ?? []} defaultWastagePct={settings.defaultRates.fittingWastagePct} baseRate={settings.baseRate} initial={receiptEdit.initial} editing onClose={() => setReceiptEdit(null)}
+          onDone={async (purityId, weight, label, wastagePercent) => { await editBulkReceipt(receiptEdit.id, { purityId, weightGrams: weight, label, wastagePercent }); setReceiptEdit(null); refreshLedger(); }} />
       )}
       {karigarForm && (
         <KarigarForm mode={karigarForm.mode} karigar={karigarForm.k} onClose={() => setKarigarForm(null)}
-          onDone={() => { setKarigarForm(null); mutateKarigars(); }} />
+          onDone={() => { setKarigarForm(null); refreshLedger(); }} />
       )}
     </div>
   );
@@ -287,18 +337,19 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: "am
   );
 }
 
-function BulkStockModal({ karigar, tiers, onClose, onDone }: {
+function BulkStockModal({ karigar, tiers, initial, editing, onClose, onDone }: {
   karigar: ProdKarigar; tiers: { id: string; label: string; percent: number }[];
+  initial?: { purityId: string; weight: number; note: string }; editing?: boolean;
   onClose: () => void; onDone: (purityId: string, weight: number, note: string) => void;
 }) {
   const pure = tiers.find((t) => t.percent === 100) ?? tiers[0];
-  const [purityId, setPurityId] = useState(pure?.id ?? "");
-  const [weight, setWeight] = useState("");
-  const [note, setNote] = useState("Bulk stock replenishment");
+  const [purityId, setPurityId] = useState(initial?.purityId ?? pure?.id ?? "");
+  const [weight, setWeight] = useState(initial ? String(initial.weight) : "");
+  const [note, setNote] = useState(initial?.note ?? "Bulk stock replenishment");
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={onClose}>
       <div className="bg-white rounded-md shadow-xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
-        <div className="px-4 py-3 border-b border-slate-100"><h2 className="text-[14px] font-semibold">Issue Bulk Stock — {karigar.name}</h2></div>
+        <div className="px-4 py-3 border-b border-slate-100"><h2 className="text-[14px] font-semibold">{editing ? "Edit Bulk Stock Issue" : "Issue Bulk Stock"} — {karigar.name}</h2></div>
         <div className="p-4 space-y-3">
           <p className="text-[11px] text-slate-500">A running-stock advance — not tied to any job card. He draws against this across designs.</p>
           <div>
@@ -318,7 +369,7 @@ function BulkStockModal({ karigar, tiers, onClose, onDone }: {
         </div>
         <div className="px-4 py-3 border-t border-slate-100 flex justify-end gap-2">
           <button onClick={onClose} className="h-8 px-3 rounded border border-slate-200 text-[12px]">Cancel</button>
-          <button disabled={!(Number(weight) > 0) || !purityId} onClick={() => onDone(purityId, Number(weight), note)} className="h-8 px-3 rounded bg-blue-800 text-white text-[12px] font-medium disabled:opacity-50">Issue Stock</button>
+          <button disabled={!(Number(weight) > 0) || !purityId} onClick={() => onDone(purityId, Number(weight), note)} className="h-8 px-3 rounded bg-blue-800 text-white text-[12px] font-medium disabled:opacity-50">{editing ? "Save" : "Issue Stock"}</button>
         </div>
       </div>
     </div>
@@ -329,16 +380,17 @@ function BulkStockModal({ karigar, tiers, onClose, onDone }: {
 // -made findings back to the store, off metal they were already holding. One
 // ledger credit, not tied to any job card — a job card's own Fitting output
 // only records what got used, never the karigar's own account.
-function BulkReceiptModal({ karigar, tiers, findingNames, defaultWastagePct, baseRate, onClose, onDone }: {
+function BulkReceiptModal({ karigar, tiers, findingNames, defaultWastagePct, baseRate, initial, editing, onClose, onDone }: {
   karigar: ProdKarigar; tiers: { id: string; label: string; percent: number }[]; findingNames: { id: string; label: string }[];
   defaultWastagePct: number; baseRate: number;
+  initial?: { purityId: string; weight: number; label: string; wastagePercent: number }; editing?: boolean;
   onClose: () => void; onDone: (purityId: string, weight: number, label: string, wastagePercent: number, note: string) => void;
 }) {
   const pure = tiers.find((t) => t.percent === 100) ?? tiers[0];
-  const [purityId, setPurityId] = useState(pure?.id ?? "");
-  const [weight, setWeight] = useState("");
-  const [label, setLabel] = useState(findingNames[0]?.label ?? "");
-  const [wastagePercent, setWastagePercent] = useState(String(defaultWastagePct));
+  const [purityId, setPurityId] = useState(initial?.purityId ?? pure?.id ?? "");
+  const [weight, setWeight] = useState(initial ? String(initial.weight) : "");
+  const [label, setLabel] = useState(initial?.label ?? findingNames[0]?.label ?? "");
+  const [wastagePercent, setWastagePercent] = useState(String(initial?.wastagePercent ?? defaultWastagePct));
   const [note, setNote] = useState("");
   const purity = tiers.find((t) => t.id === purityId);
   const wastageWeight = (Number(weight) || 0) * (Number(wastagePercent) || 0) / 100;
@@ -348,7 +400,7 @@ function BulkReceiptModal({ karigar, tiers, findingNames, defaultWastagePct, bas
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={onClose}>
       <div className="bg-white rounded-md shadow-xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
-        <div className="px-4 py-3 border-b border-slate-100"><h2 className="text-[14px] font-semibold">Receive Bulk Findings — {karigar.name}</h2></div>
+        <div className="px-4 py-3 border-b border-slate-100"><h2 className="text-[14px] font-semibold">{editing ? "Edit Bulk Receipt" : "Receive Bulk Findings"} — {karigar.name}</h2></div>
         <div className="p-4 space-y-3">
           <p className="text-[11px] text-slate-500">He made these in bulk, off metal already issued to him. Crediting it here settles that against his account — not tied to any job card; a job card's Fitting output later just records what got used from store stock, with no effect on his ledger.</p>
           <div>
@@ -382,7 +434,7 @@ function BulkReceiptModal({ karigar, tiers, findingNames, defaultWastagePct, bas
         </div>
         <div className="px-4 py-3 border-t border-slate-100 flex justify-end gap-2">
           <button onClick={onClose} className="h-8 px-3 rounded border border-slate-200 text-[12px]">Cancel</button>
-          <button disabled={!(Number(weight) > 0) || !purityId} onClick={() => onDone(purityId, Number(weight), label, Number(wastagePercent) || 0, note || narration)} className="h-8 px-3 rounded bg-emerald-700 text-white text-[12px] font-medium disabled:opacity-50">Receive</button>
+          <button disabled={!(Number(weight) > 0) || !purityId} onClick={() => onDone(purityId, Number(weight), label, Number(wastagePercent) || 0, note || narration)} className="h-8 px-3 rounded bg-emerald-700 text-white text-[12px] font-medium disabled:opacity-50">{editing ? "Save" : "Receive"}</button>
         </div>
       </div>
     </div>
