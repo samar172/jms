@@ -1,11 +1,16 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Noto_Sans_Devanagari } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
 
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
+// Latin/UI text uses Arial — a system face (nothing to download, heavier and
+// clearer than Inter). Only Devanagari is fetched, self-hosted via next/font,
+// and it sits in the font stack as the fallback that renders Hindi glyphs.
+const devanagari = Noto_Sans_Devanagari({
+  subsets: ["devanagari", "latin"],
+  weight: ["400", "500", "600", "700"],
+  display: "swap",
+  variable: "--font-dev",
 });
 
 export const metadata: Metadata = {
@@ -32,7 +37,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} h-full antialiased`}>
+    <html lang="en" className={`${devanagari.variable} h-full`}>
       <body className="min-h-full flex flex-col bg-bg text-text">
         <AuthProvider>{children}</AuthProvider>
       </body>

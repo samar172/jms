@@ -57,7 +57,9 @@
   --color-warning-tint: var(--color-warning-tint);
   --color-danger: var(--color-danger);
   --color-danger-tint: var(--color-danger-tint);
-  --font-sans: var(--font-inter);
+  /* UI font: Arial (system, heavier/clearer than Inter, nothing to download);
+     Devanagari glyphs fall through to the self-hosted Noto Sans Devanagari. */
+  --font-sans: Arial, "Helvetica Neue", Helvetica, "Liberation Sans", "Segoe UI", var(--font-dev), "Noto Sans Devanagari", sans-serif;
 
   --color-canvas: var(--color-canvas);
   --color-panel: var(--color-panel);
