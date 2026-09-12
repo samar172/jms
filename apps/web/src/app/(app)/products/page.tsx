@@ -14,6 +14,7 @@ export default function ItemMasterPage() {
   const [query, setQuery] = useState("");
   const [cat, setCat] = useState("all");
   const [purity, setPurity] = useState("all");
+  const [series, setSeries] = useState("all");
   const [onlyWithJobs, setOnlyWithJobs] = useState(false);
 
   const catOptions = useMemo(
@@ -24,10 +25,15 @@ export default function ItemMasterPage() {
     () => Array.from(new Set((items ?? []).map((i) => i.targetPurity).filter(Boolean))).sort(),
     [items],
   );
+  const seriesOptions = useMemo(
+    () => Array.from(new Set((items ?? []).flatMap((i) => i.series ?? []))).sort(),
+    [items],
+  );
 
   const filtered = (items ?? []).filter((it) => {
     if (cat !== "all" && it.category !== cat) return false;
     if (purity !== "all" && it.targetPurity !== purity) return false;
+    if (series !== "all" && !(it.series ?? []).includes(series)) return false;
     if (onlyWithJobs && it.jobCardCount === 0) return false;
     if (query.trim()) {
       const q = query.toLowerCase();
@@ -39,7 +45,7 @@ export default function ItemMasterPage() {
     }
     return true;
   });
-  const activeFilters = cat !== "all" || purity !== "all" || onlyWithJobs || query.trim().length > 0;
+  const activeFilters = cat !== "all" || purity !== "all" || series !== "all" || onlyWithJobs || query.trim().length > 0;
 
   return (
     <div className="flex flex-col">
@@ -79,13 +85,19 @@ export default function ItemMasterPage() {
           <option value="all">All purities</option>
           {purityOptions.map((p) => <option key={p} value={p}>{p}</option>)}
         </select>
+        {seriesOptions.length > 0 && (
+          <select value={series} onChange={(e) => setSeries(e.target.value)} className="h-8 px-2 rounded border border-slate-200 text-[12px]">
+            <option value="all">All series</option>
+            {seriesOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        )}
         <label className="flex items-center gap-1.5 text-[12px] text-slate-600">
           <input type="checkbox" checked={onlyWithJobs} onChange={(e) => setOnlyWithJobs(e.target.checked)} />
           Has job cards
         </label>
         {activeFilters && (
           <button
-            onClick={() => { setQuery(""); setCat("all"); setPurity("all"); setOnlyWithJobs(false); }}
+            onClick={() => { setQuery(""); setCat("all"); setPurity("all"); setSeries("all"); setOnlyWithJobs(false); }}
             className="h-8 px-2.5 rounded border border-slate-200 text-[12px] text-slate-600 hover:bg-slate-50"
           >
             Clear

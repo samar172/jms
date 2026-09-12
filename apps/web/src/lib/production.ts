@@ -49,6 +49,7 @@ export interface ItemMaster {
   imageUrl: string | null;
   imageFullUrl: string | null;
   jobCardCount: number;
+  series: string[];
   isArchived: boolean;
 }
 

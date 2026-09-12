@@ -113,6 +113,7 @@ router.get(
         purity: true,
         images: { where: { isActive: true, isPrimary: true }, take: 1 },
         _count: { select: { prodJobCards: true } },
+        prodJobCards: { select: { series: { select: { name: true } } } },
       },
       orderBy: { createdAt: "desc" },
     });
@@ -129,6 +130,8 @@ router.get(
         imageUrl: p.images[0]?.thumbnailUrl ?? p.images[0]?.url ?? null,
         imageFullUrl: p.images[0]?.url ?? null,
         jobCardCount: p._count.prodJobCards,
+        // Distinct job-card series this design has cards in — for the series filter.
+        series: [...new Set(p.prodJobCards.map((jc) => jc.series?.name).filter((n): n is string => !!n))],
         isArchived: p.isArchived,
       }))
     );
