@@ -1530,6 +1530,7 @@ model ProdStoneEntry {
   qtyReturned   String         @default("")
   valueReturned Decimal        @db.Decimal(14, 2) @default(0)
   caratReturned Decimal?       @db.Decimal(12, 3)
+  piecesReturned Int?
 
   @@index([assignmentId])
 }

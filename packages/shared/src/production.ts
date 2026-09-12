@@ -56,6 +56,7 @@ export interface StoneEntry {
   qtyReturned: string;
   valueReturned: number;
   caratReturned?: number;
+  piecesReturned?: number;
 }
 
 export interface LabourEntry {

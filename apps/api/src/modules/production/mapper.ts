@@ -136,6 +136,7 @@ export function mapJobCard(jc: FullJobCard): EngineJobCard {
           qtyReturned: s.qtyReturned,
           valueReturned: Number(s.valueReturned),
           caratReturned: s.caratReturned == null ? undefined : Number(s.caratReturned),
+          piecesReturned: s.piecesReturned ?? undefined,
         })),
         labour: a.labour.map((l) => ({
           id: l.id,

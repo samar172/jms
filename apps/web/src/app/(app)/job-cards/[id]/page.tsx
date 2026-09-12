@@ -571,7 +571,7 @@ function StageCard({ jobNo, stage, pieceCount, targetPurity, karigars, settings,
             {/* Stones */}
             {a.stones.map((s) => (
               <div key={s.id} className="flex items-center justify-between text-[11px] text-slate-500 py-0.5">
-                <span>💎 {s.type} · {s.qtyIssued} · {money(s.valueIssued)}{s.valueReturned > 0 ? ` (returned ${s.caratReturned ? `${s.caratReturned}ct / ` : ""}${money(s.valueReturned)} — net ${money(s.valueIssued - s.valueReturned)})` : ""}</span>
+                <span>💎 {s.type} · {s.qtyIssued} · {money(s.valueIssued)}{(s.valueReturned > 0 || s.piecesReturned || s.caratReturned) ? ` (returned ${s.piecesReturned ?? 0} pcs / ${s.caratReturned ?? 0}ct / ${money(s.valueReturned)} — net ${(s.piecesCount ?? 0) - (s.piecesReturned ?? 0)} pcs / ${((s.carat ?? 0) - (s.caratReturned ?? 0)).toFixed(2)}ct / ${money(s.valueIssued - s.valueReturned)})` : ""}</span>
                 {stage.status !== "Approved" && (
                   <span className="flex gap-1">
                     <ActBtn onClick={() => setModal({ kind: "stoneEdit", assignment: a, stone: s })}>Edit</ActBtn>
@@ -883,7 +883,13 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
               <F label="Carat returned *"><I value={retCarat} onChange={setRetCarat} step="0.01" /></F>
             </div>
             <F label="Value returned ₹ (auto from ₹/ct)"><I value={retValue} onChange={setRetValue} step="1" /></F>
-            <p className="text-[11px] text-emerald-700 font-medium">Deducting {retCarat || 0}ct · {money(retValueEff)} → net consumed {money(st.valueIssued - retValueEff)}</p>
+            <div className="rounded bg-emerald-50 border border-emerald-200 px-2.5 py-1.5 text-[11px] text-emerald-800">
+              <span className="text-emerald-700">Issued {st.piecesCount ?? 0} pcs / {(st.carat ?? 0).toFixed(2)} ct / {money(st.valueIssued)}</span>
+              <span className="mx-1">−</span>
+              <span className="text-rose-600">returned {Number(retPieces) || 0} pcs / {(Number(retCarat) || 0).toFixed(2)} ct / {money(retValueEff)}</span>
+              <span className="mx-1">=</span>
+              <b className="font-semibold">net {(st.piecesCount ?? 0) - (Number(retPieces) || 0)} pcs / {((st.carat ?? 0) - (Number(retCarat) || 0)).toFixed(2)} ct / {money(st.valueIssued - retValueEff)}</b>
+            </div>
           </>)}
         </div>
         <div className="px-4 py-3 border-t border-slate-100 flex justify-end gap-2">
@@ -934,7 +940,7 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
               }
               if (modal.kind === "stoneReturn" && st) {
                 const carat = Number(retCarat) || 0;
-                return returnStones(st.id, { qtyReturned: `${retPieces || 0} pcs / ${carat} ct`, valueReturned: retValueEff, caratReturned: carat || null });
+                return returnStones(st.id, { qtyReturned: `${retPieces || 0} pcs / ${carat} ct`, valueReturned: retValueEff, caratReturned: carat || null, piecesReturned: retPieces === "" ? null : Number(retPieces) });
               }
             })}>
             {busy ? "Saving…" : "Confirm"}

@@ -790,11 +790,11 @@ router.post(
   requireRole(...MANAGER),
   asyncHandler(async (req, res) => {
     const body = z
-      .object({ qtyReturned: z.string().default(""), valueReturned: z.number().default(0), caratReturned: z.number().nullable().optional() })
+      .object({ qtyReturned: z.string().default(""), valueReturned: z.number().default(0), caratReturned: z.number().nullable().optional(), piecesReturned: z.number().int().nullable().optional() })
       .parse(req.body);
     await prisma.prodStoneEntry.update({
       where: { id: req.params.stoneId },
-      data: { qtyReturned: body.qtyReturned, valueReturned: body.valueReturned, caratReturned: body.caratReturned ?? null },
+      data: { qtyReturned: body.qtyReturned, valueReturned: body.valueReturned, caratReturned: body.caratReturned ?? null, piecesReturned: body.piecesReturned ?? null },
     });
     res.json({ ok: true });
   })
