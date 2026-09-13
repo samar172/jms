@@ -13,10 +13,16 @@ const COLS: { key: string; label: string; align?: string }[] = [
   { key: "dueDate", label: "Due Date" },
   { key: "createdAt", label: "Created" },
   { key: "linked", label: "Linked" },
-  { key: "grossWeightEst", label: "GW Est", align: "text-right" },
+  { key: "grossWeight", label: "Gross Wt", align: "text-right" },
   { key: "status", label: "Status" },
 ];
 const today = () => new Date().toISOString().slice(0, 10);
+// A completed (Closed) job card shows its ACTUAL gross weight, computed by the
+// engine from reconciled stage returns + net stones; everything else shows the
+// design's estimate. `grossWeight` is 0 until there are reconciled returns, so
+// fall back to the estimate if a Closed card somehow has none.
+const jobGross = (r: JobCardListRow) =>
+  r.status === "Closed" && r.grossWeight > 0 ? r.grossWeight : r.grossWeightEst;
 
 export default function JobCardsPage() {
   const router = useRouter();
@@ -85,7 +91,7 @@ export default function JobCardsPage() {
       case "stage": return r.activeStage ?? "";
       case "dueDate": return r.dueDate ?? "";
       case "createdAt": return r.createdAt ?? "";
-      case "grossWeightEst": return r.grossWeightEst;
+      case "grossWeight": return jobGross(r);
       case "status": return r.status;
       case "linked": return r.linked.length;
       default: return "";
@@ -239,7 +245,13 @@ export default function JobCardsPage() {
                           <button key={ln} onClick={() => router.push(`/job-cards/${ln}`)} className="mono text-blue-700 hover:underline mr-1.5">{ln}</button>
                         ))}
                   </td>
-                  <td className="px-3 text-[12px] text-right mono text-slate-700">{r.grossWeightEst}g</td>
+                  <td className="px-3 text-[12px] text-right mono">
+                    {r.status === "Closed" && r.grossWeight > 0 ? (
+                      <span className="text-emerald-700 font-semibold" title="Actual gross weight — pulled from reconciled stages on completion">{r.grossWeight}g</span>
+                    ) : (
+                      <span className="text-slate-500" title="Estimated gross weight (from the design)">~{r.grossWeightEst}g</span>
+                    )}
+                  </td>
                   <td className="px-3"><StatusPill status={r.status} /></td>
                 </tr>
               );
