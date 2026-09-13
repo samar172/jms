@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useJobCards, useItemMasters, useProdSettings, useDeletedJobCards, createJobCard, type JobCardListRow } from "@/lib/production";
 import { resolveMediaUrl, ApiError } from "@/lib/api";
@@ -40,6 +40,8 @@ export default function JobCardsPage() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [showNew, setShowNew] = useState(false);
   const [preview, setPreview] = useState<{ url: string; x: number; y: number } | null>(null);
+  const [pageSize, setPageSize] = useState(25);
+  const [page, setPage] = useState(1);
 
   const rows = jobCards ?? [];
   const counts = useMemo(() => {
@@ -103,6 +105,14 @@ export default function JobCardsPage() {
     return sortDir === "asc" ? cmp : -cmp;
   });
 
+  // Client-side pagination — the endpoint returns every row, so we page in memory.
+  const pageCount = Math.max(1, Math.ceil(sorted.length / pageSize));
+  const safePage = Math.min(page, pageCount);
+  const paged = sorted.slice((safePage - 1) * pageSize, safePage * pageSize);
+  // Jump back to page 1 whenever the result set changes underneath us, so the
+  // user is never stranded on a now-empty page.
+  useEffect(() => { setPage(1); }, [activeTab, query, cat, stage, series, fromDate, toDate, overdueOnly, sortKey, sortDir, pageSize]);
+
   return (
     <div className="flex-1 flex flex-col">
       <div className="mb-3">
@@ -162,7 +172,14 @@ export default function JobCardsPage() {
               <button onClick={() => { setQuery(""); setCat("all"); setStage("all"); setSeries("all"); setFromDate(""); setToDate(""); setOverdueOnly(false); }}
                 className="h-7 px-2.5 rounded border border-slate-200 text-[12px] text-slate-600 hover:bg-slate-50">Clear</button>
             )}
-            <span className="text-[11px] text-slate-400 ml-auto">{visible.length} of {rows.length}</span>
+            <label className="flex items-center gap-1 text-[12px] text-slate-600 ml-auto">
+              Show
+              <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} className="h-7 px-1.5 rounded border border-slate-200 text-[12px]">
+                {[10, 25, 50, 100].map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+              per page
+            </label>
+            <span className="text-[11px] text-slate-400">{visible.length} of {rows.length}</span>
           </div>
         )}
       </div>
@@ -210,7 +227,7 @@ export default function JobCardsPage() {
             {sorted.length === 0 && (
               <tr><td colSpan={9} className="py-14 text-center text-[13px] text-slate-500">No job cards match these filters</td></tr>
             )}
-            {sorted.map((r: JobCardListRow) => {
+            {paged.map((r: JobCardListRow) => {
               const overdueRow = r.status !== "Closed" && r.dueDate && r.dueDate < today();
               return (
                 <tr key={r.id} onClick={() => router.push(`/job-cards/${r.id}`)} className="border-b border-slate-100 cursor-pointer h-12 hover:bg-slate-50">
@@ -261,6 +278,10 @@ export default function JobCardsPage() {
       </div>
       )}
 
+      {activeTab !== "Deleted" && sorted.length > 0 && (
+        <Pager page={safePage} pageCount={pageCount} pageSize={pageSize} total={sorted.length} onPage={setPage} />
+      )}
+
       {preview && (
         <div
           className="fixed z-50 pointer-events-none rounded-lg shadow-2xl border border-slate-200 bg-white p-1"
@@ -275,6 +296,37 @@ export default function JobCardsPage() {
       )}
 
       {showNew && <NewJobCardModal onClose={() => setShowNew(false)} onCreated={(jobNo) => { setShowNew(false); mutate(); router.push(`/job-cards/${jobNo}`); }} />}
+    </div>
+  );
+}
+
+function Pager({ page, pageCount, pageSize, total, onPage }: { page: number; pageCount: number; pageSize: number; total: number; onPage: (p: number) => void }) {
+  const from = (page - 1) * pageSize + 1;
+  const to = Math.min(page * pageSize, total);
+  // A compact window of page numbers around the current page (with first/last).
+  const nums: (number | "…")[] = [];
+  const push = (n: number | "…") => nums.push(n);
+  const window = new Set<number>([1, pageCount, page - 1, page, page + 1]);
+  let prev = 0;
+  for (let n = 1; n <= pageCount; n++) {
+    if (!window.has(n)) continue;
+    if (n - prev > 1) push("…");
+    push(n);
+    prev = n;
+  }
+  const btn = "h-7 min-w-7 px-2 rounded border text-[12px] disabled:opacity-40 disabled:cursor-not-allowed";
+  return (
+    <div className="mt-2 flex items-center justify-between flex-wrap gap-2">
+      <span className="text-[11px] text-slate-500">Showing {from}–{to} of {total}</span>
+      <div className="flex items-center gap-1">
+        <button onClick={() => onPage(page - 1)} disabled={page <= 1} className={`${btn} border-slate-200 text-slate-600 hover:bg-slate-50`}>‹ Prev</button>
+        {nums.map((n, i) =>
+          n === "…"
+            ? <span key={`e${i}`} className="px-1 text-[12px] text-slate-400">…</span>
+            : <button key={n} onClick={() => onPage(n)} className={`${btn} ${n === page ? "border-blue-800 bg-blue-800 text-white font-medium" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}>{n}</button>
+        )}
+        <button onClick={() => onPage(page + 1)} disabled={page >= pageCount} className={`${btn} border-slate-200 text-slate-600 hover:bg-slate-50`}>Next ›</button>
+      </div>
     </div>
   );
 }
