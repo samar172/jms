@@ -51,6 +51,7 @@ export interface ItemMaster {
   jobCardCount: number;
   series: string[];
   isArchived: boolean;
+  createdAt: string;
 }
 
 export interface ProdKarigar {

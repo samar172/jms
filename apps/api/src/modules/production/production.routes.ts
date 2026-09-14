@@ -133,6 +133,7 @@ router.get(
         // Distinct job-card series this design has cards in — for the series filter.
         series: [...new Set(p.prodJobCards.map((jc) => jc.series?.name).filter((n): n is string => !!n))],
         isArchived: p.isArchived,
+        createdAt: p.createdAt.toISOString(),
       }))
     );
   })

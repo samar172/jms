@@ -7,6 +7,14 @@ import { resolveMediaUrl, ApiError } from "@/lib/api";
 
 const CATEGORIES = ["Necklace Set", "Ring", "Earrings", "Bangles", "Anklets", "Coin / Idol", "Chain", "Toe Ring", "Bracelet", "Pendant"];
 
+// Local (IST) calendar date of an ISO timestamp — used for the created filter.
+const localDate = (iso: string) => { try { return new Date(iso).toLocaleDateString("en-CA"); } catch { return iso.slice(0, 10); } };
+// Date + time in the viewer's timezone, for the card's "created" line.
+const fmtCreated = (iso: string) => {
+  try { const d = new Date(iso); return `${d.toLocaleDateString("en-CA")} · ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`; }
+  catch { return iso.slice(0, 10); }
+};
+
 export default function ItemMasterPage() {
   const [tab, setTab] = useState<"active" | "archived">("active");
   const { data: items, mutate } = useItemMasters(tab === "archived");
@@ -16,6 +24,8 @@ export default function ItemMasterPage() {
   const [purity, setPurity] = useState("all");
   const [series, setSeries] = useState("all");
   const [onlyWithJobs, setOnlyWithJobs] = useState(false);
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
 
   const catOptions = useMemo(
     () => Array.from(new Set((items ?? []).map((i) => i.category).filter(Boolean))).sort(),
@@ -35,6 +45,9 @@ export default function ItemMasterPage() {
     if (purity !== "all" && it.targetPurity !== purity) return false;
     if (series !== "all" && !(it.series ?? []).includes(series)) return false;
     if (onlyWithJobs && it.jobCardCount === 0) return false;
+    const created = localDate(it.createdAt);
+    if (fromDate && created < fromDate) return false;
+    if (toDate && created > toDate) return false;
     if (query.trim()) {
       const q = query.toLowerCase();
       return (
@@ -45,7 +58,7 @@ export default function ItemMasterPage() {
     }
     return true;
   });
-  const activeFilters = cat !== "all" || purity !== "all" || series !== "all" || onlyWithJobs || query.trim().length > 0;
+  const activeFilters = cat !== "all" || purity !== "all" || series !== "all" || onlyWithJobs || !!fromDate || !!toDate || query.trim().length > 0;
 
   return (
     <div className="flex flex-col">
@@ -95,9 +108,15 @@ export default function ItemMasterPage() {
           <input type="checkbox" checked={onlyWithJobs} onChange={(e) => setOnlyWithJobs(e.target.checked)} />
           Has job cards
         </label>
+        <label className="flex items-center gap-1 text-[12px] text-slate-600">
+          Created
+          <input type="date" value={fromDate} max={toDate || undefined} onChange={(e) => setFromDate(e.target.value)} className="h-8 px-1.5 rounded border border-slate-200 text-[12px]" title="Created from" />
+          <span className="text-slate-400">–</span>
+          <input type="date" value={toDate} min={fromDate || undefined} onChange={(e) => setToDate(e.target.value)} className="h-8 px-1.5 rounded border border-slate-200 text-[12px]" title="Created to" />
+        </label>
         {activeFilters && (
           <button
-            onClick={() => { setQuery(""); setCat("all"); setPurity("all"); setSeries("all"); setOnlyWithJobs(false); }}
+            onClick={() => { setQuery(""); setCat("all"); setPurity("all"); setSeries("all"); setOnlyWithJobs(false); setFromDate(""); setToDate(""); }}
             className="h-8 px-2.5 rounded border border-slate-200 text-[12px] text-slate-600 hover:bg-slate-50"
           >
             Clear
@@ -128,6 +147,7 @@ export default function ItemMasterPage() {
                 <span className="text-slate-600">{it.targetPurity} · {it.estGrossWeight}g</span>
                 <span className="text-blue-800 font-medium">{it.jobCardCount} job card{it.jobCardCount === 1 ? "" : "s"}</span>
               </div>
+              <div className="mt-1 pt-1 border-t border-slate-50 text-[10px] mono text-slate-400" title="Created (entered) on">{fmtCreated(it.createdAt)}</div>
             </div>
           </Link>
         ))}
