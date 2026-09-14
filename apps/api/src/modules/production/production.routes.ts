@@ -506,6 +506,7 @@ router.get(
           series: row.series?.name ?? null,
           jobDate: iso(row.jobDate ?? row.createdAt),
           createdAt: jc.createdAt,
+          enteredAt: row.createdAt.toISOString(),
           linked: [...new Set([...row.linkedTo, ...row.linkedFrom].map((x) => x.jobNo))],
           thumbnailUrl: row.itemMaster.images[0]?.thumbnailUrl ?? row.itemMaster.images[0]?.url ?? null,
           imageFullUrl: row.itemMaster.images[0]?.url ?? null,
@@ -734,6 +735,7 @@ router.get(
       baseRate: zc(baseRate),
       jobDate: iso(row.jobDate ?? row.createdAt),
       createdAt: iso(row.createdAt),
+      enteredAt: row.createdAt.toISOString(),
       item: {
         id: row.itemMaster.id,
         name: row.itemMaster.designName,

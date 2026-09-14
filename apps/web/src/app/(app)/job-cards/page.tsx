@@ -24,6 +24,11 @@ const today = () => new Date().toISOString().slice(0, 10);
 // fall back to the estimate if a Closed card somehow has none.
 const jobGross = (r: JobCardListRow) =>
   r.status === "Closed" && r.grossWeight > 0 ? r.grossWeight : r.grossWeightEst;
+// Time-of-entry, in the viewer's local timezone (IST for the shop).
+const fmtTime = (iso: string) => {
+  try { return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); }
+  catch { return ""; }
+};
 
 export default function JobCardsPage() {
   const router = useRouter();
@@ -257,7 +262,10 @@ export default function JobCardsPage() {
                   <td className="px-3 text-[12px] text-slate-700">{r.activeStage ?? <span className="text-slate-400">Not issued</span>}</td>
                   <td className="px-3 text-[12px] mono text-slate-700 whitespace-nowrap">{r.jobDate || "—"}</td>
                   <td className={`px-3 text-[12px] mono ${overdueRow ? "text-rose-600 font-medium" : "text-slate-600"}`}>{r.dueDate || "—"}</td>
-                  <td className="px-3 text-[11px] mono text-slate-400 whitespace-nowrap" title="When this card was entered into the system">{r.createdAt || "—"}</td>
+                  <td className="px-3 text-[11px] mono text-slate-400 whitespace-nowrap leading-tight" title="When this card was entered into the system">
+                    <div>{r.createdAt || "—"}</div>
+                    {r.enteredAt && <div className="text-[10px] text-slate-400">{fmtTime(r.enteredAt)}</div>}
+                  </td>
                   <td className="px-3 text-[11px] whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                     {r.linked.length === 0
                       ? <span className="text-slate-300">—</span>

@@ -108,7 +108,7 @@ export default function JobCardDetailPage({ params }: { params: Promise<{ id: st
               />
             </div>
           )}
-          <JobDetailsPanel jobNo={jc.id} jobDate={data.jobDate} enteredAt={data.createdAt} dueDate={jc.dueDate} pieceCount={jc.pieceCount} notes={jc.notes} onSaved={refresh} />
+          <JobDetailsPanel jobNo={jc.id} jobDate={data.jobDate} enteredAt={data.enteredAt} dueDate={jc.dueDate} pieceCount={jc.pieceCount} notes={jc.notes} onSaved={refresh} />
           <LinkedCards data={data} jobNo={jc.id} canEdit={perms.can("job_cards", "UPDATE")} onChange={refresh} />
           <CostingSummary data={data} onSaved={refresh} />
           <div className="bg-white border border-slate-200 rounded-md">
@@ -382,7 +382,9 @@ function JobDetailsPanel({ jobNo, jobDate, enteredAt, dueDate, pieceCount, notes
   const [pcs, setPcs] = useState(pieceCount == null ? "" : String(pieceCount));
   const [note, setNote] = useState(notes || "");
   const overdue = dueDate && dueDate < today;
-  const enteredLate = jobDate && enteredAt && enteredAt > jobDate;
+  const enteredDate = enteredAt ? enteredAt.slice(0, 10) : "";
+  const enteredTime = (() => { try { return enteredAt ? new Date(enteredAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""; } catch { return ""; } })();
+  const enteredLate = jobDate && enteredDate && enteredDate > jobDate;
   async function save() {
     await updateJobCardMeta(jobNo, { jobDate: jdate || null, dueDate: due || null, pieceCount: pcs === "" ? null : Number(pcs), notes: note });
     setEdit(false); onSaved();
@@ -409,7 +411,7 @@ function JobDetailsPanel({ jobNo, jobDate, enteredAt, dueDate, pieceCount, notes
         ) : (
           <>
             <div className="flex justify-between"><span className="text-slate-500">Job Date</span><span className="mono text-slate-900">{jobDate || "—"}</span></div>
-            <div className="flex justify-between"><span className="text-slate-500">Entered On</span><span className="mono text-slate-500" title="When this card was keyed into the system">{enteredAt || "—"}{enteredLate ? " (late)" : ""}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Entered On</span><span className="mono text-slate-500" title="When this card was keyed into the system">{enteredDate || "—"}{enteredTime ? ` ${enteredTime}` : ""}{enteredLate ? " (late)" : ""}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Delivery Target</span><span className={`mono ${overdue ? "text-rose-600 font-medium" : "text-slate-900"}`}>{dueDate || "Not set"}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Pieces</span><span className="mono text-slate-900">{pieceCount ?? "—"}</span></div>
             {notes && <div className="text-slate-600 pt-1 border-t border-slate-50">{notes}</div>}

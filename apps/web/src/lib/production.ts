@@ -75,6 +75,7 @@ export interface JobCardListRow {
   series: string | null;
   jobDate: string;
   createdAt: string;
+  enteredAt: string;
   linked: string[];
   thumbnailUrl: string | null;
   imageFullUrl: string | null;
@@ -94,6 +95,7 @@ export interface JobCardDetail {
   baseRate: number;
   jobDate: string;
   createdAt: string;
+  enteredAt: string;
   item: { id: string; name: string; category: string; designCode: string | null; estGrossWeight: number; images: { url: string; fullUrl: string }[] };
   activity: { date: string; text: string }[];
   reversals: { date: string; reason: string; approvedBy: string }[];
