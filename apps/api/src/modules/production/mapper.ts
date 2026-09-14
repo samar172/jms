@@ -113,11 +113,13 @@ export function mapJobCard(jc: FullJobCard): EngineJobCard {
           purity: i.purity?.code ?? null,
           issuedWeight: num(i.issuedWeight),
           issueDate: iso(i.issueDate),
+          issuedAt: i.issueDate ? i.issueDate.toISOString() : undefined,
           status: (i.status === "Reconciled" ? "Reconciled" : "Issued") as IssueStatus,
           returnedWeight: num(i.returnedWeight),
           returnedPurity: i.returnedPurity?.code ?? null,
           dustWeight: num(i.dustWeight),
           returnDate: i.returnDate ? iso(i.returnDate) : null,
+          returnedAt: i.returnDate ? i.returnDate.toISOString() : undefined,
           fromBulkStock: i.fromBulkStock,
           pieceCount: i.pieceCount,
           wastagePercent: num(i.wastagePercent),
@@ -166,6 +168,7 @@ export function mapBulkIssue(b: {
   purity: { code: string };
   weightGrams: Prisma.Decimal | number;
   issueDate: Date;
+  createdAt: Date;
   note: string;
 }): EngineBulkStock {
   return {
@@ -174,6 +177,7 @@ export function mapBulkIssue(b: {
     purity: b.purity.code,
     weight: Number(b.weightGrams),
     date: iso(b.issueDate),
+    at: b.createdAt.toISOString(),
     note: b.note,
   };
 }
@@ -187,6 +191,7 @@ export function mapBulkReceipt(b: {
   wastagePercent: Prisma.Decimal | number | null;
   wastageWeight: Prisma.Decimal | number | null;
   receiptDate: Date;
+  createdAt: Date;
   note: string;
 }): EngineBulkReceipt {
   return {
@@ -198,6 +203,7 @@ export function mapBulkReceipt(b: {
     wastagePercent: num(b.wastagePercent),
     wastageWeight: num(b.wastageWeight),
     date: iso(b.receiptDate),
+    at: b.createdAt.toISOString(),
     note: b.note,
   };
 }

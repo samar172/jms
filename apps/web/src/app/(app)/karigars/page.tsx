@@ -9,6 +9,12 @@ const SPEC_OPTS = ["Casting", "Meenakari", "Jadai", "Kundan", "Setting", "Fittin
 
 const money = (v: number) => `₹ ${Math.round(v).toLocaleString("en-IN")}`;
 const gm = (v: number) => `${v.toFixed(3)} g`;
+// Time-of-day of a ledger transaction, in the viewer's local timezone (IST).
+const fmtTime = (iso?: string) => {
+  if (!iso) return "";
+  try { return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); }
+  catch { return ""; }
+};
 const SPECS = ["all", "Casting", "Meenakari", "Jadai", "Kundan", "Setting", "Fitting"];
 
 function defaultRateLabel(k: ProdKarigar): string | null {
@@ -177,7 +183,10 @@ export default function KarigarLedgerPage() {
                       const particulars = e.type.replace(/\s*\((?:Dr|Cr)\)$/, "");
                       return (
                       <tr key={i} className="border-b border-slate-50 h-8">
-                        <td className="px-3 text-[11px] mono text-slate-500 whitespace-nowrap">{e.date}</td>
+                        <td className="px-3 text-[11px] mono text-slate-500 whitespace-nowrap leading-tight">
+                          <div>{e.date}</div>
+                          {fmtTime(e.at) && <div className="text-[10px] text-slate-400">{fmtTime(e.at)}</div>}
+                        </td>
                         <td className="px-3 text-[11px] text-slate-600">{e.stage}</td>
                         <td className="px-3 text-[11px] mono text-blue-800">
                           {e.sourceType === "jobcard" && e.jobCardId !== "—"

@@ -32,11 +32,13 @@ export interface MaterialIssue {
   purity: string | null; // null for bulk-stock stages (Casting/Jadai/Fitting)
   issuedWeight: number | null;
   issueDate: string;
+  issuedAt?: string; // full timestamp of when the issue was recorded (for ledger time-of-day)
   status: IssueStatus;
   returnedWeight: number | null;
   returnedPurity: string | null;
   dustWeight: number | null;
   returnDate: string | null;
+  returnedAt?: string; // full timestamp of when the return was recorded
   fromBulkStock: boolean;
   pieceCount: number | null;
   wastagePercent: number | null; // Casting only
@@ -118,6 +120,7 @@ export interface BulkStockIssue {
   purity: string;
   weight: number;
   date: string;
+  at?: string; // full entry timestamp (createdAt), for ledger time-of-day
   note: string;
 }
 
@@ -135,6 +138,7 @@ export interface BulkStockReceipt {
   wastagePercent: number | null;
   wastageWeight: number | null;
   date: string;
+  at?: string; // full entry timestamp (createdAt), for ledger time-of-day
   note: string;
 }
 
@@ -489,6 +493,7 @@ export type LedgerSource = "opening" | "bulkIssue" | "bulkReceipt" | "jobcard";
 
 export interface LedgerRow {
   date: string;
+  at?: string; // full timestamp of the transaction, for showing time-of-day (opening rows have none)
   karigar: string;
   stage: string;
   jobCardId: string;
@@ -535,6 +540,7 @@ export function buildLedger(
   (bulkIssues || []).forEach((b) => {
     rows.push({
       date: b.date,
+      at: b.at,
       karigar: b.karigar,
       stage: "Bulk Stock",
       jobCardId: "—",
@@ -549,6 +555,7 @@ export function buildLedger(
   (bulkReceipts || []).forEach((b) => {
     rows.push({
       date: b.date,
+      at: b.at,
       karigar: b.karigar,
       stage: b.label ? `Bulk Receive — ${b.label}` : "Bulk Receive",
       jobCardId: "—",
@@ -565,6 +572,7 @@ export function buildLedger(
       const wastagePurity = pureTierLabel(tiers);
       rows.push({
         date: b.date,
+        at: b.at,
         karigar: b.karigar,
         stage: b.label ? `Bulk Receive — ${b.label} (wastage)` : "Bulk Receive (wastage)",
         jobCardId: "—",
@@ -592,6 +600,7 @@ export function buildLedger(
           if (!issue.fromBulkStock && issue.issuedWeight != null && issue.purity != null) {
             rows.push({
               date: issue.issueDate,
+              at: issue.issuedAt,
               karigar: a.karigar,
               stage: stage.stage,
               jobCardId: jc.id,
@@ -607,6 +616,7 @@ export function buildLedger(
             if (issue.returnedWeight != null && issue.returnedPurity != null) {
               rows.push({
                 date: issue.returnDate || issue.issueDate,
+                at: issue.returnedAt || issue.issuedAt,
                 karigar: a.karigar,
                 stage: stage.stage,
                 jobCardId: jc.id,
@@ -621,6 +631,7 @@ export function buildLedger(
             if (issue.dustWeight && issue.returnedPurity != null) {
               rows.push({
                 date: issue.returnDate || issue.issueDate,
+                at: issue.returnedAt || issue.issuedAt,
                 karigar: a.karigar,
                 stage: stage.stage,
                 jobCardId: jc.id,
@@ -636,6 +647,7 @@ export function buildLedger(
               const wastagePurity = pureTierLabel(tiers);
               rows.push({
                 date: issue.returnDate || issue.issueDate,
+                at: issue.returnedAt || issue.issuedAt,
                 karigar: a.karigar,
                 stage: stage.stage,
                 jobCardId: jc.id,
