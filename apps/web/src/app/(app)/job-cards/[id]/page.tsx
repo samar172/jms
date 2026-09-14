@@ -696,6 +696,14 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
       : [],
   );
   const [busy, setBusy] = useState(false);
+  // Labour on Jadai / Meenakari / Setting: either the auto-calculated amount
+  // (from the stage's configured rate) OR a manual flat amount the user types —
+  // exactly one is used. Editing a Setting output (recorded as flat) or a Jadai
+  // output that already carries a labour figure defaults to Manual so the saved
+  // number shows; everything else starts on Auto.
+  const [labourMode, setLabourMode] = useState<"auto" | "manual">(
+    (isJadaiEdit && jLabour > 0) || (isEdit && stage.stage === "Setting") ? "manual" : "auto",
+  );
 
   const issue = modal.issue;
   const issuedW = Number(issue?.issuedWeight ?? 0);
@@ -723,7 +731,12 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
   // rate, unless overridden — same auto/override pattern as stone-return above.
   const jadaiStonePieces = stoneRows.reduce((s, r) => s + (Number(r.pieces) || 0), 0);
   const jadaiLabourAuto = +(jadaiStonePieces * dr.jadaiRatePerStone).toFixed(2);
-  const jadaiLabourEff = labourAmount !== "" ? Number(labourAmount) : jadaiLabourAuto;
+  const jadaiLabourEff = labourMode === "manual" ? (Number(labourAmount) || 0) : jadaiLabourAuto;
+
+  // Meenakari auto = finished weight × ₹/gram; Setting auto = stones set × ₹/stone.
+  const meenakariLabourAuto = +(finished * (Number(ratePerGm) || 0)).toFixed(2);
+  const settingStonePieces = modal.assignment.stones.reduce((s, st) => s + (st.piecesCount ?? 0), 0);
+  const settingLabourAuto = +(settingStonePieces * dr.settingRatePerStone).toFixed(2);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={onClose}>
@@ -767,10 +780,11 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
               <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">Editing recorded output — correct the pieces / stone rates / labour, then Confirm. This replaces the earlier entry. (Kundan gold is recorded in the Kundan stage.)</p>
             )}
             <F label="Number of pieces *"><I value={pieces} onChange={setPieces} step="1" /></F>
-            <F label={`Labour (₹) — auto: ${jadaiStonePieces} pcs × ₹${dr.jadaiRatePerStone}/stone`}>
-              <I value={labourAmount} onChange={setLabourAmount} step="1" placeholder={String(jadaiLabourAuto)} />
-            </F>
-            {labourAmount === "" && jadaiLabourAuto > 0 && <p className="text-[11px] text-emerald-700 -mt-2">Will charge {money(jadaiLabourAuto)} (edit above to override)</p>}
+            <LabourMode mode={labourMode} setMode={setLabourMode}
+              autoLabel={`${jadaiStonePieces} pcs × ₹${dr.jadaiRatePerStone}/stone = ${money(jadaiLabourAuto)}`} />
+            {labourMode === "manual"
+              ? <F label="Labour (₹) — manual"><I value={labourAmount} onChange={setLabourAmount} step="1" /></F>
+              : <p className="text-[11px] text-emerald-700 -mt-1">Will charge {money(jadaiLabourAuto)}</p>}
             <div className="border-t border-slate-100 pt-2">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-[11px] font-medium text-slate-600">Polki / Diamond</span>
@@ -858,9 +872,15 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
             <p className="text-[11px] text-slate-500">Issued {gm(issuedW)} @ {issue?.purity}. Finished = issued − dust = <b>{gm(finished)}</b></p>
             <F label="Number of pieces *"><I value={pieces} onChange={setPieces} step="1" /></F>
             <F label="Dust recovered (g) *"><I value={dust} onChange={setDust} /></F>
-            {stage.stage === "Meenakari"
-              ? <F label="Labour rate (₹/gram on finished)"><I value={ratePerGm} onChange={setRatePerGm} step="1" /></F>
-              : <F label="Labour (₹) — flat"><I value={flat} onChange={setFlat} step="1" /></F>}
+            <LabourMode mode={labourMode} setMode={setLabourMode}
+              autoLabel={stage.stage === "Meenakari"
+                ? `₹${Number(ratePerGm) || 0}/gram × ${gm(finished)} = ${money(meenakariLabourAuto)}`
+                : `${settingStonePieces} stones × ₹${dr.settingRatePerStone}/stone = ${money(settingLabourAuto)}`} />
+            {labourMode === "auto"
+              ? (stage.stage === "Meenakari"
+                  ? <F label="Labour rate (₹/gram on finished)"><I value={ratePerGm} onChange={setRatePerGm} step="1" /></F>
+                  : <p className="text-[11px] text-emerald-700 -mt-1">Will charge {money(settingLabourAuto)}</p>)
+              : <F label="Labour (₹) — manual"><I value={flat} onChange={setFlat} step="1" /></F>}
             <F label="Work type (reference only — कोई असर नहीं)">
               <select className="w-full h-9 px-2 border border-slate-200 rounded text-[12px]" value={workType} onChange={(e) => setWorkType(e.target.value)}>
                 <option value="">—</option>
@@ -935,8 +955,9 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
               if (modal.kind === "reconcile" || isEdit) {
                 if (finished < 0) throw new Error(`Dust recovered (${gm(Number(dust) || 0)}) can't be more than the issued weight (${gm(issuedW)}).`);
                 const body: Record<string, unknown> = { returnedWeight: finished, returnedPurity: issue?.purity ?? targetPurity, dustWeight: Number(dust) || 0, pieceCount: Number(pieces), workType };
-                if (stage.stage === "Meenakari") body.ratePerGm = Number(ratePerGm) || 0;
-                else body.flatLabourAmount = Number(flat) || 0;
+                if (stage.stage === "Meenakari" && labourMode === "auto") body.ratePerGm = Number(ratePerGm) || 0;
+                else if (stage.stage === "Setting" && labourMode === "auto") body.flatLabourAmount = settingLabourAuto;
+                else body.flatLabourAmount = Number(flat) || 0; // manual (either stage)
                 return isEdit ? editReconcile(issue!.id, body) : reconcile(issue!.id, body);
               }
               if (modal.kind === "stones") {
@@ -993,6 +1014,24 @@ function ExportPdfModal({ jobNo, onClose }: { jobNo: string; onClose: () => void
 
 function F({ label, children }: { label: string; children: React.ReactNode }) {
   return <div><label className="block text-[11px] font-medium text-slate-600 mb-1">{label}</label>{children}</div>;
+}
+// Labour: auto-calculated (from the stage's rate) vs a manual flat amount —
+// mutually exclusive. `autoLabel` describes the auto calculation.
+function LabourMode({ mode, setMode, autoLabel }: { mode: "auto" | "manual"; setMode: (m: "auto" | "manual") => void; autoLabel: string }) {
+  return (
+    <div>
+      <label className="block text-[11px] font-medium text-slate-600 mb-1">Labour</label>
+      <div className="flex gap-1.5">
+        {(["auto", "manual"] as const).map((m) => (
+          <button key={m} type="button" onClick={() => setMode(m)}
+            className={`flex-1 h-8 px-2 rounded border text-[12px] font-medium ${mode === m ? "border-blue-800 bg-blue-800 text-white" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}>
+            {m === "auto" ? "Auto (calculated)" : "Manual"}
+          </button>
+        ))}
+      </div>
+      {mode === "auto" && <p className="text-[11px] text-slate-500 mt-1">Auto: {autoLabel}</p>}
+    </div>
+  );
 }
 function I({ value, onChange, step = "0.001", placeholder = "0" }: { value: string; onChange: (v: string) => void; step?: string; placeholder?: string }) {
   return <input type="number" step={step} min="0" className="w-full h-9 px-2 border border-slate-200 rounded text-[12px] mono" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />;
