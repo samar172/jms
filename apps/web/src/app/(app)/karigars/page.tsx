@@ -156,26 +156,39 @@ export default function KarigarLedgerPage() {
               <div className="overflow-auto max-h-[520px]">
                 <table className="w-full border-collapse">
                   <thead className="sticky top-0 bg-slate-50">
-                    <tr className="h-8 text-left border-b border-slate-200">
-                      {["Date", "Stage", "Job", "Type", "Weight", "Pure-eq", "Balance"].map((h) => <th key={h} className="px-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">{h}</th>)}
+                    <tr className="h-8 border-b border-slate-200">
+                      <th className="px-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Date</th>
+                      <th className="px-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Stage</th>
+                      <th className="px-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Job</th>
+                      <th className="px-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Particulars</th>
+                      <th className="px-3 text-right text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Weight</th>
+                      <th className="px-3 text-right text-[10px] uppercase tracking-wider text-rose-600 font-semibold">Debit (g)</th>
+                      <th className="px-3 text-right text-[10px] uppercase tracking-wider text-emerald-700 font-semibold">Credit (g)</th>
+                      <th className="px-3 text-right text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Balance</th>
                       <th className="px-3" />
                     </tr>
                   </thead>
                   <tbody>
-                    {entries.length === 0 && <tr><td colSpan={8} className="py-10 text-center text-[12px] text-slate-400">No transactions yet — issue bulk stock to start.</td></tr>}
-                    {entries.map((e, i) => (
+                    {entries.length === 0 && <tr><td colSpan={9} className="py-10 text-center text-[12px] text-slate-400">No transactions yet — issue bulk stock to start.</td></tr>}
+                    {entries.map((e, i) => {
+                      // Debit = metal going TO the karigar (issued / opening he holds);
+                      // Credit = metal coming BACK (returns, findings, wastage written off).
+                      const isDebit = e.type === "Issue (Dr)" || e.type === "Opening Balance";
+                      const particulars = e.type.replace(/\s*\((?:Dr|Cr)\)$/, "");
+                      return (
                       <tr key={i} className="border-b border-slate-50 h-8">
-                        <td className="px-3 text-[11px] mono text-slate-500">{e.date}</td>
+                        <td className="px-3 text-[11px] mono text-slate-500 whitespace-nowrap">{e.date}</td>
                         <td className="px-3 text-[11px] text-slate-600">{e.stage}</td>
                         <td className="px-3 text-[11px] mono text-blue-800">
                           {e.sourceType === "jobcard" && e.jobCardId !== "—"
                             ? <Link href={`/job-cards/${e.jobCardId}`} className="hover:underline" title="Edit on the job card">{e.jobCardId}</Link>
                             : e.jobCardId}
                         </td>
-                        <td className={`px-3 text-[11px] ${e.type.includes("Dr") ? "text-rose-600" : "text-emerald-700"}`}>{e.type}</td>
-                        <td className="px-3 text-[11px] mono text-slate-700">{e.weight.toFixed(3)} @ {e.purity}</td>
-                        <td className="px-3 text-[11px] mono text-slate-500">{e.pureEq.toFixed(3)}</td>
-                        <td className="px-3 text-[11px] mono font-semibold text-slate-900">{e.balance.toFixed(3)}</td>
+                        <td className="px-3 text-[11px] text-slate-700">{particulars}</td>
+                        <td className="px-3 text-[11px] mono text-right text-slate-600 whitespace-nowrap">{e.weight.toFixed(3)} @ {e.purity}</td>
+                        <td className="px-3 text-[11px] mono text-right text-rose-600">{isDebit ? e.pureEq.toFixed(3) : ""}</td>
+                        <td className="px-3 text-[11px] mono text-right text-emerald-700">{isDebit ? "" : e.pureEq.toFixed(3)}</td>
+                        <td className="px-3 text-[11px] mono text-right font-semibold text-slate-900">{e.balance.toFixed(3)}</td>
                         <td className="px-3 text-right whitespace-nowrap">
                           {(e.sourceType === "bulkIssue" || e.sourceType === "bulkReceipt") ? (
                             <>
@@ -189,10 +202,11 @@ export default function KarigarLedgerPage() {
                           ) : null}
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                   {entries.length > 0 && (
-                    <tfoot><tr className="h-8 bg-slate-50 border-t border-slate-200"><td colSpan={6} className="px-3 text-[11px] text-right font-semibold text-slate-600">Closing balance</td><td className="px-3 text-[11px] mono font-bold text-slate-900">{gm(closing)}</td><td /></tr></tfoot>
+                    <tfoot><tr className="h-8 bg-slate-50 border-t border-slate-200"><td colSpan={7} className="px-3 text-[11px] text-right font-semibold text-slate-600">Closing balance</td><td className="px-3 text-[11px] mono text-right font-bold text-slate-900">{gm(closing)}</td><td /></tr></tfoot>
                   )}
                 </table>
               </div>

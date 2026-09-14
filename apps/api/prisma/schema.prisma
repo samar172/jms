@@ -1390,6 +1390,11 @@ model ProdJobCard {
   targetPurity      PurityTier    @relation(fields: [targetPurityId], references: [id])
   status            ProdJobStatus @default(InProduction)
   pieceCount        Int?
+  // The actual work date the user assigns to this card (they may enter a card a
+  // day or two after the work). Editable and back-dateable. `createdAt` below
+  // stays the immutable system timestamp of when the row was keyed in, so both
+  // are captured. Null on old rows → treated as the createdAt date on read.
+  jobDate           DateTime?
   dueDate           DateTime?
   closedAt          DateTime?
   notes             String        @default("")

@@ -108,7 +108,7 @@ export default function JobCardDetailPage({ params }: { params: Promise<{ id: st
               />
             </div>
           )}
-          <JobDetailsPanel jobNo={jc.id} dueDate={jc.dueDate} pieceCount={jc.pieceCount} notes={jc.notes} onSaved={refresh} />
+          <JobDetailsPanel jobNo={jc.id} jobDate={data.jobDate} enteredAt={data.createdAt} dueDate={jc.dueDate} pieceCount={jc.pieceCount} notes={jc.notes} onSaved={refresh} />
           <LinkedCards data={data} jobNo={jc.id} canEdit={perms.can("job_cards", "UPDATE")} onChange={refresh} />
           <CostingSummary data={data} onSaved={refresh} />
           <div className="bg-white border border-slate-200 rounded-md">
@@ -374,14 +374,17 @@ function MaterialBreakdown({ data, onSaved }: { data: JobCardDetail; onSaved: ()
   );
 }
 
-function JobDetailsPanel({ jobNo, dueDate, pieceCount, notes, onSaved }: { jobNo: string; dueDate: string; pieceCount: number | null; notes: string; onSaved: () => void }) {
+function JobDetailsPanel({ jobNo, jobDate, enteredAt, dueDate, pieceCount, notes, onSaved }: { jobNo: string; jobDate: string; enteredAt: string; dueDate: string; pieceCount: number | null; notes: string; onSaved: () => void }) {
+  const today = new Date().toISOString().slice(0, 10);
   const [edit, setEdit] = useState(false);
+  const [jdate, setJdate] = useState(jobDate || "");
   const [due, setDue] = useState(dueDate || "");
   const [pcs, setPcs] = useState(pieceCount == null ? "" : String(pieceCount));
   const [note, setNote] = useState(notes || "");
-  const overdue = dueDate && dueDate < new Date().toISOString().slice(0, 10);
+  const overdue = dueDate && dueDate < today;
+  const enteredLate = jobDate && enteredAt && enteredAt > jobDate;
   async function save() {
-    await updateJobCardMeta(jobNo, { dueDate: due || null, pieceCount: pcs === "" ? null : Number(pcs), notes: note });
+    await updateJobCardMeta(jobNo, { jobDate: jdate || null, dueDate: due || null, pieceCount: pcs === "" ? null : Number(pcs), notes: note });
     setEdit(false); onSaved();
   }
   return (
@@ -393,6 +396,8 @@ function JobDetailsPanel({ jobNo, dueDate, pieceCount, notes, onSaved }: { jobNo
       <div className="p-4 space-y-2 text-[12px]">
         {edit ? (
           <>
+            <label className="block text-[11px] text-slate-500">Job Date (actual work date)</label>
+            <input type="date" max={today} className="h-8 w-full px-2 border border-slate-200 rounded text-[12px]" value={jdate} onChange={(e) => setJdate(e.target.value)} />
             <label className="block text-[11px] text-slate-500">Delivery Target</label>
             <input type="date" className="h-8 w-full px-2 border border-slate-200 rounded text-[12px]" value={due} onChange={(e) => setDue(e.target.value)} />
             <label className="block text-[11px] text-slate-500">Pieces</label>
@@ -403,6 +408,8 @@ function JobDetailsPanel({ jobNo, dueDate, pieceCount, notes, onSaved }: { jobNo
           </>
         ) : (
           <>
+            <div className="flex justify-between"><span className="text-slate-500">Job Date</span><span className="mono text-slate-900">{jobDate || "—"}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Entered On</span><span className="mono text-slate-500" title="When this card was keyed into the system">{enteredAt || "—"}{enteredLate ? " (late)" : ""}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Delivery Target</span><span className={`mono ${overdue ? "text-rose-600 font-medium" : "text-slate-900"}`}>{dueDate || "Not set"}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Pieces</span><span className="mono text-slate-900">{pieceCount ?? "—"}</span></div>
             {notes && <div className="text-slate-600 pt-1 border-t border-slate-50">{notes}</div>}

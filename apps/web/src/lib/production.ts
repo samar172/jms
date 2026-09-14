@@ -73,6 +73,7 @@ export interface JobCardListRow {
   itemName: string;
   category: string;
   series: string | null;
+  jobDate: string;
   createdAt: string;
   linked: string[];
   thumbnailUrl: string | null;
@@ -91,6 +92,8 @@ export interface JobCardDetail {
   jobCard: JobCard;
   tiers: PurityTier[];
   baseRate: number;
+  jobDate: string;
+  createdAt: string;
   item: { id: string; name: string; category: string; designCode: string | null; estGrossWeight: number; images: { url: string; fullUrl: string }[] };
   activity: { date: string; text: string }[];
   reversals: { date: string; reason: string; approvedBy: string }[];
@@ -154,7 +157,7 @@ const del = (path: string) => apiFetch(`/api/production${path}`, { method: "DELE
 export const linkJobCard = (jobNo: string, targetJobNo: string) => post(`/job-cards/${jobNo}/links`, { targetJobNo });
 export const unlinkJobCard = (jobNo: string, targetJobNo: string) => del(`/job-cards/${jobNo}/links/${encodeURIComponent(targetJobNo)}`);
 
-export const createJobCard = (body: { itemMasterId: string; seriesId: string; number: string; dueDate?: string; pieceCount?: number; notes?: string }) =>
+export const createJobCard = (body: { itemMasterId: string; seriesId: string; number: string; jobDate?: string; dueDate?: string; pieceCount?: number; notes?: string }) =>
   post("/job-cards", body) as Promise<{ id: string; jobNo: string }>;
 export const issueBulkStock = (body: { karigarId: string; purityId: string; weightGrams: number; note?: string }) =>
   post("/bulk-stock", body);

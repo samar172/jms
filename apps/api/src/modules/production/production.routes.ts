@@ -504,6 +504,7 @@ router.get(
           itemName: row.itemMaster.designName,
           category: row.itemMaster.category.name,
           series: row.series?.name ?? null,
+          jobDate: iso(row.jobDate ?? row.createdAt),
           createdAt: jc.createdAt,
           linked: [...new Set([...row.linkedTo, ...row.linkedFrom].map((x) => x.jobNo))],
           thumbnailUrl: row.itemMaster.images[0]?.thumbnailUrl ?? row.itemMaster.images[0]?.url ?? null,
@@ -528,6 +529,9 @@ const createSchema = z.object({
   // Manual number entered by the user (no auto-increment). Combined with the
   // series prefix to form the full job number, which must be unique.
   number: z.string().trim().min(1, "Job card number is required").max(30),
+  // Actual work date (defaults to today on the client; may be back-dated when a
+  // card is entered a day or two late). Distinct from the createdAt timestamp.
+  jobDate: z.coerce.date().optional(),
   dueDate: z.coerce.date().optional(),
   pieceCount: z.number().int().positive().optional(),
   notes: z.string().optional(),
@@ -555,6 +559,7 @@ router.post(
           targetPurityId: item.purityId,
           status: "InProduction",
           pieceCount: body.pieceCount ?? null,
+          jobDate: body.jobDate ?? new Date(),
           dueDate: body.dueDate ?? null,
           notes: body.notes ?? "",
           createdById: req.user!.id,
@@ -727,6 +732,8 @@ router.get(
       jobCard: jc,
       tiers,
       baseRate: zc(baseRate),
+      jobDate: iso(row.jobDate ?? row.createdAt),
+      createdAt: iso(row.createdAt),
       item: {
         id: row.itemMaster.id,
         name: row.itemMaster.designName,

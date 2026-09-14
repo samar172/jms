@@ -10,8 +10,9 @@ const COLS: { key: string; label: string; align?: string }[] = [
   { key: "id", label: "Job No." },
   { key: "itemName", label: "Item" },
   { key: "stage", label: "Stage" },
+  { key: "jobDate", label: "Job Date" },
   { key: "dueDate", label: "Due Date" },
-  { key: "createdAt", label: "Created" },
+  { key: "createdAt", label: "Entered" },
   { key: "linked", label: "Linked" },
   { key: "grossWeight", label: "Gross Wt", align: "text-right" },
   { key: "status", label: "Status" },
@@ -91,6 +92,7 @@ export default function JobCardsPage() {
       case "id": return r.id;
       case "itemName": return r.itemName;
       case "stage": return r.activeStage ?? "";
+      case "jobDate": return r.jobDate ?? "";
       case "dueDate": return r.dueDate ?? "";
       case "createdAt": return r.createdAt ?? "";
       case "grossWeight": return jobGross(r);
@@ -225,7 +227,7 @@ export default function JobCardsPage() {
           </thead>
           <tbody>
             {sorted.length === 0 && (
-              <tr><td colSpan={9} className="py-14 text-center text-[13px] text-slate-500">No job cards match these filters</td></tr>
+              <tr><td colSpan={10} className="py-14 text-center text-[13px] text-slate-500">No job cards match these filters</td></tr>
             )}
             {paged.map((r: JobCardListRow) => {
               const overdueRow = r.status !== "Closed" && r.dueDate && r.dueDate < today();
@@ -253,8 +255,9 @@ export default function JobCardsPage() {
                     <div className="text-[10px] text-slate-400">{r.category}</div>
                   </td>
                   <td className="px-3 text-[12px] text-slate-700">{r.activeStage ?? <span className="text-slate-400">Not issued</span>}</td>
+                  <td className="px-3 text-[12px] mono text-slate-700 whitespace-nowrap">{r.jobDate || "—"}</td>
                   <td className={`px-3 text-[12px] mono ${overdueRow ? "text-rose-600 font-medium" : "text-slate-600"}`}>{r.dueDate || "—"}</td>
-                  <td className="px-3 text-[11px] mono text-slate-500 whitespace-nowrap">{r.createdAt || "—"}</td>
+                  <td className="px-3 text-[11px] mono text-slate-400 whitespace-nowrap" title="When this card was entered into the system">{r.createdAt || "—"}</td>
                   <td className="px-3 text-[11px] whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                     {r.linked.length === 0
                       ? <span className="text-slate-300">—</span>
@@ -356,13 +359,14 @@ function NewJobCardModal({ onClose, onCreated }: { onClose: () => void; onCreate
   const [itemMasterId, setItemMasterId] = useState("");
   const [seriesId, setSeriesId] = useState("");
   const [number, setNumber] = useState("");
+  const today = new Date().toISOString().slice(0, 10);
+  const [jobDate, setJobDate] = useState(today);
   const [dueDate, setDueDate] = useState("");
   const [pieceCount, setPieceCount] = useState("1");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const chosen = items?.find((i) => i.id === itemMasterId);
-  const today = new Date().toISOString().slice(0, 10);
   const availableSeries = (settings?.jobCardSeries ?? []).filter((s) => s.effectiveFrom <= today);
   const selName = availableSeries.find((s) => s.id === seriesId)?.name;
 
@@ -370,7 +374,7 @@ function NewJobCardModal({ onClose, onCreated }: { onClose: () => void; onCreate
     if (!itemMasterId || !seriesId || !number.trim()) return;
     setBusy(true); setError(null);
     try {
-      const jc = await createJobCard({ itemMasterId, seriesId, number: number.trim(), dueDate: dueDate || undefined, pieceCount: Number(pieceCount) || undefined, notes: notes || undefined });
+      const jc = await createJobCard({ itemMasterId, seriesId, number: number.trim(), jobDate: jobDate || undefined, dueDate: dueDate || undefined, pieceCount: Number(pieceCount) || undefined, notes: notes || undefined });
       onCreated(jc.jobNo);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not create the job card.");
@@ -407,16 +411,21 @@ function NewJobCardModal({ onClose, onCreated }: { onClose: () => void; onCreate
             <input className="w-full h-9 px-2 border border-slate-200 rounded text-[12px]" value={number} onChange={(e) => setNumber(e.target.value)} placeholder="e.g. 015" />
             {selName && number.trim() && <p className="text-[11px] text-slate-500 mt-1">Full no.: <span className="mono font-medium text-slate-800">{selName}-{number.trim()}</span></p>}
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="block text-[11px] font-medium text-slate-600 mb-1">Pieces</label>
-              <input type="number" min="1" className="w-full h-9 px-2 border border-slate-200 rounded text-[12px]" value={pieceCount} onChange={(e) => setPieceCount(e.target.value)} />
+              <label className="block text-[11px] font-medium text-slate-600 mb-1">Job Date</label>
+              <input type="date" max={today} className="w-full h-9 px-2 border border-slate-200 rounded text-[12px]" value={jobDate} onChange={(e) => setJobDate(e.target.value)} />
             </div>
             <div>
               <label className="block text-[11px] font-medium text-slate-600 mb-1">Due Date</label>
               <input type="date" className="w-full h-9 px-2 border border-slate-200 rounded text-[12px]" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </div>
+            <div>
+              <label className="block text-[11px] font-medium text-slate-600 mb-1">Pieces</label>
+              <input type="number" min="1" className="w-full h-9 px-2 border border-slate-200 rounded text-[12px]" value={pieceCount} onChange={(e) => setPieceCount(e.target.value)} />
+            </div>
           </div>
+          <p className="text-[11px] text-slate-400 -mt-1">Job Date is the actual work date — set it to when the work happened if you&apos;re entering this card late. The system separately records when it was entered.</p>
           <div>
             <label className="block text-[11px] font-medium text-slate-600 mb-1">Notes</label>
             <input className="w-full h-9 px-2 border border-slate-200 rounded text-[12px]" value={notes} onChange={(e) => setNotes(e.target.value)} />

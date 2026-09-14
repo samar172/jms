@@ -245,6 +245,7 @@ router.patch(
   asyncHandler(async (req, res) => {
     const body = z
       .object({
+        jobDate: z.coerce.date().nullable().optional(),
         dueDate: z.coerce.date().nullable().optional(),
         notes: z.string().optional(),
         pieceCount: z.number().int().nullable().optional(),
@@ -257,6 +258,7 @@ router.patch(
     await prisma.prodJobCard.update({
       where: { id: jc.id },
       data: {
+        ...(body.jobDate !== undefined ? { jobDate: body.jobDate } : {}),
         ...(body.dueDate !== undefined ? { dueDate: body.dueDate } : {}),
         ...(body.notes !== undefined ? { notes: body.notes } : {}),
         ...(body.pieceCount !== undefined ? { pieceCount: body.pieceCount } : {}),
