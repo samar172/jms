@@ -515,6 +515,9 @@ function StageCard({ jobNo, stage, pieceCount, targetPurity, karigars, settings,
             <div className="flex items-center justify-between mb-1.5">
               <span className="flex items-center gap-1.5">
                 <span className="text-[12px] font-medium text-slate-800">{a.karigar}</span>
+                {stage.stage === "Jadai" && a.pieceCount != null && (
+                  <span className="text-[11px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-medium">{a.pieceCount} pcs</span>
+                )}
                 {stage.status !== "Approved" && !hasOutput && (
                   <button onClick={() => removeKarigar(a.id, a.karigar)} title="Remove this karigar (added by mistake)"
                     className="text-[11px] text-rose-500 hover:text-rose-700 leading-none">✕ remove</button>
@@ -644,7 +647,7 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
   const jLabour = isJadaiEdit ? modal.assignment.labour.reduce((s, l) => s + l.amount, 0) : 0;
   const fLabour = isFindingEdit ? modal.assignment.labour.filter((l) => l.basis !== "Wastage %").reduce((s, l) => s + l.amount, 0) : 0;
   const kLabour = isKundanEdit ? modal.assignment.labour.reduce((s, l) => s + l.amount, 0) : 0;
-  const pc0 = String(jIssue?.pieceCount ?? cIssue?.pieceCount ?? modal.issue?.pieceCount ?? pieceCount ?? 1);
+  const pc0 = String(jIssue?.pieceCount ?? cIssue?.pieceCount ?? modal.issue?.pieceCount ?? modal.assignment.pieceCount ?? pieceCount ?? 1);
 
   // shared fields
   const subNames = settings.subItemNames ?? [];

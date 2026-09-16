@@ -107,6 +107,7 @@ export function mapJobCard(jc: FullJobCard): EngineJobCard {
       assignments: st.assignments.map((a) => ({
         id: a.id,
         karigar: a.karigar.name,
+        pieceCount: a.pieceCount,
         issues: a.issues.map((i) => ({
           id: i.id,
           material: "Silver" as const,

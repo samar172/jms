@@ -106,6 +106,7 @@ router.delete(
     await prisma.prodStoneEntry.deleteMany({ where: { assignmentId: a.id } });
     await prisma.prodMaterialIssue.deleteMany({ where: { assignmentId: a.id } });
     await prisma.prodSubItem.deleteMany({ where: { assignmentId: a.id } });
+    await prisma.prodAssignment.update({ where: { id: a.id }, data: { pieceCount: null } });
     await logActivity(a.stage.jobCardId, `${a.karigar.name}'s ${a.stage.stageName} output cleared`);
     res.json({ ok: true });
   })
@@ -529,7 +530,9 @@ async function writeJadaiOutput(body: z.infer<typeof jadaiBody>, jcId: string, s
     });
   }
   await prisma.prodStage.update({ where: { id: stageId }, data: { status: "InProgress" } });
-  await prisma.prodJobCard.update({ where: { id: jcId }, data: { pieceCount: body.pieceCount } });
+  // Per-karigar count lives on the assignment — writing it to the job card would
+  // let one karigar's Jadai count overwrite every other karigar's on this stage.
+  await prisma.prodAssignment.update({ where: { id: body.assignmentId }, data: { pieceCount: body.pieceCount } });
 }
 
 router.post(

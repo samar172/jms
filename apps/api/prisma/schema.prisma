@@ -1489,6 +1489,7 @@ model ProdAssignment {
   karigarId String
   karigar  Karigar   @relation(fields: [karigarId], references: [id])
   createdAt DateTime @default(now())
+  pieceCount Int?     // per-karigar pieces on this assignment (e.g. Jadai)
 
   issues   ProdMaterialIssue[]
   stones   ProdStoneEntry[]

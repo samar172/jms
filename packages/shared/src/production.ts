@@ -75,6 +75,7 @@ export interface LabourEntry {
 export interface Assignment {
   id: string;
   karigar: string;
+  pieceCount?: number | null; // per-karigar pieces on this assignment (e.g. Jadai)
   issues: MaterialIssue[];
   stones: StoneEntry[];
   labour: LabourEntry[];
