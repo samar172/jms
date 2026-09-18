@@ -642,7 +642,7 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
   const isKundanEdit = modal.kind === "kundanEdit";
   const isStoneEdit = modal.kind === "stoneEdit";
   const jIssue = isJadaiEdit ? modal.assignment.issues.find((i) => i.fromBulkStock) : undefined;
-  const cIssue = isCastEdit ? modal.assignment.issues.find((i) => i.fromBulkStock) : undefined;
+  const cIssue = isCastEdit ? modal.assignment.issues.find((i) => i.fromBulkStock && !i.label) : undefined;
   const kIssue = isKundanEdit ? modal.assignment.issues.find((i) => i.fromBulkStock) : undefined;
   const jLabour = isJadaiEdit ? modal.assignment.labour.reduce((s, l) => s + l.amount, 0) : 0;
   const fLabour = isFindingEdit ? modal.assignment.labour.filter((l) => l.basis !== "Wastage %").reduce((s, l) => s + l.amount, 0) : 0;
@@ -658,6 +658,15 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
   );
   const subTotalPieces = subRows.reduce((s, r) => s + (Number(r.pieces) || 0), 0);
   const subTotalWeight = subRows.reduce((s, r) => s + (Number(r.weight) || 0), 0);
+  // Additional cast items at a different purity than the design's target — one
+  // labelled cast issue each (prefilled on edit from the labelled bulk issues).
+  const [extraRows, setExtraRows] = useState<{ name: string; purity: string; pieces: string; weight: string; wastagePercent: string }[]>(
+    isCastEdit
+      ? modal.assignment.issues
+          .filter((i) => i.fromBulkStock && i.label)
+          .map((i) => ({ name: i.label ?? "", purity: i.returnedPurity ?? "", pieces: i.pieceCount != null ? String(i.pieceCount) : "", weight: i.returnedWeight != null ? String(i.returnedWeight) : "", wastagePercent: i.wastagePercent != null ? String(i.wastagePercent) : "0" }))
+      : [],
+  );
   const [wastagePercent, setWastagePercent] = useState(String(
     isCastEdit ? (cIssue?.wastagePercent ?? 0) : stage.stage === "Casting" ? dr.castingWastagePct : "",
   ));
@@ -776,6 +785,31 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
               <p className="text-[11px] text-emerald-700 font-medium mt-1">Total: {subTotalPieces} pcs · {subTotalWeight.toFixed(3)} g</p>
             </div>
             <F label="Wastage % (charged as extra silver weight)"><I value={wastagePercent} onChange={setWastagePercent} step="0.1" /></F>
+            <div className="border-t border-slate-100 pt-2">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[11px] font-medium text-slate-600">Additional item — different purity (optional)</span>
+                <button type="button" onClick={() => setExtraRows((r) => [...r, { name: "", purity: pure, pieces: "", weight: "", wastagePercent: String(dr.castingWastagePct) }])} className="h-6 px-2 rounded border border-slate-200 text-[11px] hover:bg-slate-50">+ Add Item</button>
+              </div>
+              {extraRows.length === 0 && <p className="text-[11px] text-slate-400 mb-1">Karigar also delivered something at a different karat? Add it here — it&apos;s counted at its own purity.</p>}
+              {extraRows.length > 0 && (
+                <div className="grid grid-cols-[1.2fr_0.9fr_0.7fr_0.9fr_0.8fr_auto] gap-1.5 mb-1 text-[10px] text-slate-400 px-0.5">
+                  <span>Name</span><span>Purity</span><span>Pcs</span><span>Weight (g)</span><span>Wastage %</span><span></span>
+                </div>
+              )}
+              {extraRows.map((row, idx) => (
+                <div key={idx} className="grid grid-cols-[1.2fr_0.9fr_0.7fr_0.9fr_0.8fr_auto] gap-1.5 mb-1.5 items-center">
+                  <input placeholder="Name" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] min-w-0 w-full" value={row.name} onChange={(e) => setExtraRows((r) => r.map((x, i) => i === idx ? { ...x, name: e.target.value } : x))} />
+                  <select className="h-8 px-1 border border-slate-200 rounded text-[11px] min-w-0 w-full" value={row.purity} onChange={(e) => setExtraRows((r) => r.map((x, i) => i === idx ? { ...x, purity: e.target.value } : x))}>
+                    {!settings.tiers.some((t) => t.label === row.purity) && row.purity && <option value={row.purity}>{row.purity}</option>}
+                    {settings.tiers.map((t) => <option key={t.label} value={t.label}>{t.label}</option>)}
+                  </select>
+                  <input placeholder="Pcs" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono min-w-0 w-full" value={row.pieces} onChange={(e) => setExtraRows((r) => r.map((x, i) => i === idx ? { ...x, pieces: e.target.value } : x))} />
+                  <input placeholder="g" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono min-w-0 w-full" value={row.weight} onChange={(e) => setExtraRows((r) => r.map((x, i) => i === idx ? { ...x, weight: e.target.value } : x))} />
+                  <input placeholder="%" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono min-w-0 w-full" value={row.wastagePercent} onChange={(e) => setExtraRows((r) => r.map((x, i) => i === idx ? { ...x, wastagePercent: e.target.value } : x))} />
+                  <button type="button" onClick={() => setExtraRows((r) => r.filter((_, i) => i !== idx))} className="text-rose-500 text-[13px] w-5">✕</button>
+                </div>
+              ))}
+            </div>
           </>)}
 
           {(modal.kind === "jadai" || modal.kind === "jadaiEdit") && (<>
@@ -932,7 +966,10 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
               if (modal.kind === "cast" || modal.kind === "castEdit") {
                 const subItems = subRows.filter((r) => r.name.trim() && (Number(r.pieces) > 0 || Number(r.weight) > 0)).map((r) => ({ name: r.name.trim(), pieces: Number(r.pieces) || 0, weightG: r.weight !== "" ? Number(r.weight) : null }));
                 if (subItems.length === 0) throw new Error("Add at least one sub-item row (pieces or weight).");
-                const payload = { assignmentId: A, returnedWeight: subTotalWeight, wastagePercent: Number(wastagePercent) || 0, pieceCount: subTotalPieces, subItems };
+                const badExtra = extraRows.find((r) => (r.name.trim() || r.weight || r.pieces) && !(r.name.trim() && Number(r.weight) > 0 && r.purity));
+                if (badExtra) throw new Error("Each additional item needs a name, purity and weight (g).");
+                const extras = extraRows.filter((r) => r.name.trim() && Number(r.weight) > 0 && r.purity).map((r) => ({ name: r.name.trim(), purity: r.purity, pieces: Number(r.pieces) || 0, weightG: Number(r.weight), wastagePercent: Number(r.wastagePercent) || 0 }));
+                const payload = { assignmentId: A, returnedWeight: subTotalWeight, wastagePercent: Number(wastagePercent) || 0, pieceCount: subTotalPieces, subItems, extras };
                 return modal.kind === "castEdit" ? editCastOutput(jobNo, payload) : castOutput(jobNo, payload);
               }
               if (modal.kind === "jadai" || modal.kind === "jadaiEdit") {

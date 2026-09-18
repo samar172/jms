@@ -381,6 +381,21 @@ const castBody = z.object({
   subItems: z
     .array(z.object({ name: z.string(), pieces: z.number().int().default(0), weightG: z.number().nullable().optional() }))
     .default([]),
+  // Optional additional items the karigar delivered at a DIFFERENT purity than
+  // the design's target purity. Each becomes its own labelled cast issue at its
+  // own karat (with its own melt-loss wastage), so gross weight / pure-eq /
+  // costing all count it at the right purity.
+  extras: z
+    .array(
+      z.object({
+        name: z.string(),
+        purity: z.string(), // tier label
+        pieces: z.number().int().default(0),
+        weightG: z.number().positive(),
+        wastagePercent: z.number().default(0),
+      }),
+    )
+    .default([]),
 });
 
 // Writes the casting output (material issue + karigar-wise sub-item breakdown)
@@ -444,11 +459,53 @@ async function writeCastOutput(body: z.infer<typeof castBody>, jcId: string, sta
       data: rows.map((r, i) => ({ assignmentId: body.assignmentId, sortOrder: i, name: r.name.trim(), pieces: r.pieces || 0, weightG: r.weightG ?? null })),
     });
   }
+
+  // Additional items delivered at a different purity → one labelled cast issue
+  // each, at its own karat. Melt loss on the extra is priced at pure the same
+  // way as the main output (the extra was also drawn from pure bulk stock).
+  const extras = body.extras.filter((e) => e.name.trim() && e.weightG > 0);
+  for (const e of extras) {
+    const eWastageWeight = +(e.weightG * (e.wastagePercent / 100)).toFixed(3);
+    await prisma.prodMaterialIssue.create({
+      data: {
+        assignmentId: body.assignmentId,
+        purityId: null,
+        issuedWeight: null,
+        issueDate: new Date(),
+        status: "Reconciled",
+        returnedWeight: e.weightG,
+        returnedPurityId: await purityIdFor(e.purity),
+        dustWeight: 0,
+        returnDate: new Date(),
+        fromBulkStock: true,
+        pieceCount: e.pieces || null,
+        wastagePercent: e.wastagePercent,
+        wastageWeight: eWastageWeight,
+        label: e.name.trim(),
+      },
+    });
+    if (e.wastagePercent > 0 && pureTier) {
+      const amt = computeLabourAmount("Wastage %", e.weightG, e.wastagePercent, pureTier.label, tierList, base);
+      await prisma.prodLabourEntry.create({
+        data: {
+          assignmentId: body.assignmentId,
+          basis: "WastagePct",
+          qty: e.weightG,
+          rate: e.wastagePercent,
+          amount: amt,
+          purityId: pureTier.id,
+          note: `${e.wastagePercent}% wastage on ${e.weightG.toFixed(3)}g ${e.name.trim()} (${e.purity}) = ${eWastageWeight.toFixed(3)}g, priced @ ${pureTier.label} pure`,
+        },
+      });
+    }
+  }
+
   await prisma.prodStage.update({ where: { id: stageId }, data: { status: "InProgress" } });
   await prisma.prodJobCard.update({ where: { id: jcId }, data: { pieceCount: totalPieces } });
   const rowLabel = rows.length ? ` [${rows.map((r) => `${r.pieces}×${r.name.trim()}`).join(", ")}]` : "";
   const wastageLabel = body.wastagePercent > 0 ? ` + ${gm(wastageWeight)} wastage (${body.wastagePercent}%${wastageAmt > 0 ? `, ${money(wastageAmt)}` : ""})` : "";
-  await logActivity(jcId, `Casting output ${verb} — ${gm(totalWeight)} (${totalPieces} pcs)${rowLabel}${wastageLabel}`);
+  const extraLabel = extras.length ? ` + extra ${extras.map((e) => `${gm(e.weightG)} ${e.name.trim()} @ ${e.purity}`).join(", ")}` : "";
+  await logActivity(jcId, `Casting output ${verb} — ${gm(totalWeight)} (${totalPieces} pcs)${rowLabel}${wastageLabel}${extraLabel}`);
 }
 
 router.post(

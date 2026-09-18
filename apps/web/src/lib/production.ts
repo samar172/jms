@@ -180,9 +180,11 @@ export const editReconcile = (issueId: string, body: Record<string, unknown>) =>
   post(`/issues/${issueId}/edit-reconcile`, body);
 export const cancelReconcile = (issueId: string) =>
   post(`/issues/${issueId}/cancel-reconcile`);
-export const castOutput = (jobNo: string, body: { assignmentId: string; returnedWeight: number; wastagePercent: number; pieceCount: number; subItems?: { name: string; pieces: number; weightG: number | null }[] }) =>
+type CastExtra = { name: string; purity: string; pieces: number; weightG: number; wastagePercent: number };
+type CastBody = { assignmentId: string; returnedWeight: number; wastagePercent: number; pieceCount: number; subItems?: { name: string; pieces: number; weightG: number | null }[]; extras?: CastExtra[] };
+export const castOutput = (jobNo: string, body: CastBody) =>
   post(`/job-cards/${jobNo}/cast-output`, body);
-export const editCastOutput = (jobNo: string, body: { assignmentId: string; returnedWeight: number; wastagePercent: number; pieceCount: number; subItems?: { name: string; pieces: number; weightG: number | null }[] }) =>
+export const editCastOutput = (jobNo: string, body: CastBody) =>
   post(`/job-cards/${jobNo}/cast-output/edit`, body);
 export const jadaiOutput = (jobNo: string, body: Record<string, unknown>) =>
   post(`/job-cards/${jobNo}/jadai-output`, body);
