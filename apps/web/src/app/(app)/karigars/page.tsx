@@ -107,8 +107,8 @@ export default function KarigarLedgerPage() {
                 <button key={k.id} onClick={() => setSelectedId(k.id)} className={`w-full text-left px-3 py-2.5 border-b border-slate-100 ${active?.id === k.id ? "bg-blue-50 border-l-2 border-l-blue-800" : "hover:bg-slate-50"}`}>
                   <div className="text-[12px] font-medium text-slate-900">{k.name}</div>
                   <div className="text-[10px] text-slate-500">{k.specialization}{rl ? ` · ${rl}` : ""}</div>
-                  <div className={`text-[11px] mono mt-0.5 ${(ledger[k.name] ?? []).length === 0 ? "text-slate-400" : bal > 0.05 ? "text-amber-700" : "text-emerald-700"}`}>
-                    {(ledger[k.name] ?? []).length === 0 ? "No transactions yet" : bal > 0.05 ? `${gm(bal)} outstanding` : "Fully settled"}
+                  <div className={`text-[11px] mono mt-0.5 ${(ledger[k.name] ?? []).length === 0 ? "text-slate-400" : bal > 0.05 ? "text-amber-700" : bal < -0.05 ? "text-blue-700" : "text-emerald-700"}`}>
+                    {(ledger[k.name] ?? []).length === 0 ? "No transactions yet" : bal > 0.05 ? `${gm(bal)} outstanding` : bal < -0.05 ? `${gm(Math.abs(bal))} in credit` : "Fully settled"}
                   </div>
                 </button>
               );
@@ -179,7 +179,12 @@ export default function KarigarLedgerPage() {
                     {entries.map((e, i) => {
                       // Debit = metal going TO the karigar (issued / opening he holds);
                       // Credit = metal coming BACK (returns, findings, wastage written off).
-                      const isDebit = e.type === "Issue (Dr)" || e.type === "Opening Balance";
+                      // A signed amount (only Opening Balance can be negative — a
+                      // credit brought forward, i.e. we owe him) flips to the other
+                      // side and is shown as a positive figure there.
+                      const baseDebit = e.type === "Issue (Dr)" || e.type === "Opening Balance";
+                      const onDebit = e.pureEq >= 0 ? baseDebit : !baseDebit;
+                      const shown = Math.abs(e.pureEq).toFixed(3);
                       const particulars = e.type.replace(/\s*\((?:Dr|Cr)\)$/, "");
                       return (
                       <tr key={i} className="border-b border-slate-50 h-8">
@@ -195,9 +200,11 @@ export default function KarigarLedgerPage() {
                         </td>
                         <td className="px-3 text-[11px] text-slate-700">{particulars}</td>
                         <td className="px-3 text-[11px] mono text-right text-slate-600 whitespace-nowrap">{e.weight.toFixed(3)} @ {e.purity}</td>
-                        <td className="px-3 text-[11px] mono text-right text-rose-600">{isDebit ? e.pureEq.toFixed(3) : ""}</td>
-                        <td className="px-3 text-[11px] mono text-right text-emerald-700">{isDebit ? "" : e.pureEq.toFixed(3)}</td>
-                        <td className="px-3 text-[11px] mono text-right font-semibold text-slate-900">{e.balance.toFixed(3)}</td>
+                        <td className="px-3 text-[11px] mono text-right text-rose-600">{onDebit ? shown : ""}</td>
+                        <td className="px-3 text-[11px] mono text-right text-emerald-700">{onDebit ? "" : shown}</td>
+                        <td className="px-3 text-[11px] mono text-right font-semibold text-slate-900" title={e.balance < 0 ? "Credit — we owe the karigar" : e.balance > 0 ? "Debit — karigar owes us" : ""}>
+                          {Math.abs(e.balance).toFixed(3)}{e.balance < -0.0005 ? " Cr" : e.balance > 0.0005 ? " Dr" : ""}
+                        </td>
                         <td className="px-3 text-right whitespace-nowrap">
                           {(e.sourceType === "bulkIssue" || e.sourceType === "bulkReceipt") ? (
                             <>
@@ -215,7 +222,7 @@ export default function KarigarLedgerPage() {
                     })}
                   </tbody>
                   {entries.length > 0 && (
-                    <tfoot><tr className="h-8 bg-slate-50 border-t border-slate-200"><td colSpan={7} className="px-3 text-[11px] text-right font-semibold text-slate-600">Closing balance</td><td className="px-3 text-[11px] mono text-right font-bold text-slate-900">{gm(closing)}</td><td /></tr></tfoot>
+                    <tfoot><tr className="h-8 bg-slate-50 border-t border-slate-200"><td colSpan={7} className="px-3 text-[11px] text-right font-semibold text-slate-600">Closing balance</td><td className="px-3 text-[11px] mono text-right font-bold text-slate-900">{gm(Math.abs(closing))}{closing < -0.0005 ? " Cr" : closing > 0.0005 ? " Dr" : ""}</td><td /></tr></tfoot>
                   )}
                 </table>
               </div>
@@ -330,7 +337,7 @@ function KarigarForm({ mode, karigar, onClose, onDone }: { mode: "new" | "edit";
           <div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold pt-1">Opening balance</div>
           <div className="grid grid-cols-2 gap-3">
             <L label="Opening balance (g, pure-eq)">
-              <input type="number" step="0.001" className="w-full h-9 px-2 border border-slate-200 rounded text-[12px] mono" value={openingBalance} onChange={(e) => setOpeningBalance(e.target.value)} />
+              <input type="number" step="0.001" placeholder="e.g. 50 or -50" className="w-full h-9 px-2 border border-slate-200 rounded text-[12px] mono" value={openingBalance} onChange={(e) => setOpeningBalance(e.target.value)} />
             </L>
             <L label="As of">
               <input type="date" className="w-full h-9 px-2 border border-slate-200 rounded text-[12px]" value={openingBalanceDate} onChange={(e) => setOpeningBalanceDate(e.target.value)} />
