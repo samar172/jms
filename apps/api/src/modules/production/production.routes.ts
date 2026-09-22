@@ -675,7 +675,11 @@ router.get(
         where: { jobNo: req.params.jobNo },
         include: {
           ...jobCardInclude,
-          itemMaster: { include: { images: true, category: true } },
+          // Active images only, current primary first — replacing an item image
+          // uploads a new primary but leaves the old one active (just no longer
+          // primary), so an unfiltered/unordered `images: true` let the stale
+          // first-inserted image win images[0] on the job-card screen.
+          itemMaster: { include: { images: { where: { isActive: true }, orderBy: [{ isPrimary: "desc" }, { createdAt: "desc" }] }, category: true } },
           linkedTo: { select: { jobNo: true } },
           linkedFrom: { select: { jobNo: true } },
         },
