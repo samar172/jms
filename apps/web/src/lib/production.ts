@@ -162,13 +162,13 @@ export const unlinkJobCard = (jobNo: string, targetJobNo: string) => del(`/job-c
 
 export const createJobCard = (body: { itemMasterId: string; seriesId: string; number: string; jobDate?: string; dueDate?: string; pieceCount?: number; notes?: string }) =>
   post("/job-cards", body) as Promise<{ id: string; jobNo: string }>;
-export const issueBulkStock = (body: { karigarId: string; purityId: string; weightGrams: number; note?: string }) =>
+export const issueBulkStock = (body: { karigarId: string; purityId: string; weightGrams: number; note?: string; issueDate?: string }) =>
   post("/bulk-stock", body);
-export const recordBulkReceipt = (body: { karigarId: string; purityId: string; weightGrams: number; label?: string; wastagePercent?: number; note?: string }) =>
+export const recordBulkReceipt = (body: { karigarId: string; purityId: string; weightGrams: number; label?: string; wastagePercent?: number; note?: string; receiptDate?: string }) =>
   post("/bulk-receipt", body);
-export const editBulkStock = (id: string, body: { purityId?: string; weightGrams?: number; note?: string }) => patch(`/bulk-stock/${id}`, body);
+export const editBulkStock = (id: string, body: { purityId?: string; weightGrams?: number; note?: string; issueDate?: string }) => patch(`/bulk-stock/${id}`, body);
 export const deleteBulkStock = (id: string) => del(`/bulk-stock/${id}`);
-export const editBulkReceipt = (id: string, body: { purityId?: string; weightGrams?: number; label?: string; wastagePercent?: number; note?: string }) => patch(`/bulk-receipt/${id}`, body);
+export const editBulkReceipt = (id: string, body: { purityId?: string; weightGrams?: number; label?: string; wastagePercent?: number; note?: string; receiptDate?: string }) => patch(`/bulk-receipt/${id}`, body);
 export const deleteBulkReceipt = (id: string) => del(`/bulk-receipt/${id}`);
 export const assignKarigar = (jobNo: string, stageName: string, karigarId: string) =>
   post(`/job-cards/${jobNo}/assign`, { stageName, karigarId });

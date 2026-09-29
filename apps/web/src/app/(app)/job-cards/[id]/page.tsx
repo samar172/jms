@@ -702,11 +702,23 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
       ? findingIssues.map((i) => ({ type: i.label ?? "Finding", weight: i.returnedWeight != null ? String(i.returnedWeight) : "", karat: i.returnedPurity ?? pure, wastagePercent: String(findingWastageOf(i.label ?? "Finding")) }))
       : [{ type: "Wire", weight: "", karat: pure, wastagePercent: String(dr.fittingWastagePct) }],
   );
-  const [itemRows, setItemRows] = useState<{ type: string; amount: string; carat: string }[]>(
+  const [itemRows, setItemRows] = useState<{ type: string; pieces: string; rate: string; amount: string; carat: string }[]>(
     isFindingEdit && modal.assignment.stones.length > 0
-      ? modal.assignment.stones.map((s) => ({ type: s.type, amount: String(s.valueIssued), carat: s.carat != null ? String(s.carat) : "" }))
+      ? modal.assignment.stones.map((s) => ({ type: s.type, pieces: s.piecesCount != null ? String(s.piecesCount) : "", rate: s.ratePerCarat != null ? String(s.ratePerCarat) : "", amount: String(s.valueIssued), carat: s.carat != null ? String(s.carat) : "" }))
       : [],
   );
+  // Update one item field; entering pieces/rate auto-fills amount (pcs × rate),
+  // but amount stays directly editable and wins if the user overrides it after.
+  const setItemField = (idx: number, field: "type" | "pieces" | "rate" | "amount" | "carat", value: string) =>
+    setItemRows((r) => r.map((x, i) => {
+      if (i !== idx) return x;
+      const next = { ...x, [field]: value };
+      if (field === "pieces" || field === "rate") {
+        const p = Number(next.pieces), rt = Number(next.rate);
+        if (p > 0 && rt > 0) next.amount = String(+(p * rt).toFixed(2));
+      }
+      return next;
+    }));
   const [busy, setBusy] = useState(false);
   // Labour on Jadai / Meenakari / Setting: either the auto-calculated amount
   // (from the stage's configured rate) OR a manual flat amount the user types —
@@ -886,13 +898,20 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
             <div className="border-t border-slate-100 pt-2">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-[11px] font-medium text-slate-600">Other Flat Items</span>
-                <button type="button" onClick={() => setItemRows((r) => [...r, { type: "Stone", amount: "", carat: "" }])} className="h-6 px-2 rounded border border-slate-200 text-[11px] hover:bg-slate-50">+ Add Item</button>
+                <button type="button" onClick={() => setItemRows((r) => [...r, { type: "Stone", pieces: "", rate: "", amount: "", carat: "" }])} className="h-6 px-2 rounded border border-slate-200 text-[11px] hover:bg-slate-50">+ Add Item</button>
               </div>
+              {itemRows.length > 0 && (
+                <div className="grid grid-cols-[1.3fr_0.7fr_0.8fr_0.9fr_0.8fr_auto] gap-1.5 mb-1 text-[10px] text-slate-400 px-0.5">
+                  <span>Type</span><span>Pcs</span><span>Rate ₹</span><span>Amount ₹</span><span>Carat</span><span></span>
+                </div>
+              )}
               {itemRows.map((row, idx) => (
-                <div key={idx} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-1.5 mb-1.5 items-center">
-                  <input placeholder="Type" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] min-w-0 w-full" value={row.type} onChange={(e) => setItemRows((r) => r.map((x, i) => i === idx ? { ...x, type: e.target.value } : x))} />
-                  <input placeholder="Amount ₹" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono min-w-0 w-full" value={row.amount} onChange={(e) => setItemRows((r) => r.map((x, i) => i === idx ? { ...x, amount: e.target.value } : x))} />
-                  <input placeholder="Carat (opt)" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono min-w-0 w-full" value={row.carat} onChange={(e) => setItemRows((r) => r.map((x, i) => i === idx ? { ...x, carat: e.target.value } : x))} />
+                <div key={idx} className="grid grid-cols-[1.3fr_0.7fr_0.8fr_0.9fr_0.8fr_auto] gap-1.5 mb-1.5 items-center">
+                  <input placeholder="Type" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] min-w-0 w-full" value={row.type} onChange={(e) => setItemField(idx, "type", e.target.value)} />
+                  <input placeholder="Pcs" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono min-w-0 w-full" value={row.pieces} onChange={(e) => setItemField(idx, "pieces", e.target.value)} />
+                  <input placeholder="₹/pc or ct" title="Optional rate — fills Amount as pcs × rate; Amount can still be edited" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono min-w-0 w-full" value={row.rate} onChange={(e) => setItemField(idx, "rate", e.target.value)} />
+                  <input placeholder="Amount ₹" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono min-w-0 w-full" value={row.amount} onChange={(e) => setItemField(idx, "amount", e.target.value)} />
+                  <input placeholder="Carat (opt)" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono min-w-0 w-full" value={row.carat} onChange={(e) => setItemField(idx, "carat", e.target.value)} />
                   <button type="button" onClick={() => setItemRows((r) => r.filter((_, i) => i !== idx))} className="text-rose-500 text-[13px] w-5">✕</button>
                 </div>
               ))}
@@ -987,7 +1006,7 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
               if (modal.kind === "finding" || modal.kind === "findingEdit") {
                 if (!Number(pieces)) throw new Error("Enter the number of pieces.");
                 const findings = findingRows.filter((r) => Number(r.weight) > 0).map((r) => ({ type: r.type || "Finding", weight: Number(r.weight), karat: r.karat || pure, wastagePercent: Number(r.wastagePercent) || 0 }));
-                const items = itemRows.filter((r) => Number(r.amount) > 0).map((r) => ({ type: r.type || "Item", amount: Number(r.amount), carat: Number(r.carat) || 0 }));
+                const items = itemRows.filter((r) => Number(r.amount) > 0).map((r) => ({ type: r.type || "Item", amount: Number(r.amount), carat: Number(r.carat) || 0, pieces: Number(r.pieces) || 0, rate: Number(r.rate) || 0 }));
                 const payload = { assignmentId: A, pieceCount: Number(pieces), labourAmount: Number(labourAmount) || 0, findings, items };
                 return modal.kind === "findingEdit" ? editFindingOutput(jobNo, payload) : findingOutput(jobNo, payload);
               }

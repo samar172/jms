@@ -37,27 +37,38 @@ export default function KarigarLedgerPage() {
   const [showReceipt, setShowReceipt] = useState(false);
   const [karigarForm, setKarigarForm] = useState<null | { mode: "new" | "edit"; k?: ProdKarigar }>(null);
   const [ledgerTab, setLedgerTab] = useState<"metal" | "labour">("metal");
-  const [bulkEdit, setBulkEdit] = useState<null | { id: string; initial: { purityId: string; weight: number; note: string } }>(null);
-  const [receiptEdit, setReceiptEdit] = useState<null | { id: string; initial: { purityId: string; weight: number; label: string; wastagePercent: number } }>(null);
+  const [lq, setLq] = useState("");        // ledger search (stage / job / particulars)
+  const [lFrom, setLFrom] = useState("");   // date from
+  const [lTo, setLTo] = useState("");       // date to
+  const [bulkEdit, setBulkEdit] = useState<null | { id: string; initial: { purityId: string; weight: number; note: string; date: string } }>(null);
+  const [receiptEdit, setReceiptEdit] = useState<null | { id: string; initial: { purityId: string; weight: number; label: string; wastagePercent: number; date: string } }>(null);
 
   if (!karigars || !ledger || !settings) return <div className="text-slate-400 p-4 text-sm">Loading…</div>;
   const active = karigars.find((k) => k.id === selectedId) ?? karigars[0];
   const entries = active ? ledger[active.name] ?? [] : [];
   const labourEntries = active ? labourLedger?.[active.name] ?? [] : [];
   const closing = entries.length ? entries[entries.length - 1].balance : 0;
+  // Ledger filters (date range + free text over stage/job/particulars), applied
+  // to both tabs. Rows keep their true running balance — this only hides rows.
+  const lqNorm = lq.trim().toLowerCase();
+  const inRange = (d: string) => (!lFrom || d >= lFrom) && (!lTo || d <= lTo);
+  const matchText = (parts: (string | null | undefined)[]) => !lqNorm || parts.some((v) => (v ?? "").toLowerCase().includes(lqNorm));
+  const ledgerFiltered = !!(lqNorm || lFrom || lTo);
+  const shownEntries = entries.filter((e) => inRange(e.date) && matchText([e.stage, e.jobCardId, e.type]));
+  const shownLabour = labourEntries.filter((l) => inRange(l.date) && matchText([l.stage, l.jobCardId, l.basis, l.note]));
   const tierId = (label: string) => settings.tiers.find((t) => t.label === label)?.id ?? "";
   const refreshLedger = () => { mutateLedger(); mutateKarigars(); };
 
   function openEditEntry(e: (typeof entries)[number]) {
     if (e.sourceType === "bulkIssue") {
-      setBulkEdit({ id: e.sourceId, initial: { purityId: tierId(e.purity), weight: e.weight, note: "" } });
+      setBulkEdit({ id: e.sourceId, initial: { purityId: tierId(e.purity), weight: e.weight, note: "", date: e.date } });
     } else if (e.sourceType === "bulkReceipt") {
       const receiveRow = entries.find((x) => x.sourceId === e.sourceId && x.type === "Bulk Receive (Cr)");
       const wastageRow = entries.find((x) => x.sourceId === e.sourceId && x.type === "Wastage Deduction (Cr)");
       const label = (receiveRow?.stage ?? e.stage).replace(/^Bulk Receive — /, "").replace(/ \(wastage\)$/, "").replace(/^Bulk Receive$/, "");
       const w = receiveRow?.weight ?? e.weight;
       const wastagePercent = wastageRow && w ? +((wastageRow.weight / w) * 100).toFixed(2) : 0;
-      setReceiptEdit({ id: e.sourceId, initial: { purityId: tierId(receiveRow?.purity ?? e.purity), weight: w, label, wastagePercent } });
+      setReceiptEdit({ id: e.sourceId, initial: { purityId: tierId(receiveRow?.purity ?? e.purity), weight: w, label, wastagePercent, date: (receiveRow ?? e).date } });
     } else if (e.sourceType === "opening" && active) {
       setKarigarForm({ mode: "edit", k: active });
     }
@@ -158,6 +169,19 @@ export default function KarigarLedgerPage() {
                 </button>
               ))}
             </div>
+            <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-b border-slate-100 bg-slate-50/60">
+              <input value={lq} onChange={(e) => setLq(e.target.value)} placeholder="Search stage, job, particulars…" className="h-7 w-56 px-2 rounded border border-slate-200 text-[12px] outline-none focus:border-blue-400" />
+              <label className="flex items-center gap-1 text-[11px] text-slate-500">
+                From <input type="date" value={lFrom} max={lTo || undefined} onChange={(e) => setLFrom(e.target.value)} className="h-7 px-1.5 rounded border border-slate-200 text-[12px]" />
+              </label>
+              <label className="flex items-center gap-1 text-[11px] text-slate-500">
+                To <input type="date" value={lTo} min={lFrom || undefined} onChange={(e) => setLTo(e.target.value)} className="h-7 px-1.5 rounded border border-slate-200 text-[12px]" />
+              </label>
+              {ledgerFiltered && (
+                <button onClick={() => { setLq(""); setLFrom(""); setLTo(""); }} className="h-7 px-2.5 rounded border border-slate-200 text-[11px] text-slate-600 hover:bg-white">Clear</button>
+              )}
+              <span className="text-[11px] text-slate-400 ml-auto">{ledgerTab === "metal" ? `${shownEntries.length} of ${entries.length}` : `${shownLabour.length} of ${labourEntries.length}`} rows</span>
+            </div>
             {ledgerTab === "metal" ? (
               <div className="overflow-auto max-h-[520px]">
                 <table className="w-full border-collapse">
@@ -176,7 +200,8 @@ export default function KarigarLedgerPage() {
                   </thead>
                   <tbody>
                     {entries.length === 0 && <tr><td colSpan={9} className="py-10 text-center text-[12px] text-slate-400">No transactions yet — issue bulk stock to start.</td></tr>}
-                    {entries.map((e, i) => {
+                    {entries.length > 0 && shownEntries.length === 0 && <tr><td colSpan={9} className="py-10 text-center text-[12px] text-slate-400">No rows match these filters.</td></tr>}
+                    {shownEntries.map((e, i) => {
                       // Debit = metal going TO the karigar (issued / opening he holds);
                       // Credit = metal coming BACK (returns, findings, wastage written off).
                       // A signed amount (only Opening Balance can be negative — a
@@ -236,7 +261,8 @@ export default function KarigarLedgerPage() {
                   </thead>
                   <tbody>
                     {labourEntries.length === 0 && <tr><td colSpan={6} className="py-10 text-center text-[12px] text-slate-400">No labour earned yet.</td></tr>}
-                    {labourEntries.map((l, i) => (
+                    {labourEntries.length > 0 && shownLabour.length === 0 && <tr><td colSpan={6} className="py-10 text-center text-[12px] text-slate-400">No rows match these filters.</td></tr>}
+                    {shownLabour.map((l, i) => (
                       <tr key={i} className="border-b border-slate-50 h-9">
                         <td className="px-3 text-[11px] mono text-slate-500">{l.date}</td>
                         <td className="px-3 text-[11px]">
@@ -250,7 +276,7 @@ export default function KarigarLedgerPage() {
                     ))}
                   </tbody>
                   {labourEntries.length > 0 && (
-                    <tfoot><tr className="h-8 bg-slate-50 border-t border-slate-200"><td colSpan={5} className="px-3 text-[11px] text-right font-semibold text-slate-600">Total earned</td><td className="px-3 text-[11px] mono font-bold text-slate-900">{money(active.labourEarned)}</td></tr></tfoot>
+                    <tfoot><tr className="h-8 bg-slate-50 border-t border-slate-200"><td colSpan={5} className="px-3 text-[11px] text-right font-semibold text-slate-600">{ledgerFiltered ? "Total (filtered)" : "Total earned"}</td><td className="px-3 text-[11px] mono font-bold text-slate-900">{money(ledgerFiltered ? shownLabour.reduce((s, l) => s + l.amount, 0) : active.labourEarned)}</td></tr></tfoot>
                   )}
                 </table>
               </div>
@@ -269,19 +295,19 @@ export default function KarigarLedgerPage() {
 
       {showBulk && active && (
         <BulkStockModal karigar={active} tiers={settings.tiers} onClose={() => setShowBulk(false)}
-          onDone={async (purityId, weight, note) => { await issueBulkStock({ karigarId: active.id, purityId, weightGrams: weight, note }); setShowBulk(false); refreshLedger(); }} />
+          onDone={async (purityId, weight, note, date) => { await issueBulkStock({ karigarId: active.id, purityId, weightGrams: weight, note, issueDate: date }); setShowBulk(false); refreshLedger(); }} />
       )}
       {showReceipt && active && (
         <BulkReceiptModal karigar={active} tiers={settings.tiers} findingNames={settings.findingNames ?? []} defaultWastagePct={settings.defaultRates.fittingWastagePct} baseRate={settings.baseRate} onClose={() => setShowReceipt(false)}
-          onDone={async (purityId, weight, label, wastagePercent, note) => { await recordBulkReceipt({ karigarId: active.id, purityId, weightGrams: weight, label, wastagePercent, note }); setShowReceipt(false); refreshLedger(); }} />
+          onDone={async (purityId, weight, label, wastagePercent, note, date) => { await recordBulkReceipt({ karigarId: active.id, purityId, weightGrams: weight, label, wastagePercent, note, receiptDate: date }); setShowReceipt(false); refreshLedger(); }} />
       )}
       {bulkEdit && active && (
         <BulkStockModal karigar={active} tiers={settings.tiers} initial={bulkEdit.initial} editing onClose={() => setBulkEdit(null)}
-          onDone={async (purityId, weight, note) => { await editBulkStock(bulkEdit.id, { purityId, weightGrams: weight, note }); setBulkEdit(null); refreshLedger(); }} />
+          onDone={async (purityId, weight, note, date) => { await editBulkStock(bulkEdit.id, { purityId, weightGrams: weight, note, issueDate: date }); setBulkEdit(null); refreshLedger(); }} />
       )}
       {receiptEdit && active && (
         <BulkReceiptModal karigar={active} tiers={settings.tiers} findingNames={settings.findingNames ?? []} defaultWastagePct={settings.defaultRates.fittingWastagePct} baseRate={settings.baseRate} initial={receiptEdit.initial} editing onClose={() => setReceiptEdit(null)}
-          onDone={async (purityId, weight, label, wastagePercent) => { await editBulkReceipt(receiptEdit.id, { purityId, weightGrams: weight, label, wastagePercent }); setReceiptEdit(null); refreshLedger(); }} />
+          onDone={async (purityId, weight, label, wastagePercent, note, date) => { await editBulkReceipt(receiptEdit.id, { purityId, weightGrams: weight, label, wastagePercent, receiptDate: date }); setReceiptEdit(null); refreshLedger(); }} />
       )}
       {karigarForm && (
         <KarigarForm mode={karigarForm.mode} karigar={karigarForm.k} onClose={() => setKarigarForm(null)}
@@ -369,13 +395,14 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: "am
 
 function BulkStockModal({ karigar, tiers, initial, editing, onClose, onDone }: {
   karigar: ProdKarigar; tiers: { id: string; label: string; percent: number }[];
-  initial?: { purityId: string; weight: number; note: string }; editing?: boolean;
-  onClose: () => void; onDone: (purityId: string, weight: number, note: string) => void;
+  initial?: { purityId: string; weight: number; note: string; date?: string }; editing?: boolean;
+  onClose: () => void; onDone: (purityId: string, weight: number, note: string, date: string) => void;
 }) {
   const pure = tiers.find((t) => t.percent === 100) ?? tiers[0];
   const [purityId, setPurityId] = useState(initial?.purityId ?? pure?.id ?? "");
   const [weight, setWeight] = useState(initial ? String(initial.weight) : "");
   const [note, setNote] = useState(initial?.note ?? "Bulk stock replenishment");
+  const [date, setDate] = useState(initial?.date || new Date().toISOString().slice(0, 10));
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={onClose}>
       <div className="bg-white rounded-md shadow-xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
@@ -388,9 +415,15 @@ function BulkStockModal({ karigar, tiers, initial, editing, onClose, onDone }: {
               {tiers.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
             </select>
           </div>
-          <div>
-            <label className="block text-[11px] font-medium text-slate-600 mb-1">Weight (g) *</label>
-            <input type="number" step="0.001" min="0" className="w-full h-9 px-2 border border-slate-200 rounded text-[12px] mono" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="0.000" />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-medium text-slate-600 mb-1">Weight (g) *</label>
+              <input type="number" step="0.001" min="0" className="w-full h-9 px-2 border border-slate-200 rounded text-[12px] mono" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="0.000" />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-slate-600 mb-1">Date *</label>
+              <input type="date" max={new Date().toISOString().slice(0, 10)} className="w-full h-9 px-2 border border-slate-200 rounded text-[12px]" value={date} onChange={(e) => setDate(e.target.value)} />
+            </div>
           </div>
           <div>
             <label className="block text-[11px] font-medium text-slate-600 mb-1">Note</label>
@@ -399,7 +432,7 @@ function BulkStockModal({ karigar, tiers, initial, editing, onClose, onDone }: {
         </div>
         <div className="px-4 py-3 border-t border-slate-100 flex justify-end gap-2">
           <button onClick={onClose} className="h-8 px-3 rounded border border-slate-200 text-[12px]">Cancel</button>
-          <button disabled={!(Number(weight) > 0) || !purityId} onClick={() => onDone(purityId, Number(weight), note)} className="h-8 px-3 rounded bg-blue-800 text-white text-[12px] font-medium disabled:opacity-50">{editing ? "Save" : "Issue Stock"}</button>
+          <button disabled={!(Number(weight) > 0) || !purityId || !date} onClick={() => onDone(purityId, Number(weight), note, date)} className="h-8 px-3 rounded bg-blue-800 text-white text-[12px] font-medium disabled:opacity-50">{editing ? "Save" : "Issue Stock"}</button>
         </div>
       </div>
     </div>
@@ -413,8 +446,8 @@ function BulkStockModal({ karigar, tiers, initial, editing, onClose, onDone }: {
 function BulkReceiptModal({ karigar, tiers, findingNames, defaultWastagePct, baseRate, initial, editing, onClose, onDone }: {
   karigar: ProdKarigar; tiers: { id: string; label: string; percent: number }[]; findingNames: { id: string; label: string }[];
   defaultWastagePct: number; baseRate: number;
-  initial?: { purityId: string; weight: number; label: string; wastagePercent: number }; editing?: boolean;
-  onClose: () => void; onDone: (purityId: string, weight: number, label: string, wastagePercent: number, note: string) => void;
+  initial?: { purityId: string; weight: number; label: string; wastagePercent: number; date?: string }; editing?: boolean;
+  onClose: () => void; onDone: (purityId: string, weight: number, label: string, wastagePercent: number, note: string, date: string) => void;
 }) {
   const pure = tiers.find((t) => t.percent === 100) ?? tiers[0];
   const [purityId, setPurityId] = useState(initial?.purityId ?? pure?.id ?? "");
@@ -422,6 +455,7 @@ function BulkReceiptModal({ karigar, tiers, findingNames, defaultWastagePct, bas
   const [label, setLabel] = useState(initial?.label ?? findingNames[0]?.label ?? "");
   const [wastagePercent, setWastagePercent] = useState(String(initial?.wastagePercent ?? defaultWastagePct));
   const [note, setNote] = useState("");
+  const [date, setDate] = useState(initial?.date || new Date().toISOString().slice(0, 10));
   const purity = tiers.find((t) => t.id === purityId);
   const wastageWeight = (Number(weight) || 0) * (Number(wastagePercent) || 0) / 100;
   const narration = weight && purity
@@ -446,9 +480,15 @@ function BulkReceiptModal({ karigar, tiers, findingNames, defaultWastagePct, bas
               {tiers.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
             </select>
           </div>
-          <div>
-            <label className="block text-[11px] font-medium text-slate-600 mb-1">Weight (g) *</label>
-            <input type="number" step="0.001" min="0" className="w-full h-9 px-2 border border-slate-200 rounded text-[12px] mono" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="0.000" />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-medium text-slate-600 mb-1">Weight (g) *</label>
+              <input type="number" step="0.001" min="0" className="w-full h-9 px-2 border border-slate-200 rounded text-[12px] mono" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="0.000" />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-slate-600 mb-1">Date *</label>
+              <input type="date" max={new Date().toISOString().slice(0, 10)} className="w-full h-9 px-2 border border-slate-200 rounded text-[12px]" value={date} onChange={(e) => setDate(e.target.value)} />
+            </div>
           </div>
           <div>
             <label className="block text-[11px] font-medium text-slate-600 mb-1">Wastage % (credited @ pure, same as Casting/Fitting)</label>
@@ -464,7 +504,7 @@ function BulkReceiptModal({ karigar, tiers, findingNames, defaultWastagePct, bas
         </div>
         <div className="px-4 py-3 border-t border-slate-100 flex justify-end gap-2">
           <button onClick={onClose} className="h-8 px-3 rounded border border-slate-200 text-[12px]">Cancel</button>
-          <button disabled={!(Number(weight) > 0) || !purityId} onClick={() => onDone(purityId, Number(weight), label, Number(wastagePercent) || 0, note || narration)} className="h-8 px-3 rounded bg-emerald-700 text-white text-[12px] font-medium disabled:opacity-50">{editing ? "Save" : "Receive"}</button>
+          <button disabled={!(Number(weight) > 0) || !purityId || !date} onClick={() => onDone(purityId, Number(weight), label, Number(wastagePercent) || 0, note || narration, date)} className="h-8 px-3 rounded bg-emerald-700 text-white text-[12px] font-medium disabled:opacity-50">{editing ? "Save" : "Receive"}</button>
         </div>
       </div>
     </div>
