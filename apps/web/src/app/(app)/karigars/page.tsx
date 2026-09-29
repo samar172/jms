@@ -16,6 +16,34 @@ const fmtTime = (iso?: string) => {
   catch { return ""; }
 };
 const SPECS = ["all", "Casting", "Meenakari", "Jadai", "Kundan", "Setting", "Fitting"];
+// Particulars label = the ledger type without its Dr/Cr suffix.
+const stripDrCr = (type: string) => type.replace(/\s*\((?:Dr|Cr)\)$/, "");
+const distinct = (xs: string[]) => Array.from(new Set(xs.filter((x) => x && x !== "—"))).sort();
+// Debit/credit split for a metal row (negative pureEq flips side; see table).
+const metalSide = (e: { type: string; pureEq: number }) => {
+  const baseDebit = e.type === "Issue (Dr)" || e.type === "Opening Balance";
+  const onDebit = e.pureEq >= 0 ? baseDebit : !baseDebit;
+  const amt = Math.abs(e.pureEq);
+  return { onDebit, debit: onDebit ? amt : 0, credit: onDebit ? 0 : amt };
+};
+// Generic comparator: numbers numerically, everything else as text.
+const cmp = (a: unknown, b: unknown) =>
+  typeof a === "number" && typeof b === "number" ? a - b : String(a ?? "").localeCompare(String(b ?? ""));
+
+// Clickable, sortable column header.
+function SortTh({ label, colKey, sort, onSort, align = "left", tone }: {
+  label: string; colKey: string; sort: { key: string; dir: "asc" | "desc" }; onSort: (k: string) => void;
+  align?: "left" | "right"; tone?: string;
+}) {
+  const active = sort.key === colKey;
+  return (
+    <th className={`px-3 ${align === "right" ? "text-right" : "text-left"} text-[10px] uppercase tracking-wider font-semibold ${tone ?? "text-slate-500"}`}>
+      <button type="button" onClick={() => onSort(colKey)} className={`inline-flex items-center gap-0.5 hover:opacity-70 ${align === "right" ? "flex-row-reverse" : ""}`}>
+        {label}<span className="text-[9px] opacity-60">{active ? (sort.dir === "asc" ? "▲" : "▼") : "↕"}</span>
+      </button>
+    </th>
+  );
+}
 
 function defaultRateLabel(k: ProdKarigar): string | null {
   if (k.specialization === "Casting" && k.defaultWastagePct != null) return `${k.defaultWastagePct}% wastage`;
@@ -40,6 +68,12 @@ export default function KarigarLedgerPage() {
   const [lq, setLq] = useState("");        // ledger search (stage / job / particulars)
   const [lFrom, setLFrom] = useState("");   // date from
   const [lTo, setLTo] = useState("");       // date to
+  const [fStage, setFStage] = useState("all");
+  const [fJob, setFJob] = useState("all");
+  const [fPart, setFPart] = useState("all");   // metal: particulars
+  const [fBasis, setFBasis] = useState("all"); // labour: basis
+  const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "", dir: "asc" });
+  const toggleSort = (key: string) => setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }));
   const [bulkEdit, setBulkEdit] = useState<null | { id: string; initial: { purityId: string; weight: number; note: string; date: string } }>(null);
   const [receiptEdit, setReceiptEdit] = useState<null | { id: string; initial: { purityId: string; weight: number; label: string; wastagePercent: number; date: string } }>(null);
 
@@ -53,9 +87,51 @@ export default function KarigarLedgerPage() {
   const lqNorm = lq.trim().toLowerCase();
   const inRange = (d: string) => (!lFrom || d >= lFrom) && (!lTo || d <= lTo);
   const matchText = (parts: (string | null | undefined)[]) => !lqNorm || parts.some((v) => (v ?? "").toLowerCase().includes(lqNorm));
-  const ledgerFiltered = !!(lqNorm || lFrom || lTo);
-  const shownEntries = entries.filter((e) => inRange(e.date) && matchText([e.stage, e.jobCardId, e.type]));
-  const shownLabour = labourEntries.filter((l) => inRange(l.date) && matchText([l.stage, l.jobCardId, l.basis, l.note]));
+  const ledgerFiltered = !!(lqNorm || lFrom || lTo || fStage !== "all" || fJob !== "all" || fPart !== "all" || fBasis !== "all");
+  // Dropdown options built from the current karigar's rows (per tab).
+  const stageOpts = distinct((ledgerTab === "metal" ? entries.map((e) => e.stage) : labourEntries.map((l) => l.stage)));
+  const jobOpts = distinct((ledgerTab === "metal" ? entries.map((e) => e.jobCardId) : labourEntries.map((l) => l.jobCardId)));
+  const partOpts = distinct(entries.map((e) => stripDrCr(e.type)));
+  const basisOpts = distinct(labourEntries.map((l) => l.basis));
+  // Sort the displayed rows when a sort column is chosen (natural order otherwise).
+  const applySort = <T,>(rows: T[], val: (r: T) => unknown) => {
+    if (!sort.key) return rows;
+    const out = [...rows].sort((a, b) => cmp(val(a), val(b)));
+    return sort.dir === "desc" ? out.reverse() : out;
+  };
+  const metalVal = (e: (typeof entries)[number]) => {
+    switch (sort.key) {
+      case "date": return e.at ?? e.date;
+      case "stage": return e.stage;
+      case "job": return e.jobCardId;
+      case "particulars": return stripDrCr(e.type);
+      case "weight": return e.weight;
+      case "debit": return metalSide(e).debit;
+      case "credit": return metalSide(e).credit;
+      case "balance": return e.balance;
+      default: return 0;
+    }
+  };
+  const labourVal = (l: (typeof labourEntries)[number]) => {
+    switch (sort.key) {
+      case "date": return l.date;
+      case "job": return l.jobCardId;
+      case "stage": return l.stage;
+      case "basis": return l.basis;
+      case "amount": return l.amount;
+      default: return 0;
+    }
+  };
+  const shownEntries = applySort(
+    entries.filter((e) => inRange(e.date) && matchText([e.stage, e.jobCardId, e.type])
+      && (fStage === "all" || e.stage === fStage) && (fJob === "all" || e.jobCardId === fJob) && (fPart === "all" || stripDrCr(e.type) === fPart)),
+    metalVal,
+  );
+  const shownLabour = applySort(
+    labourEntries.filter((l) => inRange(l.date) && matchText([l.stage, l.jobCardId, l.basis, l.note])
+      && (fStage === "all" || l.stage === fStage) && (fJob === "all" || l.jobCardId === fJob) && (fBasis === "all" || l.basis === fBasis)),
+    labourVal,
+  );
   const tierId = (label: string) => settings.tiers.find((t) => t.label === label)?.id ?? "";
   const refreshLedger = () => { mutateLedger(); mutateKarigars(); };
 
@@ -170,15 +246,34 @@ export default function KarigarLedgerPage() {
               ))}
             </div>
             <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-b border-slate-100 bg-slate-50/60">
-              <input value={lq} onChange={(e) => setLq(e.target.value)} placeholder="Search stage, job, particulars…" className="h-7 w-56 px-2 rounded border border-slate-200 text-[12px] outline-none focus:border-blue-400" />
+              <input value={lq} onChange={(e) => setLq(e.target.value)} placeholder="Search stage, job, particulars…" className="h-7 w-48 px-2 rounded border border-slate-200 text-[12px] outline-none focus:border-blue-400" />
+              <select value={fStage} onChange={(e) => setFStage(e.target.value)} className="h-7 px-1.5 rounded border border-slate-200 text-[12px]" title="Filter by stage">
+                <option value="all">All stages</option>
+                {stageOpts.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+              <select value={fJob} onChange={(e) => setFJob(e.target.value)} className="h-7 px-1.5 rounded border border-slate-200 text-[12px]" title="Filter by job">
+                <option value="all">All jobs</option>
+                {jobOpts.map((j) => <option key={j} value={j}>{j}</option>)}
+              </select>
+              {ledgerTab === "metal" ? (
+                <select value={fPart} onChange={(e) => setFPart(e.target.value)} className="h-7 px-1.5 rounded border border-slate-200 text-[12px]" title="Filter by particulars">
+                  <option value="all">All particulars</option>
+                  {partOpts.map((p) => <option key={p} value={p}>{p}</option>)}
+                </select>
+              ) : (
+                <select value={fBasis} onChange={(e) => setFBasis(e.target.value)} className="h-7 px-1.5 rounded border border-slate-200 text-[12px]" title="Filter by basis">
+                  <option value="all">All bases</option>
+                  {basisOpts.map((b) => <option key={b} value={b}>{b}</option>)}
+                </select>
+              )}
               <label className="flex items-center gap-1 text-[11px] text-slate-500">
                 From <input type="date" value={lFrom} max={lTo || undefined} onChange={(e) => setLFrom(e.target.value)} className="h-7 px-1.5 rounded border border-slate-200 text-[12px]" />
               </label>
               <label className="flex items-center gap-1 text-[11px] text-slate-500">
                 To <input type="date" value={lTo} min={lFrom || undefined} onChange={(e) => setLTo(e.target.value)} className="h-7 px-1.5 rounded border border-slate-200 text-[12px]" />
               </label>
-              {ledgerFiltered && (
-                <button onClick={() => { setLq(""); setLFrom(""); setLTo(""); }} className="h-7 px-2.5 rounded border border-slate-200 text-[11px] text-slate-600 hover:bg-white">Clear</button>
+              {(ledgerFiltered || sort.key) && (
+                <button onClick={() => { setLq(""); setLFrom(""); setLTo(""); setFStage("all"); setFJob("all"); setFPart("all"); setFBasis("all"); setSort({ key: "", dir: "asc" }); }} className="h-7 px-2.5 rounded border border-slate-200 text-[11px] text-slate-600 hover:bg-white">Clear</button>
               )}
               <span className="text-[11px] text-slate-400 ml-auto">{ledgerTab === "metal" ? `${shownEntries.length} of ${entries.length}` : `${shownLabour.length} of ${labourEntries.length}`} rows</span>
             </div>
@@ -187,14 +282,14 @@ export default function KarigarLedgerPage() {
                 <table className="w-full border-collapse">
                   <thead className="sticky top-0 bg-slate-50">
                     <tr className="h-8 border-b border-slate-200">
-                      <th className="px-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Date</th>
-                      <th className="px-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Stage</th>
-                      <th className="px-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Job</th>
-                      <th className="px-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Particulars</th>
-                      <th className="px-3 text-right text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Weight</th>
-                      <th className="px-3 text-right text-[10px] uppercase tracking-wider text-rose-600 font-semibold">Debit (g)</th>
-                      <th className="px-3 text-right text-[10px] uppercase tracking-wider text-emerald-700 font-semibold">Credit (g)</th>
-                      <th className="px-3 text-right text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Balance</th>
+                      <SortTh label="Date" colKey="date" sort={sort} onSort={toggleSort} />
+                      <SortTh label="Stage" colKey="stage" sort={sort} onSort={toggleSort} />
+                      <SortTh label="Job" colKey="job" sort={sort} onSort={toggleSort} />
+                      <SortTh label="Particulars" colKey="particulars" sort={sort} onSort={toggleSort} />
+                      <SortTh label="Weight" colKey="weight" sort={sort} onSort={toggleSort} align="right" />
+                      <SortTh label="Debit (g)" colKey="debit" sort={sort} onSort={toggleSort} align="right" tone="text-rose-600" />
+                      <SortTh label="Credit (g)" colKey="credit" sort={sort} onSort={toggleSort} align="right" tone="text-emerald-700" />
+                      <SortTh label="Balance" colKey="balance" sort={sort} onSort={toggleSort} align="right" />
                       <th className="px-3" />
                     </tr>
                   </thead>
@@ -256,7 +351,12 @@ export default function KarigarLedgerPage() {
                 <table className="w-full border-collapse">
                   <thead className="sticky top-0 bg-slate-50">
                     <tr className="h-8 text-left border-b border-slate-200">
-                      {["Date", "Job Card", "Stage", "Basis", "Qty × Rate", "Amount"].map((h) => <th key={h} className="px-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">{h}</th>)}
+                      <SortTh label="Date" colKey="date" sort={sort} onSort={toggleSort} />
+                      <SortTh label="Job Card" colKey="job" sort={sort} onSort={toggleSort} />
+                      <SortTh label="Stage" colKey="stage" sort={sort} onSort={toggleSort} />
+                      <SortTh label="Basis" colKey="basis" sort={sort} onSort={toggleSort} />
+                      <th className="px-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Qty × Rate</th>
+                      <SortTh label="Amount" colKey="amount" sort={sort} onSort={toggleSort} />
                     </tr>
                   </thead>
                   <tbody>
