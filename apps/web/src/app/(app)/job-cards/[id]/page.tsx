@@ -707,15 +707,18 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
       ? modal.assignment.stones.map((s) => ({ type: s.type, pieces: s.piecesCount != null ? String(s.piecesCount) : "", rate: s.ratePerCarat != null ? String(s.ratePerCarat) : "", amount: String(s.valueIssued), carat: s.carat != null ? String(s.carat) : "" }))
       : [],
   );
-  // Update one item field; entering pieces/rate auto-fills amount (pcs × rate),
-  // but amount stays directly editable and wins if the user overrides it after.
+  // Update one item field. Rate auto-fills Amount against whichever basis is
+  // present: Carat × Rate when a carat is given (per-carat pricing), else
+  // Pcs × Rate (per-piece pricing). Amount stays directly editable and wins if
+  // the user overrides it afterwards.
   const setItemField = (idx: number, field: "type" | "pieces" | "rate" | "amount" | "carat", value: string) =>
     setItemRows((r) => r.map((x, i) => {
       if (i !== idx) return x;
       const next = { ...x, [field]: value };
-      if (field === "pieces" || field === "rate") {
-        const p = Number(next.pieces), rt = Number(next.rate);
-        if (p > 0 && rt > 0) next.amount = String(+(p * rt).toFixed(2));
+      if (field === "pieces" || field === "rate" || field === "carat") {
+        const rt = Number(next.rate);
+        const qty = Number(next.carat) > 0 ? Number(next.carat) : Number(next.pieces);
+        if (qty > 0 && rt > 0) next.amount = String(+(qty * rt).toFixed(2));
       }
       return next;
     }));
@@ -909,7 +912,7 @@ function StageModal({ jobNo, stage, pieceCount, targetPurity, settings, modal, o
                 <div key={idx} className="grid grid-cols-[1.3fr_0.7fr_0.8fr_0.9fr_0.8fr_auto] gap-1.5 mb-1.5 items-center">
                   <input placeholder="Type" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] min-w-0 w-full" value={row.type} onChange={(e) => setItemField(idx, "type", e.target.value)} />
                   <input placeholder="Pcs" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono min-w-0 w-full" value={row.pieces} onChange={(e) => setItemField(idx, "pieces", e.target.value)} />
-                  <input placeholder="₹/pc or ct" title="Optional rate — fills Amount as pcs × rate; Amount can still be edited" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono min-w-0 w-full" value={row.rate} onChange={(e) => setItemField(idx, "rate", e.target.value)} />
+                  <input placeholder="₹/pc or ct" title="Optional rate — fills Amount as carat × rate when a carat is set, else pcs × rate; Amount stays editable" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono min-w-0 w-full" value={row.rate} onChange={(e) => setItemField(idx, "rate", e.target.value)} />
                   <input placeholder="Amount ₹" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono min-w-0 w-full" value={row.amount} onChange={(e) => setItemField(idx, "amount", e.target.value)} />
                   <input placeholder="Carat (opt)" className="h-8 px-1.5 border border-slate-200 rounded text-[11px] mono min-w-0 w-full" value={row.carat} onChange={(e) => setItemField(idx, "carat", e.target.value)} />
                   <button type="button" onClick={() => setItemRows((r) => r.filter((_, i) => i !== idx))} className="text-rose-500 text-[13px] w-5">✕</button>
