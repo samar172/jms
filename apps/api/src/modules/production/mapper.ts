@@ -136,6 +136,7 @@ export function mapJobCard(jc: FullJobCard): EngineJobCard {
           piecesCount: s.piecesCount ?? undefined,
           carat: s.carat == null ? undefined : Number(s.carat),
           ratePerCarat: s.ratePerCarat == null ? undefined : Number(s.ratePerCarat),
+          weightG: s.weightG == null ? null : Number(s.weightG),
           qtyReturned: s.qtyReturned,
           valueReturned: Number(s.valueReturned),
           caratReturned: s.caratReturned == null ? undefined : Number(s.caratReturned),

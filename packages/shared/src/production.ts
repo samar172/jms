@@ -55,6 +55,7 @@ export interface StoneEntry {
   piecesCount?: number;
   carat?: number;
   ratePerCarat?: number;
+  weightG?: number | null; // explicit gram weight; overrides carat×0.2 for gross weight
   qtyReturned: string;
   valueReturned: number;
   caratReturned?: number;
@@ -196,15 +197,18 @@ export function accumulatedWeight(jc: JobCard): number {
 export const CARAT_TO_GRAM = 0.2; // 1 carat = 0.2g
 
 export function stonesNetCaratGrams(jc: JobCard): number {
-  let netCarat = 0;
+  let grams = 0;
   jc.stages.forEach((st) =>
     st.assignments.forEach((a) =>
       a.stones.forEach((s) => {
-        netCarat += Math.max(0, (s.carat || 0) - (s.caratReturned || 0));
+        // An explicit gram weight (flat items) wins; otherwise the stone's net
+        // carat is converted at 1 ct = 0.2 g.
+        if (s.weightG != null) grams += s.weightG;
+        else grams += Math.max(0, (s.carat || 0) - (s.caratReturned || 0)) * CARAT_TO_GRAM;
       })
     )
   );
-  return +(netCarat * CARAT_TO_GRAM).toFixed(3);
+  return +grams.toFixed(3);
 }
 
 export function grossWeight(jc: JobCard): number {

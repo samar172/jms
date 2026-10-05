@@ -698,7 +698,7 @@ const findingBody = z.object({
   findings: z
     .array(z.object({ type: z.string(), weight: z.number(), karat: z.string(), wastagePercent: z.number().default(0) }))
     .default([]),
-  items: z.array(z.object({ type: z.string(), amount: z.number(), carat: z.number().default(0), pieces: z.number().int().default(0), rate: z.number().default(0) })).default([]),
+  items: z.array(z.object({ type: z.string(), amount: z.number(), carat: z.number().default(0), pieces: z.number().int().default(0), rate: z.number().default(0), weightG: z.number().default(0) })).default([]),
 });
 
 // Writes the Fitting output (silver findings, flat items, labour) for an
@@ -767,7 +767,7 @@ async function writeFindingOutput(body: z.infer<typeof findingBody>, jcId: strin
   for (const it of body.items) {
     // pieces / rate are optional reference figures — the amount stays the source
     // of truth (it can be typed directly or auto-filled from pieces × rate).
-    const qtyParts = [it.pieces > 0 ? `${it.pieces} pcs` : "", it.carat > 0 ? `${it.carat} ct` : ""].filter(Boolean);
+    const qtyParts = [it.pieces > 0 ? `${it.pieces} pcs` : "", it.carat > 0 ? `${it.carat} ct` : "", it.weightG > 0 ? `${it.weightG} g` : ""].filter(Boolean);
     await prisma.prodStoneEntry.create({
       data: {
         assignmentId: body.assignmentId,
@@ -777,6 +777,7 @@ async function writeFindingOutput(body: z.infer<typeof findingBody>, jcId: strin
         carat: it.carat || null,
         piecesCount: it.pieces || null,
         ratePerCarat: it.rate || null,
+        weightG: it.weightG || null,
       },
     });
   }

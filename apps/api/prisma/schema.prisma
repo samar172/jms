@@ -1533,6 +1533,7 @@ model ProdStoneEntry {
   piecesCount   Int?
   carat         Decimal?       @db.Decimal(12, 3)
   ratePerCarat  Decimal?       @db.Decimal(12, 2)
+  weightG       Decimal?       @db.Decimal(12, 3) // explicit gram weight (flat items); overrides carat×0.2 for gross weight
   qtyReturned   String         @default("")
   valueReturned Decimal        @db.Decimal(14, 2) @default(0)
   caratReturned Decimal?       @db.Decimal(12, 3)
