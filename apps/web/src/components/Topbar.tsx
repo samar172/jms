@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Menu, Search, Bell, LogOut } from "lucide-react";
+import { Menu, Search, Bell, LogOut, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useApi } from "@/lib/hooks";
 import { apiFetch } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
@@ -27,7 +27,20 @@ const ENTITY_HREF: Record<string, (id: string) => string> = {
 export function Topbar({ onMenuClick }: { title?: string; onMenuClick?: () => void }) {
   const { user, logout } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
   const [notifOpen, setNotifOpen] = useState(false);
+
+  // Go back to the previous page. Falls back to the parent route (one path
+  // segment up) when there's no in-app history — e.g. a deep link opened
+  // directly — so Back never strands the user or leaves the app.
+  function goBack() {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+      return;
+    }
+    const parent = pathname.split("/").slice(0, -1).join("/") || "/dashboard";
+    router.push(parent);
+  }
   const { data: unread } = useApi<{ count: number }>("/api/notifications/unread-count");
   const { data: notifications, mutate: mutateNotifs } = useApi<NotificationRow[]>(
     notifOpen ? "/api/notifications" : null
@@ -52,6 +65,15 @@ export function Topbar({ onMenuClick }: { title?: string; onMenuClick?: () => vo
         aria-label="Open menu"
       >
         <Menu size={20} />
+      </button>
+      <button
+        onClick={goBack}
+        aria-label="Go back"
+        title="Back to previous page"
+        className="shrink-0 flex items-center gap-1 h-7 px-2 rounded border border-line text-ink2 hover:text-ink hover:bg-neu-bg text-[12px]"
+      >
+        <ArrowLeft size={15} />
+        <span className="hidden sm:inline">Back</span>
       </button>
       <div className="hidden sm:flex items-center gap-1.5 font-bold text-[14px] text-ink shrink-0">
         <span className="w-[9px] h-[9px] rounded-[2px] bg-accent" />
