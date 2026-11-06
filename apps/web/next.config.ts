@@ -11,7 +11,7 @@ const nextConfig: NextConfig = {
   // below. A Vercel dashboard env var, if set, overrides this default.
   env: {
     NEXT_PUBLIC_API_URL:
-      process.env.NEXT_PUBLIC_API_URL ?? "https://jms-api.98.70.37.83.nip.io",
+      process.env.NEXT_PUBLIC_API_URL ?? "https://jms-api.189.72.145.205.nip.io",
   },
   images: {
     remotePatterns: [
@@ -22,7 +22,7 @@ const nextConfig: NextConfig = {
       {
         // Uploaded images served by the API host, when rendered via next/image.
         protocol: "https",
-        hostname: "jms-api.98.70.37.83.nip.io",
+        hostname: "jms-api.189.72.145.205.nip.io",
       },
     ],
   },
